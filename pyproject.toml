@@ -9,6 +9,8 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "jsonschema>=4.23.0",
+    "pytest>=8.4.1",
     "fastapi[standard]>=0.115.12",
     "fastmcp>=2.8.0",
     "fulcra-api>=0.1.27",

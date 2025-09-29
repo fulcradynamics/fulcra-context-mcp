@@ -297,6 +297,115 @@ def get_fulcra_object() -> FulcraAPI:
     return fulcra
 
 
+def _coerce_bool_arg(
+    value: bool | str | int | float | None,
+    *,
+    parameter_name: str,
+) -> bool | None:
+    """Normalize potentially string-encoded boolean arguments."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value == 0:
+            return False
+        if value == 1:
+            return True
+        raise ValueError(
+            f"Invalid boolean value for '{parameter_name}': {value!r}. Expected 0 or 1."
+        )
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1"}:
+            return True
+        if normalized in {"false", "0"}:
+            return False
+        raise ValueError(
+            f"Invalid boolean string for '{parameter_name}': {value!r}. Expected 'true', 'false', '1', or '0'."
+        )
+    raise ValueError(
+        f"Unsupported type for '{parameter_name}': {type(value).__name__}. Expected bool, str, int, or float."
+    )
+
+
+def _coerce_float_arg(
+    value: bool | str | int | float | None,
+    *,
+    parameter_name: str,
+) -> float | None:
+    """Normalize potentially string-encoded numeric arguments."""
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError(
+                f"Invalid numeric string for '{parameter_name}': {value!r}. Expected a number."
+            )
+        try:
+            return float(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid numeric string for '{parameter_name}': {value!r}. Expected a number."
+            ) from exc
+    raise ValueError(
+        f"Unsupported type for '{parameter_name}': {type(value).__name__}. Expected bool, str, int, or float."
+    )
+
+
+def _coerce_list_arg(
+    value: list | tuple | str | None,
+    *,
+    parameter_name: str,
+    element_type: type,
+) -> list | None:
+    """Normalize list-like arguments that may be JSON-encoded strings."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid JSON for '{parameter_name}': {value!r}. Expected a JSON array."
+            ) from exc
+        if not isinstance(parsed, list):
+            raise ValueError(
+                f"Invalid JSON for '{parameter_name}': {value!r}. Expected a JSON array."
+            )
+        value = parsed
+
+    if isinstance(value, tuple):
+        value = list(value)
+
+    if not isinstance(value, list):
+        raise ValueError(
+            f"Unsupported type for '{parameter_name}': {type(value).__name__}. Expected list, tuple, or JSON-encoded list."
+        )
+
+    def _is_valid_element(element) -> bool:
+        if element_type is int:
+            return isinstance(element, int) and not isinstance(element, bool)
+        return isinstance(element, element_type)
+
+    for index, element in enumerate(value):
+        if not _is_valid_element(element):
+            raise ValueError(
+                f"Invalid element at index {index} for '{parameter_name}': {element!r}. Expected {element_type.__name__} values."
+            )
+
+    return value
+
+
 @mcp.tool()
 async def get_workouts(start_time: datetime, end_time: datetime) -> str:
     """Get details about the workouts that the user has done during a period of time.
@@ -327,9 +436,9 @@ async def get_metric_time_series(
     metric_name: str,
     start_time: datetime,
     end_time: datetime,
-    sample_rate: float | None = 60.0,
-    replace_nulls: bool | None = False,
-    calculations: list[str] | None = None,
+    sample_rate: float | int | str | None = None,
+    replace_nulls: bool | str | None = None,
+    calculations: list[str] | str | None = None,
 ) -> str:
     """Get user's time-series data for a single Fulcra metric.
 
@@ -341,8 +450,8 @@ async def get_metric_time_series(
         metric_name: The name of the time-series metric to retrieve. Use `get_metrics_catalog` to find available metrics.
         start_time: The starting time period (inclusive). Must include tz (ISO8601).
         end_time: The ending time (exclusive). Must include tz (ISO8601).
-        sample_rate: Optional. The number of seconds per sample. Default is 60. Can be smaller than 1.
-        replace_nulls: Optional. When true, replace all NA with 0. Default is False.
+        sample_rate: Optional. The number of seconds per sample. Defaults to 60 seconds when omitted.
+        replace_nulls: Optional. When true, replace all NA with 0. Defaults to False when omitted.
         calculations: Optional. A list of additional calculations to perform for each
         time slice.  Not supported on cumulative metrics.  Options: "max", "min", "delta", "mean", "uniques", "allpoints", "rollingmean".
     Returns:
@@ -352,12 +461,27 @@ async def get_metric_time_series(
     fulcra = get_fulcra_object()
     # Ensure defaults are passed correctly if None
     kwargs = {}
-    if sample_rate is not None:
-        kwargs["sample_rate"] = sample_rate
-    if replace_nulls is not None:
-        kwargs["replace_nulls"] = replace_nulls
-    if calculations is not None:
-        kwargs["calculations"] = calculations
+    sample_rate_value = (
+        60.0
+        if sample_rate is None
+        else _coerce_float_arg(sample_rate, parameter_name="sample_rate")
+    )
+    replace_nulls_value = (
+        False
+        if replace_nulls is None
+        else _coerce_bool_arg(replace_nulls, parameter_name="replace_nulls")
+    )
+    if sample_rate_value is not None:
+        kwargs["sample_rate"] = sample_rate_value
+    if replace_nulls_value is not None:
+        kwargs["replace_nulls"] = replace_nulls_value
+    calculations_value = _coerce_list_arg(
+        calculations,
+        parameter_name="calculations",
+        element_type=str,
+    )
+    if calculations_value is not None:
+        kwargs["calculations"] = calculations_value
 
     time_series_df = fulcra.metric_time_series(
         metric=metric_name,
@@ -411,9 +535,9 @@ async def get_sleep_cycles(
     start_time: datetime,
     end_time: datetime,
     cycle_gap: str | None = None,
-    stages: list[int] | None = None,
-    gap_stages: list[int] | None = None,
-    clip_to_range: bool | None = True,
+    stages: list[int] | str | None = None,
+    gap_stages: list[int] | str | None = None,
+    clip_to_range: bool | str | None = None,
 ) -> str:
     """Return sleep cycles summarized from sleep stages.
 
@@ -430,7 +554,7 @@ async def get_sleep_cycles(
         stages: Optional. Sleep stages to include. Defaults to all stages if not provided.
         gap_stages: Optional. Sleep stages to consider as gaps in sleep cycles.
                     Defaults to server-side default if not provided.
-        clip_to_range: Optional. Whether to clip the data to the requested date range. Defaults to True.
+        clip_to_range: Optional. Whether to clip the data to the requested date range. Defaults to True when omitted.
     Returns:
         A JSON string representing a pandas DataFrame containing the sleep cycle data.
     """
@@ -438,12 +562,27 @@ async def get_sleep_cycles(
     kwargs = {}
     if cycle_gap is not None:
         kwargs["cycle_gap"] = cycle_gap
-    if stages is not None:
-        kwargs["stages"] = stages
-    if gap_stages is not None:
-        kwargs["gap_stages"] = gap_stages
-    if clip_to_range is not None:
-        kwargs["clip_to_range"] = clip_to_range
+    stages_value = _coerce_list_arg(
+        stages,
+        parameter_name="stages",
+        element_type=int,
+    )
+    if stages_value is not None:
+        kwargs["stages"] = stages_value
+    gap_stages_value = _coerce_list_arg(
+        gap_stages,
+        parameter_name="gap_stages",
+        element_type=int,
+    )
+    if gap_stages_value is not None:
+        kwargs["gap_stages"] = gap_stages_value
+    clip_to_range_value = (
+        True
+        if clip_to_range is None
+        else _coerce_bool_arg(clip_to_range, parameter_name="clip_to_range")
+    )
+    if clip_to_range_value is not None:
+        kwargs["clip_to_range"] = clip_to_range_value
 
     sleep_cycles_df = fulcra.sleep_cycles(
         start_time=start_time,
@@ -461,7 +600,7 @@ async def get_sleep_cycles(
 async def get_location_at_time(
     time: datetime,
     window_size: int = 14400,
-    reverse_geocode: bool | None = False,
+    reverse_geocode: bool | str | None = None,
 ) -> str:
     """Gets the user's location at the given time.
 
@@ -475,6 +614,7 @@ async def get_location_at_time(
         time: The point in time to get the user's location for. Must include tz (ISO8601).
         window_size: Optional. The size (in seconds) to look back (and optionally forward) for samples. Defaults to 14400.
         include_after: Optional. When true, a sample that occurs after the requested time may be returned if it is the closest one. Defaults to False.
+        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the location. Defaults to False when omitted.
     Returns:
         A JSON string representing the location data.
     """
@@ -483,7 +623,13 @@ async def get_location_at_time(
     if window_size is not None:
         kwargs["window_size"] = window_size
     kwargs["include_after"] = True
-    kwargs["reverse_geocode"] = True
+    reverse_geocode_value = (
+        False
+        if reverse_geocode is None
+        else _coerce_bool_arg(reverse_geocode, parameter_name="reverse_geocode")
+    )
+    if reverse_geocode_value is not None:
+        kwargs["reverse_geocode"] = reverse_geocode_value
 
     location_data = fulcra.location_at_time(
         time=time,
@@ -496,9 +642,9 @@ async def get_location_at_time(
 async def get_location_time_series(
     start_time: datetime,
     end_time: datetime,
-    change_meters: float | None = None,
-    sample_rate: int | None = 900,
-    reverse_geocode: bool | None = False,
+    change_meters: float | int | str | None = None,
+    sample_rate: int | float | str | None = None,
+    reverse_geocode: bool | str | None = None,
 ) -> str:
     """Retrieve a time series of locations that the user was at.
     Result timestamps will include time zones. Always translate timestamps to the user's local tz when this is known.
@@ -507,20 +653,35 @@ async def get_location_time_series(
         start_time: The start of the time range (inclusive), as an ISO 8601 string or datetime object.
         end_time: The end of the range (exclusive), as an ISO 8601 string or datetime object.
         change_meters: Optional. When specified, subsequent samples that are fewer than this many meters away will not be included.
-        sample_rate: Optional. The length (in seconds) of each sample. Default is 900.
-        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the locations and include the details in the results. Default is False.
+        sample_rate: Optional. The length (in seconds) of each sample. Defaults to 900 seconds when omitted.
+        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the locations and include the details in the results. Defaults to False when omitted.
     Returns:
         A JSON string representing a list of location data points.
     """
     fulcra = get_fulcra_object()
     kwargs = {}
     if change_meters is not None:
-        kwargs["change_meters"] = change_meters
-    if sample_rate is not None:
-        kwargs["sample_rate"] = sample_rate
+        kwargs["change_meters"] = _coerce_float_arg(
+            change_meters, parameter_name="change_meters"
+        )
+    sample_rate_value = (
+        900
+        if sample_rate is None
+        else _coerce_float_arg(sample_rate, parameter_name="sample_rate")
+    )
+    if sample_rate_value is not None:
+        if float(sample_rate_value).is_integer():
+            kwargs["sample_rate"] = int(sample_rate_value)
+        else:
+            kwargs["sample_rate"] = sample_rate_value
     kwargs["look_back"] = 14400
-    if reverse_geocode is not None:
-        kwargs["reverse_geocode"] = reverse_geocode
+    reverse_geocode_value = (
+        False
+        if reverse_geocode is None
+        else _coerce_bool_arg(reverse_geocode, parameter_name="reverse_geocode")
+    )
+    if reverse_geocode_value is not None:
+        kwargs["reverse_geocode"] = reverse_geocode_value
 
     location_series = fulcra.location_time_series(
         start_time=start_time,
