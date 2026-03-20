@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from enum import Enum
 
 import structlog
 import uvicorn
@@ -295,6 +296,51 @@ def get_fulcra_object() -> FulcraAPI:
     fulcra = FulcraAPI()
     fulcra.set_cached_access_token(fulcra_token)
     return fulcra
+
+
+class AnnotationType(Enum):
+    Moment = "moment"
+    Duration = "duration"
+    Boolean = "boolean"
+    Numeric = "numeric"
+    Scale = "scale"
+
+
+@mcp.tool()
+async def get_annotations(ann_type: str | AnnotationType, start_time: datetime, end_time: datetime) -> str:
+    """
+    Retrieve an array of all moment annotations the user recorded during a period of time.
+    Each item contains the value (except for moment annotations) and the metadata (name, original spec, etc.) describing the annotation.
+
+    Args:
+        ann_type: annotation type (moment, duration, boolean, numeric, scale, etc.)
+        start_time: The starting time of the period. Must include tz (ISO8601).
+        end_time: the ending time of the period. Must include tz (ISO8601).
+    """
+    fulcra = get_fulcra_object()
+    if isinstance(ann_type, AnnotationType) == False:
+        try:
+            ann_type = AnnotationType(ann_type)
+        except ValueError:
+            return f"Unknown annotation type. Current valid types: {' '.join([x.name for x in AnnotationType])}"
+    match ann_type:
+        case AnnotationType.Moment:
+            annotations = fulcra.moment_annotations(start_time, end_time)
+            return f"Moment annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
+        case AnnotationType.Duration:
+            annotations = fulcra.duration_annotations(start_time, end_time)
+            return f"Duration annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
+        case AnnotationType.Boolean:
+            annotations = fulcra.boolean_annotations(start_time, end_time)
+            return f"Boolean annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
+        case AnnotationType.Numeric:
+            annotations = fulcra.numeric_annotations(start_time, end_time)
+            return f"Numeric annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
+        case AnnotationType.Scale:
+            annotations = fulcra.scale_annotations(start_time, end_time)
+            return f"Scale annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
+        case _:
+            return f"Unknown annotation type. Current valid types: {' '.join([x.name for x in AnnotationType])}"
 
 
 @mcp.tool()
