@@ -1,6 +1,6 @@
 [project]
 name = "fulcra-context-mcp"
-version = "0.1.4"
+version = "0.1.5"
 description = "Fulcra Context MCP Server"
 license = "Apache-2.0"
 authors = [
@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115.12",
     "fastmcp>=2.14.5, <3.0.0",
-    "fulcra-api>=0.1.29",
+    "fulcra-api>=0.1.30",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.3",
     "structlog>=25.4.0",

@@ -359,6 +359,18 @@ async def get_workouts(start_time: datetime, end_time: datetime) -> str:
 
 
 @mcp.tool()
+async def annotations_catalog() -> str:
+    """
+    Get the list of all annotations the user has defined. This does not get the
+    actual values the user has recorded; for that, use the `get_annotations` tool.
+    Use this tool to get the IDs and types to pass to `get_annotations`.
+    """
+    fulcra = get_fulcra_object()
+    catalog = fulcra.annotations_catalog()
+    return "Defined annotations: " + json.dumps(catalog)
+
+
+@mcp.tool()
 async def get_metrics_catalog() -> str:
     """Get the catalog of available metrics that can be used in time-series API calls
     (`metric_time_series` and `metric_samples`).
