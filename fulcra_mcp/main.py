@@ -622,11 +622,13 @@ class OpenAIWorkaroundMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Rewrite /mcp to /mcp/ so the Starlette Mount passes "/" to the sub-app
+        # Rewrite /mcp to /mcp/ so the Starlette mount passes "/" to the sub-app
         if scope["path"] == "/mcp":
             scope = dict(scope, path="/mcp/")
+        if scope["path"] == "/MCP":
+            scope = dict(scope, path="/MCP/")
 
-        if scope["path"] in ("/register", "/mcp/register"):
+        if scope["path"] in ("/register", "/mcp/register", "/MCP/register"):
             logger.info(
                 "Intercepted /register request (ASGI). Attempting to modify 'token_endpoint_auth_method'."
             )
@@ -731,6 +733,7 @@ class OpenAIWorkaroundMiddleware:
 
 
 app.add_middleware(OpenAIWorkaroundMiddleware)
+app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)
 
