@@ -50,3 +50,8 @@ Please feel free to reach out via [the GitHub repo for this project](https://git
 <a href="https://glama.ai/mcp/servers/@fulcradynamics/fulcra-context-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@fulcradynamics/fulcra-context-mcp/badge" />
 </a>
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/fulcradynamics-fulcra-context-mcp).
+
