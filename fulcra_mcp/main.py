@@ -67,8 +67,10 @@ class FulcraOAuthProvider(OAuthProvider):
         )
         self.auth_codes: dict[str, AuthorizationCode] = {}
         self.tokens: dict[str, AccessToken] = {}
+        self.refresh_tokens: dict[str, RefreshToken] = {}
         self.state_mapping: dict[str, dict[str, str]] = {}
         self.token_mapping: dict[str, str] = {}
+        self.refresh_token_mapping: dict[str, str] = {}
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         """Get OAuth client information."""
@@ -89,6 +91,14 @@ class FulcraOAuthProvider(OAuthProvider):
 
     async def register_client(self, client_info: OAuthClientInformationFull):
         """Register a new OAuth client."""
+        logger.info(
+            "client_registration",
+            client_id=client_info.client_id,
+            client_name=client_info.client_name,
+            scope=client_info.scope,
+            grant_types=client_info.grant_types,
+            redirect_uris=[str(u) for u in client_info.redirect_uris],
+        )
 
         client_filepath = (
             settings.state_path / f"{client_info.client_id}.json"
@@ -106,6 +116,12 @@ class FulcraOAuthProvider(OAuthProvider):
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
+        logger.info(
+            "authorize_request",
+            client_id=client.client_id,
+            client_name=client.client_name,
+            requested_scopes=params.scopes,
+        )
         state = params.state or secrets.token_hex(16)
         self.state_mapping[state] = {
             "redirect_uri": str(params.redirect_uri),
@@ -184,10 +200,9 @@ class FulcraOAuthProvider(OAuthProvider):
         if authorization_code.code not in self.auth_codes:
             raise ValueError("Invalid authorization code")
 
-        # Generate MCP access token
         mcp_token = f"mcp_{secrets.token_hex(32)}"
+        refresh_token_value = f"mcp_refresh_{secrets.token_hex(32)}"
 
-        # Store MCP token
         self.tokens[mcp_token] = AccessToken(
             token=mcp_token,
             client_id=client.client_id,
@@ -195,48 +210,92 @@ class FulcraOAuthProvider(OAuthProvider):
             expires_at=int(time.time()) + 3600,
         )
 
-        # Find GitHub token for this client
+        self.refresh_tokens[refresh_token_value] = RefreshToken(
+            token=refresh_token_value,
+            client_id=client.client_id,
+            scopes=authorization_code.scopes,
+        )
+
+        # Find the Fulcra API token stored during handle_callback for this client
         oidc_token = next(
             (
                 token
                 for token, data in self.tokens.items()
-                # see https://github.blog/engineering/platform-security/behind-githubs-new-authentication-token-formats/
-                # which you get depends on your GH app setup.
                 if data.client_id == client.client_id
+                and not token.startswith("mcp_")
             ),
             None,
         )
 
         if oidc_token:
             self.token_mapping[mcp_token] = oidc_token
+            self.refresh_token_mapping[refresh_token_value] = oidc_token
 
         del self.auth_codes[authorization_code.code]
+
+        logger.info(
+            "tokens_issued",
+            client_id=client.client_id,
+            scopes=authorization_code.scopes,
+            has_refresh_token=True,
+            has_fulcra_token=oidc_token is not None,
+        )
 
         return OAuthToken(
             access_token=mcp_token,
             token_type="bearer",
             expires_in=3600,
             scope=" ".join(authorization_code.scopes),
+            refresh_token=refresh_token_value,
         )
 
     async def load_access_token(self, token: str) -> AccessToken | None:
         """Load and validate an access token."""
         access_token = self.tokens.get(token)
         if not access_token:
+            logger.warning("token_not_found", token_prefix=token[:12])
             return None
 
-        # Check if expired
         if access_token.expires_at and access_token.expires_at < time.time():
+            logger.info(
+                "token_expired",
+                client_id=access_token.client_id,
+                scopes=access_token.scopes,
+                token_prefix=token[:12],
+            )
             del self.tokens[token]
             return None
 
+        logger.info(
+            "token_validated",
+            client_id=access_token.client_id,
+            scopes=access_token.scopes,
+            expires_at=access_token.expires_at,
+            token_prefix=token[:12],
+        )
         return access_token
 
     async def load_refresh_token(
         self, client: OAuthClientInformationFull, refresh_token: str
     ) -> RefreshToken | None:
-        """Load a refresh token - not supported."""
-        return None
+        token_obj = self.refresh_tokens.get(refresh_token)
+        if not token_obj:
+            logger.warning("refresh_token_not_found", token_prefix=refresh_token[:16])
+            return None
+        if token_obj.client_id != client.client_id:
+            logger.warning(
+                "refresh_token_client_mismatch",
+                expected=client.client_id,
+                actual=token_obj.client_id,
+            )
+            return None
+        if token_obj.expires_at is not None and token_obj.expires_at < time.time():
+            logger.info("refresh_token_expired", client_id=client.client_id)
+            del self.refresh_tokens[refresh_token]
+            if refresh_token in self.refresh_token_mapping:
+                del self.refresh_token_mapping[refresh_token]
+            return None
+        return token_obj
 
     async def exchange_refresh_token(
         self,
@@ -244,8 +303,49 @@ class FulcraOAuthProvider(OAuthProvider):
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        """Exchange refresh token"""
-        raise NotImplementedError("Not supported")
+        fulcra_token = self.refresh_token_mapping.get(refresh_token.token)
+
+        # Clean up old refresh token (rotation)
+        if refresh_token.token in self.refresh_tokens:
+            del self.refresh_tokens[refresh_token.token]
+        if refresh_token.token in self.refresh_token_mapping:
+            del self.refresh_token_mapping[refresh_token.token]
+
+        new_mcp_token = f"mcp_{secrets.token_hex(32)}"
+        new_refresh_token_value = f"mcp_refresh_{secrets.token_hex(32)}"
+        resolved_scopes = scopes if scopes else refresh_token.scopes
+
+        self.tokens[new_mcp_token] = AccessToken(
+            token=new_mcp_token,
+            client_id=client.client_id,
+            scopes=resolved_scopes,
+            expires_at=int(time.time()) + 3600,
+        )
+
+        self.refresh_tokens[new_refresh_token_value] = RefreshToken(
+            token=new_refresh_token_value,
+            client_id=client.client_id,
+            scopes=resolved_scopes,
+        )
+
+        if fulcra_token:
+            self.token_mapping[new_mcp_token] = fulcra_token
+            self.refresh_token_mapping[new_refresh_token_value] = fulcra_token
+
+        logger.info(
+            "tokens_refreshed",
+            client_id=client.client_id,
+            scopes=resolved_scopes,
+            has_fulcra_token=fulcra_token is not None,
+        )
+
+        return OAuthToken(
+            access_token=new_mcp_token,
+            token_type="bearer",
+            expires_in=3600,
+            scope=" ".join(resolved_scopes),
+            refresh_token=new_refresh_token_value,
+        )
 
     async def revoke_token(
         self, token: str, token_type_hint: str | None = None
@@ -253,6 +353,12 @@ class FulcraOAuthProvider(OAuthProvider):
         """Revoke a token."""
         if token in self.tokens:
             del self.tokens[token]
+        if token in self.token_mapping:
+            del self.token_mapping[token]
+        if token in self.refresh_tokens:
+            del self.refresh_tokens[token]
+        if token in self.refresh_token_mapping:
+            del self.refresh_token_mapping[token]
 
 
 oauth_provider = FulcraOAuthProvider(
@@ -588,6 +694,27 @@ async def get_location_time_series(
     return f"Location time series from {start_time} to {end_time}: " + json.dumps(
         location_series
     )
+
+
+@mcp.tool()
+async def debug_token_info() -> str:
+    """Return info about the current MCP session's OAuth token.
+
+    Shows scopes, expiry, client ID, and whether a Fulcra API token is mapped.
+    Useful for diagnosing authentication and scope issues.
+    """
+    mcp_access_token = get_access_token()
+    if not mcp_access_token:
+        return json.dumps({"error": "No token in current session"})
+    stored = oauth_provider.tokens.get(mcp_access_token.token)
+    has_fulcra_token = mcp_access_token.token in oauth_provider.token_mapping
+    return json.dumps({
+        "client_id": stored.client_id if stored else None,
+        "scopes": stored.scopes if stored else None,
+        "expires_at": stored.expires_at if stored else None,
+        "has_fulcra_token": has_fulcra_token,
+        "mcp_token_prefix": mcp_access_token.token[:12],
+    })
 
 
 @mcp.tool()
