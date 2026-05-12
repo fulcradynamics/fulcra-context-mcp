@@ -12,3 +12,6 @@ wheels/
 .aider*
 .mypy_cache
 .DS_Store
+
+# State from local testing
+state/
