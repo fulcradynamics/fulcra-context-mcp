@@ -276,7 +276,7 @@ class FulcraOAuthProvider(OAuthProvider):
     ) -> RefreshToken | None:
         token_obj = self.refresh_tokens.get(refresh_token)
         if not token_obj:
-            logger.warning("refresh_token_not_found", token_prefix=refresh_token[:16])
+            logger.warning("refresh_token_not_found", token_prefix=refresh_token[:12])
             return None
         if token_obj.client_id != client.client_id:
             logger.warning(
