@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import secrets
 import sys
 import time
@@ -14,6 +15,7 @@ from fastapi.responses import RedirectResponse
 from fastmcp import FastMCP
 from fastmcp.server.auth.auth import OAuthProvider
 from fulcra_api.core import FulcraAPI
+from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import (
     AccessToken,
@@ -43,9 +45,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+logging.basicConfig(format="%(message)s", stream=sys.stderr, level=logging.INFO)
 logger = structlog.getLogger(__name__)
-if settings.fulcra_environment == "localdev":
-    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=logging.DEBUG)
 
 
 class FulcraOAuthProvider(OAuthProvider):
@@ -69,8 +70,11 @@ class FulcraOAuthProvider(OAuthProvider):
         self.tokens: dict[str, AccessToken] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
         self.state_mapping: dict[str, dict[str, str]] = {}
-        self.token_mapping: dict[str, str] = {}
-        self.refresh_token_mapping: dict[str, str] = {}
+        # Maps MCP tokens to the underlying FulcraCredentials
+        self.token_mapping: dict[str, FulcraCredentials] = {}
+        self.refresh_token_mapping: dict[str, FulcraCredentials] = {}
+        # Fulcra API credentials keyed by MCP client_id
+        self.client_credentials: dict[str, FulcraCredentials] = {}
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         """Get OAuth client information."""
@@ -156,15 +160,23 @@ class FulcraOAuthProvider(OAuthProvider):
 
         fulcra = FulcraAPI(
             oidc_client_id=settings.oidc_client_id,
+            oidc_domain=settings.fulcra_oidc_domain,
+            oidc_audience=settings.fulcra_api,
         )
         try:
             fulcra.authorize_with_authorization_code(
                 code=code,
                 redirect_uri=f"{settings.oidc_server_url}/callback",
             )
-            access_token = fulcra.get_cached_access_token()
+            self.client_credentials[client_id] = fulcra.fulcra_credentials
+            logger.info(
+                "fulcra_credentials_stored",
+                client_id=client_id,
+                has_refresh_token=fulcra.fulcra_credentials.refresh_token is not None,
+                expires_at=str(fulcra.fulcra_credentials.access_token_expiration),
+            )
+
             new_code = f"mcp_{secrets.token_hex(16)}"
-            # Create MCP authorization code
             auth_code = AuthorizationCode(
                 code=new_code,
                 client_id=client_id,
@@ -175,12 +187,6 @@ class FulcraOAuthProvider(OAuthProvider):
                 code_challenge=code_challenge,
             )
             self.auth_codes[new_code] = auth_code
-            self.tokens[access_token] = AccessToken(
-                token=access_token,
-                client_id=client_id,
-                scopes=OIDC_SCOPES,
-                expires_at=None,
-            )
         except Exception as e:
             logger.error("oauth2 code exchange failure", exc_info=e)
             raise HTTPException(400, "failed to exchange code for token")
@@ -216,20 +222,10 @@ class FulcraOAuthProvider(OAuthProvider):
             scopes=authorization_code.scopes,
         )
 
-        # Find the Fulcra API token stored during handle_callback for this client
-        oidc_token = next(
-            (
-                token
-                for token, data in self.tokens.items()
-                if data.client_id == client.client_id
-                and not token.startswith("mcp_")
-            ),
-            None,
-        )
-
-        if oidc_token:
-            self.token_mapping[mcp_token] = oidc_token
-            self.refresh_token_mapping[refresh_token_value] = oidc_token
+        creds = self.client_credentials.get(client.client_id)
+        if creds:
+            self.token_mapping[mcp_token] = creds
+            self.refresh_token_mapping[refresh_token_value] = creds
 
         del self.auth_codes[authorization_code.code]
 
@@ -238,7 +234,7 @@ class FulcraOAuthProvider(OAuthProvider):
             client_id=client.client_id,
             scopes=authorization_code.scopes,
             has_refresh_token=True,
-            has_fulcra_token=oidc_token is not None,
+            has_fulcra_credentials=creds is not None,
         )
 
         return OAuthToken(
@@ -303,7 +299,7 @@ class FulcraOAuthProvider(OAuthProvider):
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        fulcra_token = self.refresh_token_mapping.get(refresh_token.token)
+        creds = self.refresh_token_mapping.get(refresh_token.token)
 
         # Clean up old refresh token (rotation)
         if refresh_token.token in self.refresh_tokens:
@@ -328,15 +324,15 @@ class FulcraOAuthProvider(OAuthProvider):
             scopes=resolved_scopes,
         )
 
-        if fulcra_token:
-            self.token_mapping[new_mcp_token] = fulcra_token
-            self.refresh_token_mapping[new_refresh_token_value] = fulcra_token
+        if creds:
+            self.token_mapping[new_mcp_token] = creds
+            self.refresh_token_mapping[new_refresh_token_value] = creds
 
         logger.info(
             "tokens_refreshed",
             client_id=client.client_id,
             scopes=resolved_scopes,
-            has_fulcra_token=fulcra_token is not None,
+            has_fulcra_credentials=creds is not None,
         )
 
         return OAuthToken(
@@ -382,26 +378,80 @@ mcp = FastMCP(
 stdio_fulcra: FulcraAPI | None = None
 
 
+def _get_credentials_path() -> Path:
+    """Return the path for Fulcra credentials.
+    TODO: Replace with FulcraCredentials built-in persistence when available.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    return Path(xdg) / "fulcra" / "credentials.json"
+
+
+def _load_stdio_credentials() -> FulcraCredentials | None:
+    try:
+        return FulcraCredentials.from_json(_get_credentials_path().read_text())
+    except Exception:
+        return None
+
+
+def _save_stdio_credentials(creds: FulcraCredentials):
+    path = _get_credentials_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(creds.to_json())
+
+
 def get_fulcra_object() -> FulcraAPI:
     global stdio_fulcra
 
     if settings.fulcra_environment == "stdio":
         if stdio_fulcra is not None:
             return stdio_fulcra
-        else:
-            stdio_fulcra = FulcraAPI()
-            stdio_fulcra.authorize()
+
+        creds = _load_stdio_credentials()
+        if creds is not None:
+            def on_refresh(new_creds: FulcraCredentials):
+                creds.access_token = new_creds.access_token
+                creds.access_token_expiration = new_creds.access_token_expiration
+                if new_creds.refresh_token:
+                    creds.refresh_token = new_creds.refresh_token
+                _save_stdio_credentials(creds)
+                logger.info("stdio_credentials_refreshed")
+
+            stdio_fulcra = FulcraAPI(
+                credentials=creds,
+                refresh_callback=on_refresh,
+            )
             return stdio_fulcra
+
+        stdio_fulcra = FulcraAPI()
+        stdio_fulcra.authorize()
+        if stdio_fulcra.fulcra_credentials:
+            _save_stdio_credentials(stdio_fulcra.fulcra_credentials)
+        return stdio_fulcra
 
     mcp_access_token = get_access_token()
     if not mcp_access_token:
         raise HTTPException(401, "Not authenticated")
-    fulcra_token = oauth_provider.token_mapping.get(mcp_access_token.token)
-    if fulcra_token is None:
+    creds = oauth_provider.token_mapping.get(mcp_access_token.token)
+    if creds is None:
         raise HTTPException(401, "Not authenticated")
-    fulcra = FulcraAPI()
-    fulcra.set_cached_access_token(fulcra_token)
-    return fulcra
+
+    def on_refresh(new_creds: FulcraCredentials):
+        creds.access_token = new_creds.access_token
+        creds.access_token_expiration = new_creds.access_token_expiration
+        if new_creds.refresh_token:
+            creds.refresh_token = new_creds.refresh_token
+        logger.info(
+            "fulcra_token_refreshed",
+            new_expires_at=str(new_creds.access_token_expiration),
+        )
+
+    return FulcraAPI(
+        oidc_client_id=settings.oidc_client_id,
+        oidc_domain=settings.fulcra_oidc_domain,
+        oidc_audience=settings.fulcra_api,
+        credentials=creds,
+        refresh_callback=on_refresh,
+    )
 
 
 class AnnotationType(Enum):
@@ -707,12 +757,15 @@ async def debug_token_info() -> str:
     if not mcp_access_token:
         return json.dumps({"error": "No token in current session"})
     stored = oauth_provider.tokens.get(mcp_access_token.token)
-    has_fulcra_token = mcp_access_token.token in oauth_provider.token_mapping
+    creds = oauth_provider.token_mapping.get(mcp_access_token.token)
     return json.dumps({
         "client_id": stored.client_id if stored else None,
         "scopes": stored.scopes if stored else None,
-        "expires_at": stored.expires_at if stored else None,
-        "has_fulcra_token": has_fulcra_token,
+        "mcp_token_expires_at": stored.expires_at if stored else None,
+        "has_fulcra_credentials": creds is not None,
+        "fulcra_token_expires_at": str(creds.access_token_expiration) if creds else None,
+        "fulcra_has_refresh_token": bool(creds.refresh_token) if creds else None,
+        "fulcra_token_expired": creds.is_expired() if creds else None,
         "mcp_token_prefix": mcp_access_token.token[:12],
     })
 
@@ -884,7 +937,7 @@ async def _received_request(self, *args, **kwargs):
     try:
         return await old__received_request(self, *args, **kwargs)
     except RuntimeError:
-        pass
+        logger.debug("Ignoring RuntimeError in _received_request", exc_info=True)
 
 
 # pylint: disable-next=protected-access
