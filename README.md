@@ -9,7 +9,7 @@ When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as
 
 ### Remote Connection using Proxy
 
-Claude for Desktop config:
+Claude for Desktop config (`claude_desktop_config.json`) file:
 ```
 {
     "mcpServers": {
