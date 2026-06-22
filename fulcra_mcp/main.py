@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -75,6 +76,69 @@ class FulcraOAuthProvider(OAuthProvider):
         self.refresh_token_mapping: dict[str, FulcraCredentials] = {}
         # Fulcra API credentials keyed by MCP client_id
         self.client_credentials: dict[str, FulcraCredentials] = {}
+
+    # Access/refresh tokens (and their mapped FulcraCredentials) are persisted
+    # to ``state_path`` so issued tokens survive a restart or redeploy. The
+    # in-memory dicts above act as a cache in front of disk.
+
+    def _token_record_path(self, kind: str, token: str) -> Path | None:
+        """Resolve the on-disk path for a persisted token record.
+
+        ``kind`` is ``"access_tokens"`` or ``"refresh_tokens"``. The token is a
+        bearer secret, so it is hashed to form the filename rather than written
+        into the object name.
+        """
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        path = (settings.state_path / kind / f"{digest}.json").resolve()
+        if not path.is_relative_to(settings.state_path):
+            return None
+        return path
+
+    def _save_token_record(
+        self, kind: str, token: str, token_obj, creds: FulcraCredentials | None
+    ) -> None:
+        path = self._token_record_path(kind, token)
+        if path is None:
+            return
+        record = {
+            "token": token_obj.model_dump_json(),
+            "credentials": creds.to_json() if creds else None,
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(record))
+        except Exception as exc:
+            logger.error("failed to persist token record", kind=kind, exc_info=exc)
+
+    def _load_token_record(
+        self, kind: str, token: str
+    ) -> tuple[str, FulcraCredentials | None] | None:
+        """Return ``(token_json, credentials)`` from disk, or ``None`` if absent."""
+        path = self._token_record_path(kind, token)
+        if path is None:
+            return None
+        try:
+            record = json.loads(path.read_text())
+        except FileNotFoundError:
+            return None
+        except Exception as exc:
+            logger.error("failed to load token record", kind=kind, exc_info=exc)
+            return None
+        creds = (
+            FulcraCredentials.from_json(record["credentials"])
+            if record.get("credentials")
+            else None
+        )
+        return record["token"], creds
+
+    def _delete_token_record(self, kind: str, token: str) -> None:
+        path = self._token_record_path(kind, token)
+        if path is None:
+            return
+        try:
+            path.unlink(missing_ok=True)
+        except Exception as exc:
+            logger.error("failed to delete token record", kind=kind, exc_info=exc)
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         """Get OAuth client information."""
@@ -227,6 +291,16 @@ class FulcraOAuthProvider(OAuthProvider):
             self.token_mapping[mcp_token] = creds
             self.refresh_token_mapping[refresh_token_value] = creds
 
+        self._save_token_record(
+            "access_tokens", mcp_token, self.tokens[mcp_token], creds
+        )
+        self._save_token_record(
+            "refresh_tokens",
+            refresh_token_value,
+            self.refresh_tokens[refresh_token_value],
+            creds,
+        )
+
         del self.auth_codes[authorization_code.code]
 
         logger.info(
@@ -249,8 +323,16 @@ class FulcraOAuthProvider(OAuthProvider):
         """Load and validate an access token."""
         access_token = self.tokens.get(token)
         if not access_token:
-            logger.warning("token_not_found", token_prefix=token[:12])
-            return None
+            # Rehydrate from disk (e.g. after a restart or redeploy).
+            record = self._load_token_record("access_tokens", token)
+            if record is None:
+                logger.warning("token_not_found", token_prefix=token[:12])
+                return None
+            token_json, creds = record
+            access_token = AccessToken.model_validate_json(token_json)
+            self.tokens[token] = access_token
+            if creds is not None:
+                self.token_mapping[token] = creds
 
         if access_token.expires_at and access_token.expires_at < time.time():
             logger.info(
@@ -259,7 +341,9 @@ class FulcraOAuthProvider(OAuthProvider):
                 scopes=access_token.scopes,
                 token_prefix=token[:12],
             )
-            del self.tokens[token]
+            self.tokens.pop(token, None)
+            self.token_mapping.pop(token, None)
+            self._delete_token_record("access_tokens", token)
             return None
 
         logger.info(
@@ -276,8 +360,18 @@ class FulcraOAuthProvider(OAuthProvider):
     ) -> RefreshToken | None:
         token_obj = self.refresh_tokens.get(refresh_token)
         if not token_obj:
-            logger.warning("refresh token not found", token_prefix=refresh_token[:12])
-            return None
+            # Rehydrate from disk (e.g. after a restart or redeploy).
+            record = self._load_token_record("refresh_tokens", refresh_token)
+            if record is None:
+                logger.warning(
+                    "refresh token not found", token_prefix=refresh_token[:12]
+                )
+                return None
+            token_json, creds = record
+            token_obj = RefreshToken.model_validate_json(token_json)
+            self.refresh_tokens[refresh_token] = token_obj
+            if creds is not None:
+                self.refresh_token_mapping[refresh_token] = creds
         if token_obj.client_id != client.client_id:
             logger.warning(
                 "refresh_token_client_mismatch",
@@ -287,9 +381,9 @@ class FulcraOAuthProvider(OAuthProvider):
             return None
         if token_obj.expires_at is not None and token_obj.expires_at < time.time():
             logger.info("refresh_token_expired", client_id=client.client_id)
-            del self.refresh_tokens[refresh_token]
-            if refresh_token in self.refresh_token_mapping:
-                del self.refresh_token_mapping[refresh_token]
+            self.refresh_tokens.pop(refresh_token, None)
+            self.refresh_token_mapping.pop(refresh_token, None)
+            self._delete_token_record("refresh_tokens", refresh_token)
             return None
         return token_obj
 
@@ -302,10 +396,9 @@ class FulcraOAuthProvider(OAuthProvider):
         creds = self.refresh_token_mapping.get(refresh_token.token)
 
         # Clean up old refresh token (rotation)
-        if refresh_token.token in self.refresh_tokens:
-            del self.refresh_tokens[refresh_token.token]
-        if refresh_token.token in self.refresh_token_mapping:
-            del self.refresh_token_mapping[refresh_token.token]
+        self.refresh_tokens.pop(refresh_token.token, None)
+        self.refresh_token_mapping.pop(refresh_token.token, None)
+        self._delete_token_record("refresh_tokens", refresh_token.token)
 
         new_mcp_token = f"mcp_{secrets.token_hex(32)}"
         new_refresh_token_value = f"mcp_refresh_{secrets.token_hex(32)}"
@@ -328,6 +421,16 @@ class FulcraOAuthProvider(OAuthProvider):
             self.token_mapping[new_mcp_token] = creds
             self.refresh_token_mapping[new_refresh_token_value] = creds
 
+        self._save_token_record(
+            "access_tokens", new_mcp_token, self.tokens[new_mcp_token], creds
+        )
+        self._save_token_record(
+            "refresh_tokens",
+            new_refresh_token_value,
+            self.refresh_tokens[new_refresh_token_value],
+            creds,
+        )
+
         logger.info(
             "tokens_refreshed",
             client_id=client.client_id,
@@ -347,14 +450,12 @@ class FulcraOAuthProvider(OAuthProvider):
         self, token: str, token_type_hint: str | None = None
     ) -> None:
         """Revoke a token."""
-        if token in self.tokens:
-            del self.tokens[token]
-        if token in self.token_mapping:
-            del self.token_mapping[token]
-        if token in self.refresh_tokens:
-            del self.refresh_tokens[token]
-        if token in self.refresh_token_mapping:
-            del self.refresh_token_mapping[token]
+        self.tokens.pop(token, None)
+        self.token_mapping.pop(token, None)
+        self.refresh_tokens.pop(token, None)
+        self.refresh_token_mapping.pop(token, None)
+        self._delete_token_record("access_tokens", token)
+        self._delete_token_record("refresh_tokens", token)
 
 
 oauth_provider = FulcraOAuthProvider(
@@ -440,6 +541,13 @@ def get_fulcra_object() -> FulcraAPI:
         creds.access_token_expiration = new_creds.access_token_expiration
         if new_creds.refresh_token:
             creds.refresh_token = new_creds.refresh_token
+        # Keep the persisted record fresh so the refreshed Fulcra token
+        # survives a redeploy instead of going stale on disk.
+        stored = oauth_provider.tokens.get(mcp_access_token.token)
+        if stored is not None:
+            oauth_provider._save_token_record(
+                "access_tokens", mcp_access_token.token, stored, creds
+            )
         logger.info(
             "fulcra_token_refreshed",
             new_expires_at=str(new_creds.access_token_expiration),
@@ -474,7 +582,7 @@ async def get_annotations(ann_type: str | AnnotationType, start_time: datetime, 
         end_time: the ending time of the period. Must include tz (ISO8601).
     """
     fulcra = get_fulcra_object()
-    if isinstance(ann_type, AnnotationType) == False:
+    if not isinstance(ann_type, AnnotationType):
         try:
             ann_type = AnnotationType(ann_type)
         except ValueError:

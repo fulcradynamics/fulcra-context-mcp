@@ -18,7 +18,7 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        pythonVersion = pkgs.python312;
+        pythonVersion = pkgs.python314;
         pythonEnv = (
           pythonVersion.withPackages (
             p: with p; [
