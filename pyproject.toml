@@ -17,6 +17,9 @@ dependencies = [
     "structlog>=25.4.0",
 ]
 
+[tool.uv]
+exclude-newer = "2 weeks"
+exclude-newer-package = { fulcra = false, fulcra-data-types = false }
 
 [build-system]
 requires = ["setuptools>=45", "wheel"]
