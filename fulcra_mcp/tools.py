@@ -18,8 +18,11 @@ class AnnotationType(Enum):
     Numeric = "numeric"
     Scale = "scale"
 
+
 @tools_mcp.tool()
-async def get_annotations(ann_type: str | AnnotationType, start_time: datetime, end_time: datetime) -> str:
+async def get_annotations(
+    ann_type: str | AnnotationType, start_time: datetime, end_time: datetime
+) -> str:
     """
     Retrieve an array of all moment annotations the user recorded during a period of time.
     Each item contains the value (except for moment annotations) and the metadata (name, original spec, etc.) describing the annotation.
@@ -314,16 +317,20 @@ async def debug_token_info() -> str:
         return json.dumps({"error": "No token in current session"})
     stored = oauth_provider.tokens.get(mcp_access_token.token)
     creds = oauth_provider.token_mapping.get(mcp_access_token.token)
-    return json.dumps({
-        "client_id": stored.client_id if stored else None,
-        "scopes": stored.scopes if stored else None,
-        "mcp_token_expires_at": stored.expires_at if stored else None,
-        "has_fulcra_credentials": creds is not None,
-        "fulcra_token_expires_at": str(creds.access_token_expiration) if creds else None,
-        "fulcra_has_refresh_token": bool(creds.refresh_token) if creds else None,
-        "fulcra_token_expired": creds.is_expired() if creds else None,
-        "mcp_token_prefix": mcp_access_token.token[:12],
-    })
+    return json.dumps(
+        {
+            "client_id": stored.client_id if stored else None,
+            "scopes": stored.scopes if stored else None,
+            "mcp_token_expires_at": stored.expires_at if stored else None,
+            "has_fulcra_credentials": creds is not None,
+            "fulcra_token_expires_at": str(creds.access_token_expiration)
+            if creds
+            else None,
+            "fulcra_has_refresh_token": bool(creds.refresh_token) if creds else None,
+            "fulcra_token_expired": creds.is_expired() if creds else None,
+            "mcp_token_prefix": mcp_access_token.token[:12],
+        }
+    )
 
 
 @tools_mcp.tool()
@@ -335,6 +342,3 @@ async def get_user_info() -> str:
     fulcra = get_fulcra_object()
     user_info = fulcra.get_user_info()
     return "User information: " + json.dumps(user_info)
-
-
-

@@ -11,6 +11,8 @@ from fastapi import HTTPException
 logger = structlog.getLogger(__name__)
 
 stdio_fulcra: FulcraAPI | None = None
+
+
 def _get_credentials_path() -> Path:
     """Return the path for Fulcra credentials.
     TODO: Replace with FulcraCredentials built-in persistence when available.
@@ -44,6 +46,7 @@ def get_fulcra_object() -> FulcraAPI:
 
         creds = _load_stdio_credentials()
         if creds is not None:
+
             def on_refresh(new_creds: FulcraCredentials):
                 creds.access_token = new_creds.access_token
                 creds.access_token_expiration = new_creds.access_token_expiration
@@ -95,6 +98,3 @@ def get_fulcra_object() -> FulcraAPI:
         credentials=creds,
         refresh_callback=on_refresh,
     )
-
-
-
