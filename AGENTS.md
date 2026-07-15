@@ -114,7 +114,7 @@ Sleep stages, sleep duration, sleep efficiency, HRV (heart rate variability), he
 Continuous glucose monitor (CGM) readings from Dexcom and Libre, meal logs, macronutrient tracking, calorie intake, hydration data. Enables correlation of nutrition with biometric outcomes.
 
 ### Location & Calendar
-Real-time and historical location data (high-frequency updates and visit summaries), calendar events and meeting schedules synced from the user's device calendars (Apple Calendar, including any subscribed Google or other calendars). Includes both `CLLocationUpdate` (frequent GPS pings) and `CLVisit` (place-based time ranges) data types.
+Real-time and historical location data, plus calendar events and meeting schedules synced from the user's device calendars (Apple Calendar, including any subscribed Google or other calendars). The location tools return a fused interpretation of where the user was at a given time, combining whatever underlying data sources are available rather than exposing raw per-source samples.
 
 ### Annotations & Custom Events
 User-logged medications, supplements, mood entries, device usage, and custom events. These can be discovered, classified, and correlated with biometric streams over time. Users (and agents, via the CLI's `data-type` and `tag` commands) can define new data types to track.
