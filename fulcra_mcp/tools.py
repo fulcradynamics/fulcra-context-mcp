@@ -30,8 +30,8 @@ async def get_annotations(
     ann_type: str | AnnotationType, start_time: datetime, end_time: datetime
 ) -> str:
     """
-    Retrieve an array of all moment annotations the user recorded during a period of time.
-    Each item contains the value (except for moment annotations) and the metadata (name, original spec, etc.) describing the annotation.
+    Retrieve recorded annotations during a period of time.
+    Each record contains the value (except for moment annotations) and the metadata (name, original spec, etc.) describing the annotation.
 
     Args:
         ann_type: annotation type (moment, duration, boolean, numeric, scale, etc.)
@@ -94,8 +94,152 @@ async def annotations_catalog() -> str:
 # Base annotation types; ids rooted in one of these (including custom
 # "<Base>/<uuid>" types) are readable with the `get_annotations` tool.
 ANNOTATION_BASE_TYPES = tuple(f"{t.name}Annotation" for t in AnnotationType)
+ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
 NO_TOOL_GROUP = "data types not yet readable through this server"
+
+
+def _parse_annotation_id(data_type: str) -> str | None:
+    """Extract the annotation UUID from a '<BaseType>/<uuid>' ID or a bare UUID."""
+    candidate = data_type.rsplit("/", 1)[-1]
+    try:
+        return str(UUID(candidate))
+    except ValueError:
+        return None
+
+
+@tools_mcp.tool(annotations={"destructiveHint": False})
+async def create_data_type(
+    base_type: Literal["moment", "duration", "boolean", "numeric", "scale"],
+    name: str,
+    description: str | None = None,
+    tags: list[str] | None = None,
+    metric_kind: Literal["cumulative", "discrete"] | None = None,
+    default_value: str | None = None,
+    unit: str | None = None,
+    scale_labels: list[str] | None = None,
+) -> str:
+    """Create a user-defined data type so the user can track something new.
+
+    Choose base_type by what gets recorded: "moment" (a point in time),
+    "duration" (a time range), "boolean" (yes/no), "numeric" (a number,
+    optionally with a unit), or "scale" (a 1-5 rating with labels).
+
+    The new type appears in get_data_catalog, and recorded values are readable
+    with get_records or get_annotations. Creation is reversible with
+    archive_data_type.
+
+    Args:
+        base_type: What kind of values this type records (see above).
+        name: Human-readable name (e.g. "Caffeine Intake").
+        description: Optional description of what the type tracks.
+        tags: Optional tag names to attach; missing tags are created automatically.
+        metric_kind: "cumulative" or "discrete". boolean/numeric/scale only.
+        default_value: Value pre-filled when recording. boolean/numeric only.
+        unit: Unit for recorded values (e.g. "mg"). numeric only.
+        scale_labels: Exactly 5 labels for the 1-5 scale values. scale only.
+    Returns:
+        The created data type, including its "<BaseType>/<uuid>" ID.
+    """
+    if scale_labels is not None and base_type != "scale":
+        return "scale_labels can only be used with base_type='scale'."
+    if base_type == "scale" and len(scale_labels or []) != 5:
+        return "base_type='scale' requires exactly 5 scale_labels, one per value 1-5."
+    if unit is not None and base_type != "numeric":
+        return "unit can only be used with base_type='numeric'."
+    if metric_kind is not None and base_type in ("moment", "duration"):
+        return "metric_kind can only be used with boolean, numeric, or scale types."
+
+    value = None
+    if default_value is not None:
+        if base_type == "boolean":
+            lowered = default_value.strip().lower()
+            if lowered in ("true", "1", "yes", "y", "on"):
+                value = True
+            elif lowered in ("false", "0", "no", "n", "off"):
+                value = False
+            else:
+                return f"default_value {default_value!r} is not a valid boolean."
+        elif base_type == "numeric":
+            try:
+                value = float(default_value)
+            except ValueError:
+                return f"default_value {default_value!r} is not a valid number."
+        else:
+            return "default_value can only be used with boolean or numeric types."
+
+    fulcra = get_fulcra_object()
+    try:
+        ann = fulcra.create_annotation(
+            annotation_type=base_type,
+            name=name,
+            description=description,
+            tags=tags or [],
+            metric_kind=metric_kind,
+            value=value,
+            unit=unit,
+            scale_labels=scale_labels,
+        )
+    except urllib.error.HTTPError as e:
+        return f"Could not create data type (HTTP {e.code}): {e.read().decode('utf-8', errors='replace')[:300]}"
+    catalog_id = f"{ANNOTATION_ID_BY_TYPE[base_type]}/{ann['id']}"
+    return f"Created data type {catalog_id}: " + json.dumps(ann)
+
+
+@tools_mcp.tool(annotations={"destructiveHint": True})
+async def archive_data_type(data_type: str) -> str:
+    """Archive (soft-delete) a user-defined data type.
+
+    The type and its recorded data are recoverable with restore_data_type.
+    Only user-defined types (created via create_data_type or the Context app)
+    can be archived.
+
+    Args:
+        data_type: The "<BaseType>/<uuid>" ID from get_data_catalog, or the bare UUID.
+    """
+    ann_id = _parse_annotation_id(data_type)
+    if ann_id is None:
+        return (
+            "data_type must be a user-defined type ID of the form '<BaseType>/<uuid>' "
+            "(see get_data_catalog, category 'user_configured') or a bare UUID."
+        )
+    fulcra = get_fulcra_object()
+    try:
+        fulcra.delete_annotation(ann_id)
+    except urllib.error.HTTPError as e:
+        # The server responds 403 for IDs that don't exist or belong to another user.
+        if e.code in (403, 404):
+            return (
+                f"No user-defined data type of this user found with ID {data_type!r}."
+            )
+        raise
+    return (
+        f"Archived data type {data_type}. It can be recovered with restore_data_type."
+    )
+
+
+@tools_mcp.tool()
+async def restore_data_type(data_type: str) -> str:
+    """Restore an archived user-defined data type.
+
+    Args:
+        data_type: The "<BaseType>/<uuid>" ID of the archived type, or the bare UUID.
+    """
+    ann_id = _parse_annotation_id(data_type)
+    if ann_id is None:
+        return (
+            "data_type must be a user-defined type ID of the form '<BaseType>/<uuid>' "
+            "or a bare UUID."
+        )
+    fulcra = get_fulcra_object()
+    try:
+        ann = fulcra.restore_annotation(ann_id)
+    except urllib.error.HTTPError as e:
+        # The server responds 403 for IDs that don't exist or belong to another user.
+        if e.code in (403, 404):
+            return f"No archived data type of this user found with ID {data_type!r}."
+        raise
+    return f"Restored data type {data_type}: " + json.dumps(ann)
 
 
 def _compatible_tools(entry: dict) -> str:
@@ -242,7 +386,7 @@ async def get_records(
     end_time: datetime,
     fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve the raw records of a data type for the user during a specified period.
+    """Retrieve the raw records of a data type for the user during a time period.
 
     Works with every data type listed by `get_data_catalog`, including
     user-defined ones, which use the "<BaseType>/<uuid>" ID form. The correct
