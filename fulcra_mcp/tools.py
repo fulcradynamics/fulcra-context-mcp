@@ -303,16 +303,16 @@ async def get_records(
             "metric",
             "event",
         ):
-            path_type = entry["id"]
+            path = f"{record_type}/{entry['id']}"
             if user_annotation_id:
-                path_type = f"{path_type}/{user_annotation_id}"
+                path = f"{path}/{user_annotation_id}"
             params = {
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat(),
             }
             if fulcra_userid:
                 params["fulcra_userid"] = fulcra_userid
-            results += json.loads(fulcra.fulcra_v1_api(record_type, path_type, params))
+            results += json.loads(fulcra.fulcra_v1_api_path(path, params=params))
         else:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "
