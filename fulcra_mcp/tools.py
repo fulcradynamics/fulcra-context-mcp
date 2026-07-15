@@ -374,48 +374,33 @@ async def get_sleep(
 ) -> str:
     """Return the user's sleep data at a chosen level of detail.
 
-    Pick the coarsest level that answers the question — results get much larger
-    as detail increases:
-    - "aggregate": totals per period (default: per day), one row per period and
-      sleep stage (the "value" column is the stage). Best for multi-day
-      questions like "how did I sleep this month".
-    - "cycles": one row per sleep session, with start/end and duration.
-    - "stages": every sleep stage interval (the full hypnogram). Best for
-      single-night deep dives.
+    Pick the coarsest level that answers the question — results grow with detail:
+    - "aggregate": stage totals per period (default 1 day), one row per period
+      per stage. Best for multi-day questions ("how did I sleep this month").
+    - "cycles": one row per sleep session.
+    - "stages": every stage interval (the full hypnogram); single-night detail.
 
-    Sleep typically spans midnight: a night's sleep starts on day N and ends on
-    day N+1, so extend the time range accordingly. Result timestamps include
-    time zones; always translate them to the user's local time zone when known.
-
-    Sleep stage integer values: 0 = In Bed, 1 = Asleep (Unknown), 2 = Awake,
-    3 = Asleep (Light), 4 = Asleep (Deep), 5 = Asleep (REM).
+    Sleep spans midnight (starts day N, ends day N+1) — extend the time range
+    accordingly. Stage integers: 0=In Bed, 1=Asleep/Unknown, 2=Awake, 3=Light,
+    4=Deep, 5=REM. Result timestamps include time zones; translate them to the
+    user's local time zone when known.
 
     Args:
-        start_time: The starting timestamp (inclusive). Must include tz (ISO8601).
-        end_time: The ending timestamp (exclusive). Must include tz (ISO8601).
-        level: The level of detail to return (see above). Defaults to "cycles".
-        cycle_gap: Optional. Minimum time interval separating distinct cycles
-                   (e.g., "PT2H" for 2 hours). Defaults to server-side default.
-        stages: Optional. Sleep stages to include. Defaults to all stages.
-        gap_stages: Optional. Sleep stages to consider as gaps in sleep cycles.
-                    Defaults to server-side default.
-        clip_to_range: Optional. Whether to clip the data to the requested date range. Defaults to True.
-        merge_overlapping: Optional, level="stages" only. Merge overlapping stages
-                           based on priority and start time. Defaults to True.
-        merge_contiguous: Optional, level="stages" only. Merge contiguous samples
-                          with the same sleep stage. Defaults to True.
-        mode: Optional, level="aggregate" only. Whether to use the cycle "start" or
-              "end" to assign cycles to periods, or "split" stage intervals at
-              period boundaries. Defaults to "end".
-        period: Optional, level="aggregate" only. The aggregation period (e.g. "1d",
-                "1w"). Defaults to "1d".
-        agg_functions: Optional, level="aggregate" only. Aggregations to return
-                       (e.g. "sum", "mean"). Defaults to ["sum"].
-        time_zone: Optional, level="aggregate" only. IANA time zone to assign
-                   periods in. Defaults to "UTC"; use the user's local time zone
-                   so periods match their days.
-    Returns:
-        A JSON string representing a list of rows of sleep data.
+        start_time: Range start (inclusive). Must include tz (ISO8601).
+        end_time: Range end (exclusive). Must include tz (ISO8601).
+        level: Level of detail (see above).
+        cycle_gap: Minimum interval separating distinct cycles (e.g. "PT2H").
+        stages: Stage integers to include (default: all).
+        gap_stages: Stage integers treated as gaps between cycles.
+        clip_to_range: Clip results to the requested range (default True).
+        merge_overlapping: "stages" level only. Merge overlapping stages (default True).
+        merge_contiguous: "stages" level only. Merge adjacent same-stage samples (default True).
+        mode: "aggregate" level only. Assign cycles to periods by "start" or
+              "end", or "split" intervals at period boundaries (default "end").
+        period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
+        agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
+        time_zone: "aggregate" level only. IANA tz for period boundaries
+                   (default "UTC"; use the user's local tz so periods match their days).
     """
     fulcra = get_fulcra_object()
     kwargs = {}
