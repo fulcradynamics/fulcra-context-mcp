@@ -105,6 +105,21 @@ There are MCP tools available to both get general information about the user and
 
 All time parameters must include time zones (ISO 8601 format). Always translate result timestamps to the user's local time zone when known.
 
+### Measuring tool context cost (for contributors)
+
+Tool definitions (descriptions + schemas) are loaded into every MCP client
+conversation, so their size matters. To measure the current cost per tool and
+in total, run this from the repo root:
+
+```sh
+uv run python scripts/measure_tools.py
+```
+
+Pass another checkout's path as an argument to compare versions (e.g. `uv run
+python scripts/measure_tools.py ../main-checkout`). Treat it as a regression
+check when adding or editing tools: a change that adds hundreds of tokens of
+definitions should be earning them.
+
 ## Available Data
 
 ### Health & Biometrics
