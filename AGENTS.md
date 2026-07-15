@@ -16,7 +16,7 @@ The human user gets to investigate their data interactively using beautiful mobi
 ### Agentic/Programmatic Access To the User's Data
 * Fully supported [OAuth2 REST API](https://fulcradynamics.github.io/developer-docs/):
     * [OpenAPI spec](https://api.fulcradynamics.com/openapi.json)
-* [Python client library](https://fulcradynamics.github.io/fulcra-api-python/) (`pip install fulcra-api`): For an easy way to use the client library. Handles authentication for you.
+* [Python client library](https://fulcradynamics.github.io/fulcra-api-python/) (`pip install fulcra-api`): For an easy way to use the client library. Handles authentication for you. It also includes the `fulcra` CLI, which gives command-line access to the full platform — data queries, the data type catalog, tags, user-defined data types, and file storage. Sub-commands emit JSON lines for piping into tools like `jq`; run `fulcra --help` for the command list.
 * [MCP Server Docs](https://fulcradynamics.github.io/developer-docs/mcp-server/): A guide on how to use the MCP server.
 * [MCP server](https://mcp.fulcradynamics.com): The endpoint to the public MCP server. The server uses Streamable HTTP transport with OAuth2 authorization. Context users can use this server with their own account to securely access their data.
 * [MCP server source code](https://github.com/fulcradynamics/fulcra-context-mcp): The open-source repository for the MCP server. Useful for inspecting available tools, running locally, or contributing.
@@ -25,12 +25,30 @@ The human user gets to investigate their data interactively using beautiful mobi
 
 #### Code-first agents
 
-If you're able to write and run Python code, try the official `fulcra-api` Python module first.  When calling `.authorize()`, the output will include a URL that you can send to the operator (the user). The user can then click that link on a browser and authorize the API instance to make calls. This path uses the OAuth2 Device Authorization Flow convention.
+If you can run shell commands, try the `fulcra` CLI first; it ships as part of the `fulcra-api` client library (`pip install fulcra-api`). Authenticate once with:
 
-Example interactive session (`fulcra-api` module must be installed first):
 ```
-Python 3.14.2 (main, Dec  9 2025, 19:29:30) [Clang 21.1.4 ] on darwin
-Type "help", "copyright", "credits" or "license" for more information.
+fulcra auth login
+```
+
+This uses the OAuth2 Device Authorization Flow: it prints a URL for the operator (the user) to open in a browser, polls until they approve, and persists credentials (including a refresh token) at `~/.config/fulcra/credentials.json`, so subsequent commands need no re-authentication.
+
+If you can't keep a process alive while the user completes the browser flow, use the split, non-interactive variant:
+
+```
+fulcra auth login --get-auth-url          # prints the auth URL and a device code; send the URL to the user
+fulcra auth login --device-code <CODE>    # run after the user finishes the browser flow
+```
+
+To make direct REST API calls, `fulcra auth print-access-token` prints a bearer token, e.g.:
+
+```
+curl --oauth2-bearer "$(fulcra auth print-access-token)" 'https://api.fulcradynamics.com/user/v1alpha1/info'
+```
+
+If you're writing Python code, the same flow is available on the `fulcra-api` module. When calling `.authorize()`, the output will include a URL that you can send to the operator; the call polls while the user completes it in a browser. If the call times out, call `authorize()` again to get a new URL.
+
+```
 >>> from fulcra_api.core import FulcraAPI
 >>> fulcra = FulcraAPI()
 >>> fulcra.authorize()
@@ -39,11 +57,9 @@ Type "help", "copyright", "credits" or "license" for more information.
             automatically, visit this URL to authenticate: https://fulcra.us.auth0.com/activate?user_code=DBNV-DBQV
 ```
 
-The `authorize()` call will poll while the user reaches the URL. If the call times out, call `authorize()` again to get a new URL.
-
 #### Text-first agents
 
-For agents without the ability to run Python code, use the [MCP server](https://mcp.fulcradynamics.com). This server includes tools that can access the same data sources that the API can.
+For agents without the ability to run shell commands or Python code, use the [MCP server](https://mcp.fulcradynamics.com). This server includes tools that can access the same data sources that the API can.
 
 The user can either use the public MCP server instance at `https://mcp.fulcradynamics.com`, or run it locally. It is published as the `fulcra-context-mcp` PyPI module.
 
@@ -83,7 +99,9 @@ Local connection using `uvx`:
 
 ## MCP tools and tips
 
-There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info`, `get_sleep_cycles`, `annotations_catalog`, to get a sense of what the user has chosen to record. Then use the other fuctions (e.g. `metric_time_series`, `metric_samples`, `get_sleep_cycles`, etc. to get the data for specific time range(s).
+There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info`, `get_data_catalog`, and `annotations_catalog`, to get a sense of what the user has chosen to record. Then use the other tools (e.g. `get_metric_time_series`, `get_records`, `get_sleep`, `get_annotations`, etc.) to get the data for specific time range(s).
+
+`get_data_catalog` returns every available data type grouped by the tools that can read it — only use a data type with the tools named in its group. `get_records` retrieves raw records for any data type in the catalog (including user-defined ones); `get_metric_time_series` computes per-interval values and only supports the types listed under it.
 
 All time parameters must include time zones (ISO 8601 format). Always translate result timestamps to the user's local time zone when known.
 
@@ -96,10 +114,13 @@ Sleep stages, sleep duration, sleep efficiency, HRV (heart rate variability), he
 Continuous glucose monitor (CGM) readings from Dexcom and Libre, meal logs, macronutrient tracking, calorie intake, hydration data. Enables correlation of nutrition with biometric outcomes.
 
 ### Location & Calendar
-Real-time and historical location data (high-frequency updates and visit summaries), Google Calendar events, meeting schedules. Includes both `CLLocationUpdate` (frequent GPS pings) and `CLVisit` (place-based time ranges) data types.
+Real-time and historical location data (high-frequency updates and visit summaries), calendar events and meeting schedules synced from the user's device calendars (Apple Calendar, including any subscribed Google or other calendars). Includes both `CLLocationUpdate` (frequent GPS pings) and `CLVisit` (place-based time ranges) data types.
 
 ### Annotations & Custom Events
-User-logged medications, supplements, mood entries, device usage, and custom events. These can be discovered, classified, and correlated with biometric streams over time.
+User-logged medications, supplements, mood entries, device usage, and custom events. These can be discovered, classified, and correlated with biometric streams over time. Users (and agents, via the CLI's `data-type` and `tag` commands) can define new data types to track.
+
+### Files
+Users can upload arbitrary files to their account for storage alongside their data. The CLI's `file` sub-commands support list, stat, upload, download, delete, and version restore.
 
 ### Time Series Metrics
 
@@ -107,9 +128,24 @@ Example metrics from the catalog: `StepCount`, `HeartRate`, `HeartRateVariabilit
 
 ## Best Practices for Agents
 
-- **Use appropriate sample rates.** When querying time series data, choose a `samprate` that balances resolution with performance. For daily overviews, 3600 seconds (hourly) works well. For detailed analysis, 60-300 seconds.
+- **Use appropriate sample rates.** When querying time series data, choose a `sample_rate` that balances resolution with performance. For daily overviews, 3600 seconds (hourly) works well. For detailed analysis, 60-300 seconds.
 - **Sleep spans midnight.** Sleep cycles typically start on day N and end on day N+1. When querying sleep data, account for this by extending your date range.
 - **Correlate across domains.** The real power of Context is combining data streams - sleep quality with nutrition, HRV with training load, location with calendar events. Look for patterns across domains.
+
+### Example: Querying Data with the CLI
+
+```sh
+# Discover available data types (supports --name, --category, and --data-type filters)
+fulcra catalog --name heart
+
+# Get heart rate data for a day (hourly resolution)
+fulcra metric-time-series HeartRate "2025-01-01T00:00:00-08:00" "2025-01-02T00:00:00-08:00" --sample-rate 3600
+
+# Raw records for any catalog data type; time ranges can also be relative
+fulcra get-records StepCount "1 day"
+```
+
+The `related_cli_commands` property on each `fulcra catalog` entry lists the sub-commands that work with that data type.
 
 ### Example: Querying Data with the Python Client
 
@@ -119,8 +155,8 @@ from fulcra_api.core import FulcraAPI
 fulcra = FulcraAPI()
 fulcra.authorize()
 
-# Discover available metrics
-catalog = fulcra.metrics_catalog()
+# Discover available data types (metrics, events, annotations)
+catalog = fulcra.v1_catalog()
 
 # Get heart rate data for a day (hourly resolution)
 data = fulcra.metric_time_series(

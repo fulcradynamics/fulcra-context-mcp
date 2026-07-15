@@ -14,6 +14,10 @@ from .provider import oauth_provider
 from .tools import tools_mcp
 
 logging.basicConfig(format="%(message)s", stream=sys.stderr, level=logging.INFO)
+# In stdio mode, stdout carries the JSON-RPC stream; logs must go to stderr.
+structlog.configure(
+    logger_factory=structlog.PrintLoggerFactory(sys.stderr),
+)
 logger = structlog.getLogger(__name__)
 
 

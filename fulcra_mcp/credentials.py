@@ -1,5 +1,7 @@
 import structlog
 import os
+import sys
+import webbrowser
 from pathlib import Path
 from .settings import settings
 from .provider import oauth_provider
@@ -61,8 +63,21 @@ def get_fulcra_object() -> FulcraAPI:
             )
             return stdio_fulcra
 
+        # stdout carries the JSON-RPC stream in stdio mode, so the device-flow
+        # prompt must go to stderr (FulcraAPI.authorize() prints to stdout).
+        def _stderr_prompt(device_code: str, uri: str, code: str):
+            webbrowser.open_new_tab(uri)
+            print(
+                f"Use your browser to log in to Fulcra. If a tab does not open "
+                f"automatically, visit this URL: {uri}\n"
+                f"Verify that the code displayed matches: {code}",
+                file=sys.stderr,
+            )
+
         stdio_fulcra = FulcraAPI()
-        stdio_fulcra.authorize()
+        stdio_fulcra.fulcra_credentials = stdio_fulcra.oidc.authorize_via_device_flow(
+            prompt_callback=_stderr_prompt
+        )
         if stdio_fulcra.fulcra_credentials:
             _save_stdio_credentials(stdio_fulcra.fulcra_credentials)
         return stdio_fulcra
