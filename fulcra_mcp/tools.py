@@ -9,10 +9,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastmcp import FastMCP
-from mcp.server.auth.middleware.auth_context import get_access_token
 
 from .credentials import get_fulcra_object
-from .provider import oauth_provider
+from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
 
@@ -848,32 +847,44 @@ async def restore_file(version_id: str) -> str:
     return f"Restored {full_path}: " + json.dumps(_slim_file(restored))
 
 
-@tools_mcp.tool()
 async def debug_token_info() -> str:
-    """Return info about the current MCP session's OAuth token.
+    """Return info about the local session's Fulcra credentials.
 
-    Shows scopes, expiry, client ID, and whether a Fulcra API token is mapped.
-    Useful for diagnosing authentication and scope issues.
+    Shows expiry and refresh-token presence for the stdio session's stored
+    credentials. Useful for diagnosing authentication issues.
     """
-    mcp_access_token = get_access_token()
-    if not mcp_access_token:
-        return json.dumps({"error": "No token in current session"})
-    stored = oauth_provider.tokens.get(mcp_access_token.token)
-    creds = oauth_provider.token_mapping.get(mcp_access_token.token)
+    from . import credentials as credentials_module
+
+    if (
+        credentials_module.stdio_fulcra is not None
+        and credentials_module.stdio_fulcra.fulcra_credentials is not None
+    ):
+        creds = credentials_module.stdio_fulcra.fulcra_credentials
+        source = "active session"
+    else:
+        creds = credentials_module._load_stdio_credentials()
+        source = "credentials file"
+    if creds is None:
+        return json.dumps(
+            {
+                "error": "No stored Fulcra credentials; the first data tool call "
+                "will start the device login flow."
+            }
+        )
     return json.dumps(
         {
-            "client_id": stored.client_id if stored else None,
-            "scopes": stored.scopes if stored else None,
-            "mcp_token_expires_at": stored.expires_at if stored else None,
-            "has_fulcra_credentials": creds is not None,
-            "fulcra_token_expires_at": str(creds.access_token_expiration)
-            if creds
-            else None,
-            "fulcra_has_refresh_token": bool(creds.refresh_token) if creds else None,
-            "fulcra_token_expired": creds.is_expired() if creds else None,
-            "mcp_token_prefix": mcp_access_token.token[:12],
+            "source": source,
+            "fulcra_token_expires_at": str(creds.access_token_expiration),
+            "fulcra_token_expired": creds.is_expired(),
+            "fulcra_has_refresh_token": bool(creds.refresh_token),
         }
     )
+
+
+# Token debugging is only exposed on local stdio servers; the deployed server
+# must not leak token details to MCP clients.
+if settings.fulcra_environment == "stdio":
+    tools_mcp.tool(debug_token_info)
 
 
 @tools_mcp.tool()
