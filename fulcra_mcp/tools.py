@@ -648,6 +648,147 @@ async def get_location_time_series(
     )
 
 
+# Event fields that carry sync plumbing rather than meaning; recurrence info
+# is deliberately kept.
+CALENDAR_EVENT_DROP_FIELDS = frozenset(
+    (
+        "calendar_event_id",
+        "calendar_item_external_identifier",
+        "calendar_item_identifier",
+        "event_identifier",
+        "alarms",
+        "has_alarms",
+        "has_attendees",
+        "has_notes",
+        "creation_date",
+        "last_modified_date",
+        "occurrence_date",
+        "organizer",
+        "extras",
+        "is_detached",
+        "allow_new_time_proposals",
+    )
+)
+
+
+def _slim_calendar(cal: dict) -> dict:
+    slim = {"id": cal.get("calendar_id"), "name": cal.get("calendar_name")}
+    for key in ("is_subscribed", "is_immutable"):
+        if cal.get(key):
+            slim[key] = True
+    return slim
+
+
+def _slim_event(
+    event: dict, calendar_names: dict[str, str], include_participants: bool
+) -> dict:
+    slim = {
+        k: v
+        for k, v in event.items()
+        if k not in CALENDAR_EVENT_DROP_FIELDS and v not in (None, [], {}, False)
+    }
+    name = calendar_names.get(event.get("calendar_id") or "")
+    if name:
+        slim["calendar_name"] = name
+    participants = slim.pop("participants", None)
+    if participants:
+        # The count is always present so clients know participant detail is
+        # available on request.
+        slim["participant_count"] = len(participants)
+        if include_participants:
+            compact = []
+            for p in participants:
+                cp = {
+                    k: p.get(k)
+                    for k in (
+                        "name",
+                        "participant_status",
+                        "participant_role",
+                        "is_current_user",
+                    )
+                    if p.get(k)
+                }
+                # A bare-email invitee may have no name; the mailto: URL is
+                # then the only identity.
+                if not cp.get("name") and (p.get("url") or "").startswith("mailto:"):
+                    cp["email"] = p["url"][len("mailto:") :]
+                compact.append(cp)
+            slim["participants"] = compact
+    return slim
+
+
+@tools_mcp.tool(annotations={"readOnlyHint": True})
+async def get_calendars(fulcra_userid: str | None = None) -> str:
+    """List the user's calendars, grouped by account/source.
+
+    Use the names or IDs with get_calendar_events to filter by calendar.
+
+    Args:
+        fulcra_userid: List calendars of another Fulcra user (requires an
+            active datashare from that user).
+    """
+    fulcra = get_fulcra_object()
+    grouped: dict[str, list[dict]] = {}
+    for cal in fulcra.calendars(fulcra_userid=fulcra_userid):
+        source = cal.get("calendar_source_name") or "unknown source"
+        grouped.setdefault(source, []).append(_slim_calendar(cal))
+    return "Calendars by source: " + json.dumps(grouped)
+
+
+@tools_mcp.tool(annotations={"readOnlyHint": True})
+async def get_calendar_events(
+    start_time: datetime,
+    end_time: datetime,
+    calendars: list[str] | None = None,
+    include_participants: bool = False,
+    fulcra_userid: str | None = None,
+) -> str:
+    """Retrieve the user's calendar events that occur (at least partially)
+    during a time period.
+
+    Each event carries a participant_count; pass include_participants=true
+    when you need who was invited and their responses. Result timestamps
+    include time zones; translate them to the user's local time zone when
+    known.
+
+    Args:
+        start_time: Range start (inclusive). Must include tz (ISO8601).
+        end_time: Range end (exclusive). Must include tz (ISO8601).
+        calendars: Only return events from these calendars, given as calendar
+            names (case-insensitive) or IDs (see get_calendars).
+        include_participants: Include each event's participant list (name or
+            email, RSVP status, role).
+        fulcra_userid: Retrieve events of another Fulcra user (requires an
+            active datashare from that user).
+    """
+    fulcra = get_fulcra_object()
+    all_calendars = fulcra.calendars(fulcra_userid=fulcra_userid)
+    calendar_names = {c["calendar_id"]: c.get("calendar_name") for c in all_calendars}
+
+    calendar_ids = None
+    if calendars:
+        calendar_ids = []
+        for wanted in calendars:
+            matches = [
+                cid
+                for cid, cname in calendar_names.items()
+                if cid == wanted or (cname or "").lower() == wanted.lower()
+            ]
+            if not matches:
+                return f"No calendar named {wanted!r}. Use get_calendars to list available calendars."
+            calendar_ids += matches
+
+    events = fulcra.calendar_events(
+        start_time=start_time,
+        end_time=end_time,
+        calendar_ids=calendar_ids,
+        fulcra_userid=fulcra_userid,
+    )
+    return f"Calendar events from {start_time} to {end_time}: " + json.dumps(
+        [_slim_event(e, calendar_names, include_participants) for e in events]
+    )
+
+
 def _file_path(path: str, name: str = "") -> str:
     """Normalize a user-supplied file path to an absolute one, like the CLI does."""
     return str(PurePath("/", path, name))
