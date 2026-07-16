@@ -241,6 +241,109 @@ async def restore_data_type(data_type: str) -> str:
     return f"Restored data type {data_type}: " + json.dumps(ann)
 
 
+# Stamped into every record written through this server, mirroring the CLI's
+# "com.fulcradynamics.cli".
+MCP_RECORD_SOURCE = "com.fulcradynamics.mcp"
+
+
+@tools_mcp.tool(annotations={"destructiveHint": False})
+async def record_data(
+    data_type: str,
+    value: str | None = None,
+    note: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    tags: list[str] | None = None,
+) -> str:
+    """Record a single record for a recordable data type.
+
+    Use get_data_catalog to find data types; user-defined ones use the
+    "<BaseType>/<uuid>" ID form (create new ones with create_data_type).
+    Recorded data can be read back with get_records.
+
+    Args:
+        data_type: The ID of the data type to record to.
+        value: The value to record, for types that take one (e.g. "75.5" for
+            numeric, "true" for boolean, "3" for scale).
+        note: Free-text note stored with the record.
+        start_time: When the record occurred. Defaults to now. Must include
+            tz (ISO8601). Duration-style types require it.
+        end_time: When the recorded range ended; only for duration-style types
+            (required there).
+        tags: Tag names to attach; missing tags are created automatically.
+    Returns:
+        Confirmation including the upload ID and the recorded fields.
+    """
+    fulcra = get_fulcra_object()
+
+    base_type, _, annotation_uuid = data_type.partition("/")
+    annotation_source = None
+    if annotation_uuid:
+        try:
+            annotation_source = (
+                f"com.fulcradynamics.annotation.{str(UUID(annotation_uuid)).lower()}"
+            )
+        except ValueError:
+            return (
+                "User-defined data type IDs must take the form <BaseType>/<UUID>. "
+                "Use get_data_catalog to list valid IDs."
+            )
+
+    try:
+        entries = fulcra.v1_catalog(data_type=base_type)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
+        raise
+    if len(entries) != 1:
+        return f"Data type {base_type!r} matches {len(entries)} catalog entries; use an exact ID from get_data_catalog."
+    entry = entries[0]
+    if not entry.get("recordable"):
+        return f"Data type {data_type!r} is not recordable."
+
+    if end_time is not None and start_time is None:
+        return "end_time requires start_time."
+
+    record: dict = {"sources": [MCP_RECORD_SOURCE]}
+    if annotation_source:
+        record["sources"].append(annotation_source)
+    if value is not None:
+        try:
+            record["value"] = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            record["value"] = value
+    if note is not None:
+        record["note"] = note
+    if start_time is not None and end_time is not None:
+        record["recorded_at"] = {
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        }
+    elif start_time is not None:
+        record["recorded_at"] = start_time.isoformat()
+    if tags:
+        try:
+            record["tags"] = [t["id"] for t in fulcra.create_tags(tags)]
+        except urllib.error.HTTPError as e:
+            return f"Could not resolve tags (HTTP {e.code})."
+
+    api_version = entry["api_version"]
+    validation_errors = fulcra.validate_records(base_type, [record], api_version)
+    if validation_errors:
+        _, error_msg, _ = validation_errors[0]
+        hint = ""
+        if "recorded_at" in error_msg and "object" in error_msg:
+            hint = " This type records a time range; pass both start_time and end_time."
+        return f"Record is not valid for {data_type}: {error_msg}.{hint}"
+
+    resp = fulcra.record_data_type(base_type, [record], api_version)
+    return (
+        f"Recorded 1 {data_type} record (upload ID {resp.get('upload_id')}): "
+        + json.dumps(record)
+        + ". It can be read back with get_records."
+    )
+
+
 def _compatible_tools(entry: dict) -> str:
     """Map a v1 catalog entry to the MCP tools that can read it, mirroring the
     CLI's related_cli_commands()."""
