@@ -324,26 +324,21 @@ async def get_metric_time_series(
     replace_nulls: bool | None = False,
     calculations: list[str] | None = None,
 ) -> str:
-    """Get user's time-series data for a single Fulcra metric.
-
-    Covers the time starting at start_time (inclusive) until end_time (exclusive).
-    Result timestamps will include tz. Always translate timestamps to the user's local
-    tz when this is known.
+    """Get calculated per-interval time-series values for a single Fulcra metric.
 
     Only data types that `get_data_catalog` lists as usable with this tool are
-    supported; other types can be read with `get_records`.
+    supported; other types can be read with `get_records`. Result timestamps
+    include time zones; translate them to the user's local time zone when known.
 
     Args:
-        metric_name: The name of the time-series metric to retrieve. Use `get_data_catalog` to find available metrics.
-        start_time: The starting time period (inclusive). Must include tz (ISO8601).
-        end_time: The ending time (exclusive). Must include tz (ISO8601).
-        sample_rate: Optional. The number of seconds per sample. Default is 60. Can be smaller than 1.
-        replace_nulls: Optional. When true, replace all NA with 0. Default is False.
-        calculations: Optional. A list of additional calculations to perform for each
-        time slice.  Not supported on cumulative metrics.  Options: "max", "min", "delta", "mean", "uniques", "allpoints", "rollingmean".
-    Returns:
-        A JSON string representing a list of data points for the metric.
-        For time ranges where data is missing, the values will be NA unless replace_nulls is true.
+        metric_name: The metric to retrieve (see `get_data_catalog`).
+        start_time: Range start (inclusive). Must include tz (ISO8601).
+        end_time: Range end (exclusive). Must include tz (ISO8601).
+        sample_rate: Seconds per sample; may be fractional.
+        replace_nulls: Replace missing values (NA) with 0.
+        calculations: Extra per-slice calculations ("max", "min", "delta",
+            "mean", "uniques", "allpoints", "rollingmean"). Not supported on
+            cumulative metrics.
     """
     fulcra = get_fulcra_object()
     # Ensure defaults are passed correctly if None
@@ -385,30 +380,23 @@ async def get_records(
     end_time: datetime,
     fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve the raw records of a data type for the user during a time period.
+    """Retrieve the raw records of any data type during a time period.
 
-    Works with every data type listed by `get_data_catalog`, including
-    user-defined ones, which use the "<BaseType>/<uuid>" ID form. The correct
-    API endpoint is chosen automatically based on the catalog.
-
-    In cases where records cover ranges and not points in time, a record will be
-    returned if any part of its range intersects with the requested range. For
-    example, if start_time is 14:00 and end_time is 15:00, a record covering
-    13:30-14:30 will be included. Result timestamps will include time zones.
-    Always translate timestamps to the user's local time zone when this is known.
-
-    Returned records are raw samples: they may come from multiple sources and can
-    overlap. For calculated per-interval values of numeric metrics, prefer
-    `get_metric_time_series`.
+    Works with every type listed by `get_data_catalog`, including user-defined
+    ones ("<BaseType>/<uuid>" IDs); the correct API endpoint is chosen
+    automatically. Records that cover a time range are included when any part
+    of it intersects the requested window. Results are raw samples — they may
+    come from multiple sources and can overlap; for calculated per-interval
+    values of numeric metrics, prefer `get_metric_time_series`. Result
+    timestamps include time zones; translate them to the user's local time
+    zone when known.
 
     Args:
-        data_type: The ID of the data type to retrieve, as returned by `get_data_catalog`.
-        start_time: The start of the time range (inclusive). Must include tz (ISO8601).
-        end_time: The end of the time range (exclusive). Must include tz (ISO8601).
-        fulcra_userid: Optional. Retrieve data for another Fulcra user (requires
-            an active datashare from that user).
-    Returns:
-        A JSON string representing a list of raw records for the data type.
+        data_type: The data type ID, as returned by `get_data_catalog`.
+        start_time: Range start (inclusive). Must include tz (ISO8601).
+        end_time: Range end (exclusive). Must include tz (ISO8601).
+        fulcra_userid: Retrieve data for another Fulcra user (requires an
+            active datashare from that user).
     """
     fulcra = get_fulcra_object()
 
