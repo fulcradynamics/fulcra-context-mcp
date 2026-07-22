@@ -98,7 +98,7 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
 @tools_mcp.tool()
 async def annotations_catalog() -> str:
     """
-    Get the list of all annotation data types the user has defined. 
+    Get the list of all annotation data types the user has defined.
     This does not get the actual values the user has recorded; for that, use the `get_annotations` tool.
     Use this tool to get the IDs and types to pass to `get_annotations`.
     """
