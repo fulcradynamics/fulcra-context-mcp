@@ -98,8 +98,8 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
 @tools_mcp.tool()
 async def annotations_catalog() -> str:
     """
-    Get the list of all annotations the user has defined. This does not get the
-    actual values the user has recorded; for that, use the `get_annotations` tool.
+    Get the list of all annotation data types the user has defined. 
+    This does not get the actual values the user has recorded; for that, use the `get_annotations` tool.
     Use this tool to get the IDs and types to pass to `get_annotations`.
     """
     fulcra = get_fulcra_object()
@@ -863,8 +863,9 @@ async def get_calendar_events(
     include_participants: bool = False,
     fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve the user's calendar events that occur (at least partially)
-    during a time period.
+    """Retrieve the user's calendar events within a time range.
+    This will return events that occur (at least partially)
+    during the range.
 
     Each event carries a participant_count; pass include_participants=true
     when you need who was invited and their responses. Result timestamps
