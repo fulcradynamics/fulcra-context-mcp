@@ -5,15 +5,32 @@ import re
 import urllib.error
 from enum import Enum
 from pathlib import PurePath
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastmcp import FastMCP
+from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
+
+
+def _require_time_zone(dt: datetime) -> datetime:
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        raise ValueError(
+            "this time has no time zone, so the results could be hours off. "
+            "Please resend it as an ISO 8601 time with a UTC offset — e.g. "
+            "'2026-07-17T08:00:00-07:00', or a 'Z' suffix for UTC — using the "
+            "user's local time zone when known."
+        )
+    return dt
+
+
+# All time parameters must be time-zone-aware; naive times would silently be
+# interpreted in the wrong zone and hand the user bad data.
+AwareDatetime = Annotated[datetime, AfterValidator(_require_time_zone)]
 
 
 class AnnotationType(Enum):
@@ -26,7 +43,7 @@ class AnnotationType(Enum):
 
 @tools_mcp.tool()
 async def get_annotations(
-    ann_type: str | AnnotationType, start_time: datetime, end_time: datetime
+    ann_type: str | AnnotationType, start_time: AwareDatetime, end_time: AwareDatetime
 ) -> str:
     """
     Retrieve recorded annotations during a period of time.
@@ -64,7 +81,7 @@ async def get_annotations(
 
 
 @tools_mcp.tool()
-async def get_workouts(start_time: datetime, end_time: datetime) -> str:
+async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
     time zone when this is known.
@@ -251,8 +268,8 @@ async def record_data(
     data_type: str,
     value: str | None = None,
     note: str | None = None,
-    start_time: datetime | None = None,
-    end_time: datetime | None = None,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
     tags: list[str] | None = None,
 ) -> str:
     """Record a single record for a recordable data type.
@@ -421,8 +438,8 @@ async def get_data_catalog(
 @tools_mcp.tool()
 async def get_time_series(
     data_type: str,
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
     sample_rate: float | None = 60.0,
     replace_nulls: bool | None = False,
     calculations: list[str] | None = None,
@@ -479,8 +496,8 @@ async def get_time_series(
 @tools_mcp.tool()
 async def get_records(
     data_type: str,
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
     fulcra_userid: str | None = None,
 ) -> str:
     """Retrieve the raw records of any data type during a time period.
@@ -559,8 +576,8 @@ async def get_records(
 
 @tools_mcp.tool()
 async def get_data_updates(
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
 ) -> str:
     """Summarize the data that arrived in the user's account during a period of time.
 
@@ -592,8 +609,8 @@ async def get_data_updates(
 
 @tools_mcp.tool()
 async def get_sleep(
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
     level: Literal["aggregate", "cycles", "stages"] = "cycles",
     cycle_gap: str | None = None,
     stages: list[int] | None = None,
@@ -678,7 +695,7 @@ async def get_sleep(
 
 @tools_mcp.tool()
 async def get_location_at_time(
-    time: datetime,
+    time: AwareDatetime,
     window_size: int = 14400,
     reverse_geocode: bool | None = False,
 ) -> str:
@@ -713,8 +730,8 @@ async def get_location_at_time(
 
 @tools_mcp.tool()
 async def get_location_time_series(
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
     change_meters: float | None = None,
     sample_rate: int | None = 900,
     reverse_geocode: bool | None = False,
@@ -840,8 +857,8 @@ async def get_calendars(fulcra_userid: str | None = None) -> str:
 
 @tools_mcp.tool(annotations={"readOnlyHint": True})
 async def get_calendar_events(
-    start_time: datetime,
-    end_time: datetime,
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
     calendars: list[str] | None = None,
     include_participants: bool = False,
     fulcra_userid: str | None = None,
@@ -1127,4 +1144,5 @@ async def get_user_info() -> str:
     """
     fulcra = get_fulcra_object()
     user_info = fulcra.get_user_info()
+    user_info.pop("intercom_token", None)
     return "User information: " + json.dumps(user_info)
