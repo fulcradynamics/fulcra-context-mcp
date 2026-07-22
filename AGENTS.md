@@ -99,9 +99,9 @@ Local connection using `uvx`:
 
 ## MCP tools and tips
 
-There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info`, `get_data_catalog`, and `annotations_catalog`, to get a sense of what the user has chosen to record. Then use the other tools (e.g. `get_metric_time_series`, `get_records`, `get_sleep`, `get_annotations`, etc.) to get the data for specific time range(s).
+There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info`, `get_data_catalog`, and `annotations_catalog`, to get a sense of what the user has chosen to record. Then use the other tools (e.g. `get_time_series`, `get_records`, `get_sleep`, `get_annotations`, etc.) to get the data for specific time range(s).
 
-`get_data_catalog` returns every available data type grouped by the tools that can read it — only use a data type with the tools named in its group. `get_records` retrieves raw records for any data type in the catalog (including user-defined ones); `get_metric_time_series` computes per-interval values and only supports the types listed under it.
+`get_data_catalog` returns every available data type grouped by the tools that can read it — only use a data type with the tools named in its group. `get_records` retrieves raw records for any data type in the catalog (including user-defined ones); `get_time_series` computes per-interval values and only supports the types listed under it.
 
 All time parameters must include time zones (ISO 8601 format). Always translate result timestamps to the user's local time zone when known.
 

@@ -351,7 +351,7 @@ def _compatible_tools(entry: dict) -> str:
         return "data types that cannot be queried (used only when recording data)"
     if entry.get("api_version") == "v0":
         if entry.get("class") == "metric":
-            return "data types usable with: get_metric_time_series | get_records"
+            return "data types usable with: get_time_series | get_records"
         if entry.get("class") == "location":
             return "data types usable with: get_location_at_time | get_location_time_series"
     if entry.get("id", "").startswith(ANNOTATION_BASE_TYPES):
@@ -391,8 +391,8 @@ async def get_data_catalog(
     name: str | None = None,
 ) -> str:
     """Get the catalog of all data types available for this user, grouped by the
-    MCP tools that can read each type. Includes health/sensor metrics, location,
-    events, and user-defined annotation types.
+    MCP tools that can read each type. Includes health and sensor measurements,
+    location, events, and user-defined annotation types.
 
     Call this before requesting time-series data or raw records, and only use a
     data type with the tools named in its group.
@@ -419,29 +419,29 @@ async def get_data_catalog(
 
 
 @tools_mcp.tool()
-async def get_metric_time_series(
-    metric_name: str,
+async def get_time_series(
+    data_type: str,
     start_time: datetime,
     end_time: datetime,
     sample_rate: float | None = 60.0,
     replace_nulls: bool | None = False,
     calculations: list[str] | None = None,
 ) -> str:
-    """Get calculated per-interval time-series values for a single Fulcra metric.
+    """Get calculated per-interval time-series values for a single data type.
 
     Only data types that `get_data_catalog` lists as usable with this tool are
     supported; other types can be read with `get_records`. Result timestamps
     include time zones; translate them to the user's local time zone when known.
 
     Args:
-        metric_name: The metric to retrieve (see `get_data_catalog`).
+        data_type: The data type ID to retrieve (see `get_data_catalog`).
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
         sample_rate: Seconds per sample; may be fractional.
         replace_nulls: Replace missing values (NA) with 0.
         calculations: Extra per-slice calculations ("max", "min", "delta",
             "mean", "uniques", "allpoints", "rollingmean"). Not supported on
-            cumulative metrics.
+            data types whose kind is "cumulative".
     """
     fulcra = get_fulcra_object()
     # Ensure defaults are passed correctly if None
@@ -455,7 +455,7 @@ async def get_metric_time_series(
 
     try:
         time_series_df = fulcra.metric_time_series(
-            metric=metric_name,
+            metric=data_type,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
@@ -463,13 +463,13 @@ async def get_metric_time_series(
     except urllib.error.HTTPError as e:
         if e.code in (400, 404, 422):
             return (
-                f"Could not retrieve {metric_name!r} (HTTP {e.code}). Only data types "
-                "that get_data_catalog lists under get_metric_time_series are supported "
+                f"Could not retrieve {data_type!r} (HTTP {e.code}). Only data types "
+                "that get_data_catalog lists under get_time_series are supported "
                 "by this tool; other types can be read with get_records."
             )
         raise
     return (
-        f"Time series data for {metric_name} from {start_time} to {end_time}: "
+        f"Time series data for {data_type} from {start_time} to {end_time}: "
         + time_series_df.to_json(
             orient="records", date_format="iso", default_handler=str
         )
@@ -490,7 +490,7 @@ async def get_records(
     automatically. Records that cover a time range are included when any part
     of it intersects the requested window. Results are raw samples — they may
     come from multiple sources and can overlap; for calculated per-interval
-    values of numeric metrics, prefer `get_metric_time_series`. Result
+    values of numeric data types, prefer `get_time_series`. Result
     timestamps include time zones; translate them to the user's local time
     zone when known.
 
@@ -578,7 +578,7 @@ async def get_data_updates(
         - "data_types": a map of each data type that had records processed
           during the range to the number of records processed. Most keys are
           catalog data type IDs (readable via get_records or
-          get_metric_time_series); "apple_workout" refers to workouts
+          get_time_series); "apple_workout" refers to workouts
           (readable via get_workouts).
         - "file_changes": a list of uploaded files that were added, changed, or
           removed, with name, size, state, and upload/archive/delete timestamps.
