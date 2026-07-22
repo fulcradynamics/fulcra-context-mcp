@@ -42,45 +42,6 @@ class AnnotationType(Enum):
 
 
 @tools_mcp.tool()
-async def get_annotations(
-    ann_type: str | AnnotationType, start_time: AwareDatetime, end_time: AwareDatetime
-) -> str:
-    """
-    Retrieve recorded annotations during a period of time.
-    Each record contains the value (except for moment annotations) and the metadata (name, original spec, etc.) describing the annotation.
-
-    Args:
-        ann_type: annotation type (moment, duration, boolean, numeric, scale, etc.)
-        start_time: The starting time of the period. Must include tz (ISO8601).
-        end_time: the ending time of the period. Must include tz (ISO8601).
-    """
-    fulcra = get_fulcra_object()
-    if not isinstance(ann_type, AnnotationType):
-        try:
-            ann_type = AnnotationType(ann_type)
-        except ValueError:
-            return f"Unknown annotation type. Current valid types: {' '.join([x.name for x in AnnotationType])}"
-    match ann_type:
-        case AnnotationType.Moment:
-            annotations = fulcra.moment_annotations(start_time, end_time)
-            return f"Moment annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
-        case AnnotationType.Duration:
-            annotations = fulcra.duration_annotations(start_time, end_time)
-            return f"Duration annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
-        case AnnotationType.Boolean:
-            annotations = fulcra.boolean_annotations(start_time, end_time)
-            return f"Boolean annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
-        case AnnotationType.Numeric:
-            annotations = fulcra.numeric_annotations(start_time, end_time)
-            return f"Numeric annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
-        case AnnotationType.Scale:
-            annotations = fulcra.scale_annotations(start_time, end_time)
-            return f"Scale annotations during {start_time} and {end_time}: {json.dumps(annotations)}"
-        case _:
-            return f"Unknown annotation type. Current valid types: {' '.join([x.name for x in AnnotationType])}"
-
-
-@tools_mcp.tool()
 async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
@@ -99,8 +60,8 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
 async def annotations_catalog() -> str:
     """
     Get the list of all annotation data types the user has defined.
-    This does not get the actual values the user has recorded; for that, use the `get_annotations` tool.
-    Use this tool to get the IDs and types to pass to `get_annotations`.
+    This does not get the actual values the user has recorded; for that, use the `get_records` tool.
+    Use this tool to get the IDs and types to pass to `get_records`.
     """
     fulcra = get_fulcra_object()
     catalog = fulcra.annotations_catalog()
@@ -108,7 +69,7 @@ async def annotations_catalog() -> str:
 
 
 # Base annotation types; ids rooted in one of these (including custom
-# "<Base>/<uuid>" types) are readable with the `get_annotations` tool.
+# "<Base>/<uuid>" types) are readable with the `get_records` tool.
 ANNOTATION_BASE_TYPES = tuple(f"{t.name}Annotation" for t in AnnotationType)
 ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
@@ -142,8 +103,7 @@ async def create_data_type(
     optionally with a unit), or "scale" (a 1-5 rating with labels).
 
     The new type appears in get_data_catalog, and recorded values are readable
-    with get_records or get_annotations. Creation is reversible with
-    archive_data_type.
+    with get_records. Creation is reversible with archive_data_type.
 
     Args:
         base_type: What kind of values this type records (see above).
@@ -372,7 +332,7 @@ def _compatible_tools(entry: dict) -> str:
         if entry.get("class") == "location":
             return "data types usable with: get_location_at_time | get_location_time_series"
     if entry.get("id", "").startswith(ANNOTATION_BASE_TYPES):
-        return "data types usable with: get_records | get_annotations (pass the ann_type matching the base type)"
+        return "data types usable with: get_records"
     if entry.get("api_version") == "v1alpha1":
         return "data types usable with: get_records"
     return NO_TOOL_GROUP
@@ -407,8 +367,8 @@ async def get_data_catalog(
     category: str | None = None,
     name: str | None = None,
 ) -> str:
-    """Get the catalog of all data types available for this user, grouped by the
-    MCP tools that can read each type. Includes health and sensor measurements,
+    """Get all data types available for this user, grouped by relevant MCP tool.
+    Includes health and sensor measurements,
     location, events, and user-defined annotation types.
 
     Call this before requesting time-series data or raw records, and only use a
@@ -515,8 +475,7 @@ async def get_records(
         data_type: The data type ID, as returned by `get_data_catalog`.
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        fulcra_userid: Retrieve data for another Fulcra user (requires an
-            active datashare from that user).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared)
     """
     fulcra = get_fulcra_object()
 
@@ -646,12 +605,10 @@ async def get_sleep(
         clip_to_range: Clip results to the requested range (default True).
         merge_overlapping: "stages" level only. Merge overlapping stages (default True).
         merge_contiguous: "stages" level only. Merge adjacent same-stage samples (default True).
-        mode: "aggregate" level only. Assign cycles to periods by "start" or
-              "end", or "split" intervals at period boundaries (default "end").
+        mode: "aggregate" level only. Assign by "start", "end", or "split" (default "end").
         period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
         agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
-        time_zone: "aggregate" level only. IANA tz for period boundaries
-                   (default "UTC"; use the user's local tz so periods match their days).
+        time_zone: "aggregate" level only. IANA tz for time bounds; use user's local TZ
     """
     fulcra = get_fulcra_object()
     kwargs = {}
@@ -844,8 +801,7 @@ async def get_calendars(fulcra_userid: str | None = None) -> str:
     Use the names or IDs with get_calendar_events to filter by calendar.
 
     Args:
-        fulcra_userid: List calendars of another Fulcra user (requires an
-            active datashare from that user).
+        fulcra_userid: List calendars of another Fulcra user (if shared)
     """
     fulcra = get_fulcra_object()
     grouped: dict[str, list[dict]] = {}
@@ -875,12 +831,9 @@ async def get_calendar_events(
     Args:
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        calendars: Only return events from these calendars, given as calendar
-            names (case-insensitive) or IDs (see get_calendars).
-        include_participants: Include each event's participant list (name or
-            email, RSVP status, role).
-        fulcra_userid: Retrieve events of another Fulcra user (requires an
-            active datashare from that user).
+        calendars: choose specific calendars to get events from (names or IDs)
+        include_participants: Include each event's participant list
+        fulcra_userid: Retrieve events of another Fulcra user (if shared)
     """
     fulcra = get_fulcra_object()
     all_calendars = fulcra.calendars(fulcra_userid=fulcra_userid)
