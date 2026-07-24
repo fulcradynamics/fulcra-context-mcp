@@ -9,25 +9,12 @@ When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as
 
 ### Remote Connection using Proxy
 
-Claude for Desktop config (`claude_desktop_config.json`) file:
-```
-{
-    "mcpServers": {
-        "fulcra_context": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "mcp-remote",
-                "https://mcp.fulcradynamics.com/mcp"
-            ]
-        }
-    }
-}
-```
+There is a public instance of this server running at `https://mcp.fulcradynamics.com/`.  Point your OAuth2-capable MCP clients at that.
 
 ### Local Connection
 
-Similar config using `uvx`:
+Example Claude Desktop config using `uvx`:
+```
 {
     "mcpServers": {
         "fulcra_context": {
@@ -38,10 +25,20 @@ Similar config using `uvx`:
         }
     }
 }
+```
 
-### Debugging
+### Debugging / Developer Tools
 
 - Both the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) and [mcp-remote](https://github.com/geelen/mcp-remote) tools can be useful in debugging.
+
+#### Viewing Tools
+
+Every MCP client is different, but many abbreviate abbreviate tool and parameter descriptions for summaries. To avoid confusing client models, keep the initial descriptions short (full description in one line, around 80 characters).
+
+While developing locally, the `scripts/simulate_tools.py` script simulates what this might look like to an MCP client:
+```
+FULCRA_ENVIRONMENT=stdio uv run python scripts/simulate_tools.py --command "uv run fulcra-context-mcp"
+```
 
 ## Bugs / Feature Requests
 
