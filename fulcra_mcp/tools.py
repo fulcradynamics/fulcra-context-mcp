@@ -41,8 +41,42 @@ class AnnotationType(Enum):
     Scale = "scale"
 
 
+def _participant_source(group_id: str | None, participant_id: str | None):
+    """Resolve the object data tools read from: the user's own client, or a
+    group-participant accessor when both group params are given.
+
+    Returns (source, error); error is a client-facing message when the params
+    are inconsistent.
+    """
+    fulcra = get_fulcra_object()
+    if (group_id is None) != (participant_id is None):
+        return None, (
+            "group_id and participant_id must be passed together to read a "
+            "group participant's shared data."
+        )
+    if group_id is not None:
+        return fulcra.group_participant(group_id, participant_id), None
+    return fulcra, None
+
+
+def _participant_denied(e: urllib.error.HTTPError, group_id: str | None) -> str | None:
+    """Client-facing message when a group-scoped data request is refused."""
+    if group_id is not None and e.code in (401, 403, 404):
+        return (
+            f"Fulcra denied access to this participant's data (HTTP {e.code}). "
+            "Only the group's owner can read participant data, and only within "
+            "the group's data types and time range (see get_groups)."
+        )
+    return None
+
+
 @tools_mcp.tool()
-async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
+async def get_workouts(
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
+    group_id: str | None = None,
+    participant_id: str | None = None,
+) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
     time zone when this is known.
@@ -50,9 +84,19 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
     Args:
         start_time: The starting time of the period. Must include tz (ISO8601).
         end_time: the ending time of the period. Must include tz (ISO8601).
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     """
-    fulcra = get_fulcra_object()
-    workouts = fulcra.apple_workouts(start_time, end_time)
+    source, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
+    try:
+        workouts = source.apple_workouts(start_time, end_time)
+    except urllib.error.HTTPError as e:
+        msg = _participant_denied(e, group_id)
+        if msg:
+            return msg
+        raise
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
@@ -403,6 +447,8 @@ async def get_time_series(
     sample_rate: float | None = 60.0,
     replace_nulls: bool | None = False,
     calculations: list[str] | None = None,
+    group_id: str | None = None,
+    participant_id: str | None = None,
 ) -> str:
     """Get calculated per-interval time-series values for a single data type.
 
@@ -419,8 +465,12 @@ async def get_time_series(
         calculations: Extra per-slice calculations ("max", "min", "delta",
             "mean", "uniques", "allpoints", "rollingmean"). Not supported on
             data types whose kind is "cumulative".
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     """
-    fulcra = get_fulcra_object()
+    source, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
     # Ensure defaults are passed correctly if None
     kwargs = {}
     if sample_rate is not None:
@@ -431,13 +481,16 @@ async def get_time_series(
         kwargs["calculations"] = calculations
 
     try:
-        time_series_df = fulcra.metric_time_series(
+        time_series_df = source.metric_time_series(
             metric=data_type,
             start_time=start_time,
             end_time=end_time,
             **kwargs,
         )
     except urllib.error.HTTPError as e:
+        msg = _participant_denied(e, group_id)
+        if msg:
+            return msg
         if e.code in (400, 404, 422):
             return (
                 f"Could not retrieve {data_type!r} (HTTP {e.code}). Only data types "
@@ -459,6 +512,8 @@ async def get_records(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
     fulcra_userid: str | None = None,
+    group_id: str | None = None,
+    participant_id: str | None = None,
 ) -> str:
     """Retrieve the raw records of any data type during a time period.
 
@@ -476,8 +531,15 @@ async def get_records(
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
         fulcra_userid: Retrieve data for another Fulcra user (if shared)
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     """
     fulcra = get_fulcra_object()
+    source, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
+    if fulcra_userid is not None and group_id is not None:
+        return "fulcra_userid cannot be combined with group_id/participant_id."
 
     # Support the "<BaseType>/<uuid>" shorthand for user-defined data types.
     base_type, _, user_annotation_id = data_type.partition("/")
@@ -508,7 +570,13 @@ async def get_records(
             }
             if fulcra_userid:
                 kwargs["fulcra_userid"] = fulcra_userid
-            results += fulcra.metric_samples(**kwargs)
+            try:
+                results += source.metric_samples(**kwargs)
+            except urllib.error.HTTPError as e:
+                msg = _participant_denied(e, group_id)
+                if msg:
+                    return msg
+                raise
         elif entry.get("api_version") == "v1alpha1" and record_type in (
             "metric",
             "event",
@@ -522,7 +590,13 @@ async def get_records(
             }
             if fulcra_userid:
                 params["fulcra_userid"] = fulcra_userid
-            results += json.loads(fulcra.fulcra_v1_api_path(path, params=params))
+            try:
+                results += json.loads(source.fulcra_v1_api_path(path, params=params))
+            except urllib.error.HTTPError as e:
+                msg = _participant_denied(e, group_id)
+                if msg:
+                    return msg
+                raise
         else:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "
@@ -581,6 +655,8 @@ async def get_sleep(
     period: str | None = None,
     agg_functions: list[str] | None = None,
     time_zone: str | None = None,
+    group_id: str | None = None,
+    participant_id: str | None = None,
 ) -> str:
     """Return the user's sleep data at a chosen level of detail.
 
@@ -609,8 +685,12 @@ async def get_sleep(
         period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
         agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
         time_zone: "aggregate" level only. IANA tz for time bounds; use user's local TZ
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     """
-    fulcra = get_fulcra_object()
+    fulcra, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
     kwargs = {}
     if cycle_gap is not None:
         kwargs["cycle_gap"] = cycle_gap
@@ -640,11 +720,17 @@ async def get_sleep(
     else:
         query_func = fulcra.sleep_cycles
 
-    sleep_df = query_func(
-        start_time=start_time,
-        end_time=end_time,
-        **kwargs,
-    )
+    try:
+        sleep_df = query_func(
+            start_time=start_time,
+            end_time=end_time,
+            **kwargs,
+        )
+    except urllib.error.HTTPError as e:
+        msg = _participant_denied(e, group_id)
+        if msg:
+            return msg
+        raise
     return f"Sleep {level} from {start_time} to {end_time}: " + sleep_df.to_json(
         orient="records", date_format="iso", default_handler=str
     )
@@ -655,6 +741,8 @@ async def get_location_at_time(
     time: AwareDatetime,
     window_size: int = 14400,
     reverse_geocode: bool | None = False,
+    group_id: str | None = None,
+    participant_id: str | None = None,
 ) -> str:
     """Gets the user's location at the given time.
 
@@ -668,20 +756,30 @@ async def get_location_at_time(
         time: The point in time to get the user's location for. Must include tz (ISO8601).
         window_size: Optional. The size (in seconds) to look back (and optionally forward) for samples. Defaults to 14400.
         include_after: Optional. When true, a sample that occurs after the requested time may be returned if it is the closest one. Defaults to False.
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     Returns:
         A JSON string representing the location data.
     """
-    fulcra = get_fulcra_object()
+    fulcra, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
     kwargs = {}
     if window_size is not None:
         kwargs["window_size"] = window_size
     kwargs["include_after"] = True
     kwargs["reverse_geocode"] = True
 
-    location_data = fulcra.location_at_time(
-        time=time,
-        **kwargs,
-    )
+    try:
+        location_data = fulcra.location_at_time(
+            time=time,
+            **kwargs,
+        )
+    except urllib.error.HTTPError as e:
+        msg = _participant_denied(e, group_id)
+        if msg:
+            return msg
+        raise
     return f"Location info at {time}: " + json.dumps(location_data)
 
 
@@ -692,6 +790,8 @@ async def get_location_time_series(
     change_meters: float | None = None,
     sample_rate: int | None = 900,
     reverse_geocode: bool | None = False,
+    group_id: str | None = None,
+    participant_id: str | None = None,
 ) -> str:
     """Retrieve a time series of locations that the user was at.
     Result timestamps will include time zones. Always translate timestamps to the user's local tz when this is known.
@@ -702,10 +802,14 @@ async def get_location_time_series(
         change_meters: Optional. When specified, subsequent samples that are fewer than this many meters away will not be included.
         sample_rate: Optional. The length (in seconds) of each sample. Default is 900.
         reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the locations and include the details in the results. Default is False.
+        group_id: Read a group participant's shared data instead (owner only).
+        participant_id: The group participant to read; requires group_id.
     Returns:
         A JSON string representing a list of location data points.
     """
-    fulcra = get_fulcra_object()
+    fulcra, err = _participant_source(group_id, participant_id)
+    if err:
+        return err
     kwargs = {}
     if change_meters is not None:
         kwargs["change_meters"] = change_meters
@@ -715,11 +819,17 @@ async def get_location_time_series(
     if reverse_geocode is not None:
         kwargs["reverse_geocode"] = reverse_geocode
 
-    location_series = fulcra.location_time_series(
-        start_time=start_time,
-        end_time=end_time,
-        **kwargs,
-    )
+    try:
+        location_series = fulcra.location_time_series(
+            start_time=start_time,
+            end_time=end_time,
+            **kwargs,
+        )
+    except urllib.error.HTTPError as e:
+        msg = _participant_denied(e, group_id)
+        if msg:
+            return msg
+        raise
     return f"Location time series from {start_time} to {end_time}: " + json.dumps(
         location_series
     )
@@ -1100,3 +1210,315 @@ async def get_user_info() -> str:
     user_info = fulcra.get_user_info()
     user_info.pop("intercom_token", None)
     return "User information: " + json.dumps(user_info)
+
+
+# Long-form fields omitted from group listings; fetch a single group for the
+# complete record.
+GROUP_LIST_DROP_FIELDS = frozenset(
+    (
+        "detail_markdown",
+        "agreement_markdown",
+        "withdraw_markdown",
+        "annotations",
+        "view_description",
+    )
+)
+
+
+def _slim_group(group: dict) -> dict:
+    return {
+        k: v
+        for k, v in group.items()
+        if k not in GROUP_LIST_DROP_FIELDS and v not in (None, [], {})
+    }
+
+
+def _group_http_error(e: urllib.error.HTTPError, group_id: str) -> str | None:
+    """Map common group HTTP failures to client-facing messages."""
+    if e.code == 404:
+        return f"No group found with ID {group_id!r}. Use get_groups to list groups."
+    if e.code in (401, 403):
+        return "Access denied: only the group's owner can do this."
+    return None
+
+
+@tools_mcp.tool(annotations={"readOnlyHint": True})
+async def get_groups(group_id: str | None = None, subscribed_only: bool = False) -> str:
+    """List joinable data groups, or get one group's full details.
+
+    A group lets Fulcra users share read-only access to selected data types
+    over a time range with the group's owner. By default this lists all
+    public groups (long-form fields omitted); pass group_id for one group's
+    complete record, including its markdown texts. Use group_membership to
+    join or leave a group and manage_group to administer the user's own.
+
+    Args:
+        group_id: Return this single group in full detail.
+        subscribed_only: List only groups the user has joined; entries then
+            include the user's participant_id and joined_at.
+    """
+    fulcra = get_fulcra_object()
+    if group_id is not None:
+        try:
+            group = fulcra.get_group(group_id)
+        except urllib.error.HTTPError as e:
+            msg = _group_http_error(e, group_id)
+            if msg:
+                return msg
+            raise
+        return f"Group {group_id}: " + json.dumps(group)
+    groups = fulcra.get_groups(subscribed_only=subscribed_only)
+    label = "Groups the user has joined" if subscribed_only else "Public groups"
+    return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
+
+
+# Resource names the group data routes accept that are not (yet) v1 catalog
+# IDs. Calendars and calendar events are deliberately absent for now, until
+# how groups should access them is worked out (mirrors the fulcra CLI).
+GROUP_EXTRA_DATA_TYPES = frozenset(("apple_workouts",))
+
+
+@tools_mcp.tool(annotations={"destructiveHint": True})
+async def manage_group(
+    action: Literal["create", "update", "delete"],
+    group_id: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    responsible_entity: str | None = None,
+    fulcra_data_types: list[str] | None = None,
+    group_url: str | None = None,
+    time_start: AwareDatetime | None = None,
+    time_end: AwareDatetime | None = None,
+    detail_markdown: str | None = None,
+    agreement_markdown: str | None = None,
+    withdraw_markdown: str | None = None,
+    header_image_url: str | None = None,
+    preview_image_url: str | None = None,
+    view_description: dict | None = None,
+    friendly_id: str | None = None,
+) -> str:
+    """Create, update, or delete a data group owned by the user.
+
+    Participants who join a group share read-only access to their data —
+    limited to fulcra_data_types and the time_start..time_end range — with
+    the owner until they leave. So participants get no surprises, every
+    field participants agree to is immutable after creation: "update"
+    accepts only description, header_image_url, preview_image_url, and
+    view_description. "delete" is permanent. Confirm with the user before
+    creating or deleting a group.
+
+    Args:
+        action: "create" a new group, or "update"/"delete" one the user owns.
+        group_id: The group to update or delete (required there).
+        title: Group title. Create only; required.
+        description: Description shown to prospective participants.
+        responsible_entity: Person or organization responsible for the group.
+            Create only; required.
+        fulcra_data_types: Data type IDs participants will share (see
+            get_data_catalog; "apple_workouts" is also allowed). Create only;
+            required.
+        group_url: URL of the webapp that opens inside participants' Context
+            app. Create only; required.
+        time_start: Start of the shared-data time range. Create only.
+        time_end: End of the shared-data time range. Create only.
+        detail_markdown: Markdown for the group's detail view. Create only.
+        agreement_markdown: Markdown shown when a user joins. Create only.
+        withdraw_markdown: Markdown shown when a user leaves. Create only.
+        header_image_url: URL of the group's header image.
+        preview_image_url: URL of the group's preview image.
+        view_description: Dict describing the group's view. Update only.
+        friendly_id: Human-friendly ID (lowercase letters, digits, "-", "_").
+            Create only.
+    """
+    fulcra = get_fulcra_object()
+
+    if action == "create":
+        required = {
+            "title": title,
+            "description": description,
+            "responsible_entity": responsible_entity,
+            "fulcra_data_types": fulcra_data_types,
+            "group_url": group_url,
+        }
+        missing = [k for k, v in required.items() if v is None]
+        if missing:
+            return "Creating a group also requires: " + ", ".join(missing) + "."
+        valid_ids = {e["id"] for e in fulcra.v1_catalog()}
+        invalid = [
+            dt
+            for dt in fulcra_data_types
+            if dt not in valid_ids and dt not in GROUP_EXTRA_DATA_TYPES
+        ]
+        if invalid:
+            return (
+                "These are not group-shareable data types: "
+                + ", ".join(repr(dt) for dt in invalid)
+                + '. Use IDs from get_data_catalog (or "apple_workouts").'
+            )
+        group = fulcra.create_group(
+            title=title,
+            responsible_entity=responsible_entity,
+            description=description,
+            fulcra_data_types=fulcra_data_types,
+            group_url=group_url,
+            time_start=time_start,
+            time_end=time_end,
+            detail_markdown=detail_markdown,
+            agreement_markdown=agreement_markdown,
+            withdraw_markdown=withdraw_markdown,
+            header_image_url=header_image_url,
+            preview_image_url=preview_image_url,
+            friendly_id=friendly_id,
+        )
+        return f"Created group {group['id']}: " + json.dumps(group)
+
+    if group_id is None:
+        return f"action={action!r} requires group_id."
+
+    try:
+        if action == "delete":
+            fulcra.delete_group(group_id)
+            return (
+                f"Deleted group {group_id}. This is permanent; participants' "
+                "shared access is revoked."
+            )
+
+        immutable = {
+            "title": title,
+            "responsible_entity": responsible_entity,
+            "fulcra_data_types": fulcra_data_types,
+            "group_url": group_url,
+            "time_start": time_start,
+            "time_end": time_end,
+            "detail_markdown": detail_markdown,
+            "agreement_markdown": agreement_markdown,
+            "withdraw_markdown": withdraw_markdown,
+            "friendly_id": friendly_id,
+        }
+        rejected = [k for k, v in immutable.items() if v is not None]
+        if rejected:
+            return (
+                "These fields are immutable after creation and were not "
+                "changed: " + ", ".join(rejected) + ". Group parameters that "
+                "participants agreed to cannot be updated."
+            )
+        # Only forward provided fields: the accessor treats an explicit None
+        # as "clear this field on the server".
+        mutable = {
+            k: v
+            for k, v in {
+                "description": description,
+                "header_image_url": header_image_url,
+                "preview_image_url": preview_image_url,
+                "view_description": view_description,
+            }.items()
+            if v is not None
+        }
+        if not mutable:
+            return (
+                "update requires at least one of: description, "
+                "header_image_url, preview_image_url, view_description."
+            )
+        group = fulcra.update_group(group_id, **mutable)
+        return f"Updated group {group_id}: " + json.dumps(group)
+    except urllib.error.HTTPError as e:
+        msg = _group_http_error(e, group_id)
+        if msg:
+            return msg
+        raise
+
+
+@tools_mcp.tool()
+async def group_membership(group_id: str, action: Literal["join", "leave"]) -> str:
+    """Join or leave a data group on the user's behalf.
+
+    Joining shares read-only access to the user's data — limited to the
+    group's data types and time range — with the group's owner until the
+    user leaves. The owner sees only an anonymized participant_id, never
+    the user's Fulcra UserID. Leaving revokes the owner's access. Only call
+    this at the user's explicit request, after showing them the group's
+    details from get_groups.
+
+    Args:
+        group_id: The group to join or leave.
+        action: "join" or "leave".
+    """
+    fulcra = get_fulcra_object()
+    try:
+        if action == "join":
+            membership = fulcra.join_group(group_id)
+            return f"Joined group {group_id}: " + json.dumps(membership)
+        fulcra.leave_group(group_id)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return (
+                f"No group found with ID {group_id!r}. Use get_groups to list groups."
+            )
+        raise
+    return f"Left group {group_id}; the owner's access to the user's data is revoked."
+
+
+@tools_mcp.tool()
+async def group_participants(
+    group_id: str,
+    participant_id: str | None = None,
+    set_metadata: dict | None = None,
+    merge_metadata: dict | None = None,
+) -> str:
+    """List a group's participants, or read or write one participant's metadata.
+
+    For groups the user owns. Participants appear only as anonymized
+    participant IDs. Each participant has a metadata object (e.g. nicknames,
+    app state) visible only to the owner; unlike the group's parameters it
+    is mutable. Without participant_id, lists the group's participant IDs.
+    With participant_id alone, returns that participant's metadata. To read
+    a participant's shared data, pass group_id and participant_id to the
+    data tools (get_time_series, get_records, get_sleep, ...).
+
+    Args:
+        group_id: A group the user owns.
+        participant_id: A participant in that group.
+        set_metadata: Replace the participant's entire metadata object.
+        merge_metadata: Update only these keys, leaving others unchanged.
+    """
+    fulcra = get_fulcra_object()
+    if set_metadata is not None and merge_metadata is not None:
+        return "Pass either set_metadata or merge_metadata, not both."
+    if participant_id is None:
+        if set_metadata is not None or merge_metadata is not None:
+            return "Writing metadata requires participant_id."
+        try:
+            participants = fulcra.get_group_participants(group_id)
+        except urllib.error.HTTPError as e:
+            msg = _group_http_error(e, group_id)
+            if msg:
+                return msg
+            raise
+        return f"Participants of group {group_id} ({len(participants)}): " + json.dumps(
+            participants
+        )
+    try:
+        if merge_metadata is not None:
+            fulcra.update_group_participant_metadata(
+                group_id, participant_id, merge_metadata
+            )
+            return (
+                f"Merged {len(merge_metadata)} value(s) into participant "
+                f"{participant_id}'s metadata."
+            )
+        if set_metadata is not None:
+            fulcra.set_group_participant_metadata(
+                group_id, participant_id, set_metadata
+            )
+            return f"Replaced participant {participant_id}'s metadata."
+        metadata = fulcra.get_group_participant_metadata(group_id, participant_id)
+        return f"Metadata for participant {participant_id}: " + json.dumps(metadata)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return (
+                f"No metadata found for participant {participant_id!r} in group "
+                f"{group_id!r} (or no such group/participant)."
+            )
+        if e.code in (401, 403):
+            return "Access denied: only the group's owner can do this."
+        raise
