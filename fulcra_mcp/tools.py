@@ -41,7 +41,7 @@ class AnnotationType(Enum):
     Scale = "scale"
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True})
 async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
@@ -56,7 +56,7 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
 async def annotations_catalog() -> str:
     """
     Get the list of all annotation data types the user has defined.
@@ -85,7 +85,7 @@ def _parse_annotation_id(data_type: str) -> str | None:
         return None
 
 
-@tools_mcp.tool(annotations={"destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Data Type", "destructiveHint": False})
 async def create_data_type(
     base_type: Literal["moment", "duration", "boolean", "numeric", "scale"],
     name: str,
@@ -162,7 +162,7 @@ async def create_data_type(
     return f"Created data type {catalog_id}: " + json.dumps(ann)
 
 
-@tools_mcp.tool(annotations={"destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Archive Data Type", "destructiveHint": True})
 async def archive_data_type(data_type: str) -> str:
     """Archive (soft-delete) a user-defined data type.
 
@@ -194,7 +194,7 @@ async def archive_data_type(data_type: str) -> str:
     )
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Restore Data Type", "destructiveHint": False})
 async def restore_data_type(data_type: str) -> str:
     """Restore an archived user-defined data type.
 
@@ -223,7 +223,7 @@ async def restore_data_type(data_type: str) -> str:
 MCP_RECORD_SOURCE = "com.fulcradynamics.mcp"
 
 
-@tools_mcp.tool(annotations={"destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Record Data", "destructiveHint": False})
 async def record_data(
     data_type: str,
     value: str | None = None,
@@ -361,7 +361,7 @@ def _slim_entry(entry: dict) -> dict:
     return slim
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
 async def get_data_catalog(
     data_type: str | None = None,
     category: str | None = None,
@@ -395,7 +395,7 @@ async def get_data_catalog(
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True})
 async def get_time_series(
     data_type: str,
     start_time: AwareDatetime,
@@ -453,7 +453,7 @@ async def get_time_series(
     )
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True})
 async def get_records(
     data_type: str,
     start_time: AwareDatetime,
@@ -533,7 +533,7 @@ async def get_records(
     )
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True})
 async def get_data_updates(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -566,7 +566,7 @@ async def get_data_updates(
     return f"Data updates from {start_time} to {end_time}: " + json.dumps(updates)
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True})
 async def get_sleep(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -650,7 +650,7 @@ async def get_sleep(
     )
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Location at Time", "readOnlyHint": True})
 async def get_location_at_time(
     time: AwareDatetime,
     window_size: int = 14400,
@@ -685,7 +685,7 @@ async def get_location_at_time(
     return f"Location info at {time}: " + json.dumps(location_data)
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get Location Time Series", "readOnlyHint": True})
 async def get_location_time_series(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -794,7 +794,7 @@ def _slim_event(
     return slim
 
 
-@tools_mcp.tool(annotations={"readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Calendars", "readOnlyHint": True})
 async def get_calendars(fulcra_userid: str | None = None) -> str:
     """List the user's calendars, grouped by account/source.
 
@@ -811,7 +811,7 @@ async def get_calendars(fulcra_userid: str | None = None) -> str:
     return "Calendars by source: " + json.dumps(grouped)
 
 
-@tools_mcp.tool(annotations={"readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
 async def get_calendar_events(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -888,7 +888,7 @@ def _slim_file(f: dict) -> dict:
     return {k: f[k] for k in keep if f.get(k) not in (None, [], "")}
 
 
-@tools_mcp.tool(annotations={"readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True})
 async def list_files(path: str = "/", include_versions: bool = False) -> str:
     """List the files stored in the user's Fulcra account.
 
@@ -927,7 +927,7 @@ async def list_files(path: str = "/", include_versions: bool = False) -> str:
     return f"Files at {path}: " + json.dumps(result)
 
 
-@tools_mcp.tool(annotations={"readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
 async def read_file(
     path: str,
     max_bytes: int = 100000,
@@ -980,7 +980,7 @@ async def read_file(
     return f"Content of {path}: {text}"
 
 
-@tools_mcp.tool(annotations={"destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Write File", "destructiveHint": False})
 async def write_file(path: str, content: str, content_type: str = "text/plain") -> str:
     """Write a text file to the user's Fulcra account.
 
@@ -1004,7 +1004,7 @@ async def write_file(path: str, content: str, content_type: str = "text/plain") 
     return f"Wrote {path}: " + json.dumps(_slim_file(result.get("file", result)))
 
 
-@tools_mcp.tool(annotations={"destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete File", "destructiveHint": True})
 async def delete_file(path: str) -> str:
     """Delete a file stored in the user's Fulcra account.
 
@@ -1025,7 +1025,7 @@ async def delete_file(path: str) -> str:
     return f"Deleted {path} (version {file_record['id']})."
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Restore File Version", "destructiveHint": False})
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
 
@@ -1087,10 +1087,13 @@ async def debug_token_info() -> str:
 # Token debugging is only exposed on local stdio servers; the deployed server
 # must not leak token details to MCP clients.
 if settings.fulcra_environment == "stdio":
-    tools_mcp.tool(debug_token_info)
+    tools_mcp.tool(
+        debug_token_info,
+        annotations={"title": "Debug Token Info", "readOnlyHint": True},
+    )
 
 
-@tools_mcp.tool()
+@tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
 async def get_user_info() -> str:
     """Return general info about the Context by Fulcra user.
 
