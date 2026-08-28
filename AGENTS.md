@@ -14,10 +14,9 @@ Data is primarily collected through the human's phone; the human installs [Conte
 The human user gets to investigate their data interactively using beautiful mobile and [web apps](https://context.fulcradynamics.com/).
 
 ### Agentic/Programmatic Access To the User's Data
-* Fully supported [OAuth2 REST API](https://fulcradynamics.github.io/developer-docs/):
-    * [OpenAPI spec](https://api.fulcradynamics.com/openapi.json)
-* [Python client library](https://fulcradynamics.github.io/fulcra-api-python/) (`pip install fulcra-api`): For an easy way to use the client library. Handles authentication for you. It also includes the `fulcra` CLI, which gives command-line access to the full platform — data queries, the data type catalog, tags, user-defined data types, and file storage. Sub-commands emit JSON lines for piping into tools like `jq`; run `fulcra --help` for the command list.
-* [MCP Server Docs](https://fulcradynamics.github.io/developer-docs/mcp-server/): A guide on how to use the MCP server.
+* [Main Developer Docs](https://docs.fulcradynamics.com/)
+* [OpenAPI spec](https://api.fulcradynamics.com/openapi.json)
+* [Python client library and CLI](https://fulcradynamics.github.io/fulcra-api-python/) (`pip install fulcra-api`): For an easy way to use the client library. Handles authentication for you. It also includes the `fulcra` CLI, which gives command-line access to the full platform — data queries, the data type catalog, tags, user-defined data types, and file storage. Sub-commands emit JSON lines for piping into tools like `jq`; run `fulcra --help` for the command list.
 * [MCP server](https://mcp.fulcradynamics.com): The endpoint to the public MCP server. The server uses Streamable HTTP transport with OAuth2 authorization. Context users can use this server with their own account to securely access their data.
 * [MCP server source code](https://github.com/fulcradynamics/fulcra-context-mcp): The open-source repository for the MCP server. Useful for inspecting available tools, running locally, or contributing.
 
