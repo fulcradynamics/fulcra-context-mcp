@@ -267,7 +267,7 @@ async def record_data(
             )
 
     try:
-        entries = fulcra.v1_catalog(data_type=base_type)
+        entries = fulcra.v1_catalog(data_type=data_type)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
