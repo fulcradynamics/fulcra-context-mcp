@@ -1,5 +1,6 @@
 import base64
 from datetime import datetime
+import functools
 import json
 import re
 import urllib.error
@@ -33,6 +34,57 @@ def _require_time_zone(dt: datetime) -> datetime:
 AwareDatetime = Annotated[datetime, AfterValidator(_require_time_zone)]
 
 
+def _friendly_http_errors(func):
+    """Convert raw Fulcra API HTTP errors into actionable tool responses;
+    an unhandled HTTPError would otherwise surface as an opaque tool failure
+    like "HTTP Error 422: Unprocessable Entity"."""
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8", errors="replace")[:300].strip()
+            except Exception:
+                detail = ""
+            detail = detail or getattr(e, "reason", None) or "no details provided"
+            if e.code in (401, 403):
+                return (
+                    f"The Fulcra API rejected this request (HTTP {e.code}): {detail}. "
+                    "The session may have expired; re-authenticate with Fulcra and try again."
+                )
+            if e.code in (400, 404, 409, 422):
+                return (
+                    f"The Fulcra API could not process this request (HTTP {e.code}): {detail}. "
+                    "Check the parameter values (data type IDs come from get_data_catalog; "
+                    "times must be ISO 8601 with a UTC offset) and try again."
+                )
+            return (
+                f"The Fulcra API returned an unexpected error (HTTP {e.code}): {detail}. "
+                "Try again shortly; if the error persists, report it to support@fulcradynamics.com."
+            )
+
+    return wrapper
+
+
+def _range_error(start_time: datetime, end_time: datetime) -> str | None:
+    """Reject inverted/empty time ranges with an actionable message."""
+    if end_time <= start_time:
+        return (
+            f"end_time ({end_time.isoformat()}) must be after start_time "
+            f"({start_time.isoformat()}). Note that ranges are start-inclusive "
+            "and end-exclusive."
+        )
+    return None
+
+
+# Response-size guardrails: keep tool responses reasonably sized for a model's
+# context window instead of returning unbounded data dumps.
+MAX_SERIES_SAMPLES = 5000
+MAX_RECORDS = 2000
+
+
 class AnnotationType(Enum):
     Moment = "moment"
     Duration = "duration"
@@ -42,6 +94,7 @@ class AnnotationType(Enum):
 
 
 @tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
@@ -51,12 +104,15 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
         start_time: The starting time of the period. Must include tz (ISO8601).
         end_time: the ending time of the period. Must include tz (ISO8601).
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
     fulcra = get_fulcra_object()
     workouts = fulcra.apple_workouts(start_time, end_time)
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
 @tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
+@_friendly_http_errors
 async def annotations_catalog() -> str:
     """
     Get the list of all annotation data types the user has defined.
@@ -86,6 +142,7 @@ def _parse_annotation_id(data_type: str) -> str | None:
 
 
 @tools_mcp.tool(annotations={"title": "Create Data Type", "destructiveHint": False})
+@_friendly_http_errors
 async def create_data_type(
     base_type: Literal["moment", "duration", "boolean", "numeric", "scale"],
     name: str,
@@ -163,6 +220,7 @@ async def create_data_type(
 
 
 @tools_mcp.tool(annotations={"title": "Archive Data Type", "destructiveHint": True})
+@_friendly_http_errors
 async def archive_data_type(data_type: str) -> str:
     """Archive (soft-delete) a user-defined data type.
 
@@ -195,6 +253,7 @@ async def archive_data_type(data_type: str) -> str:
 
 
 @tools_mcp.tool(annotations={"title": "Restore Data Type", "destructiveHint": False})
+@_friendly_http_errors
 async def restore_data_type(data_type: str) -> str:
     """Restore an archived user-defined data type.
 
@@ -224,6 +283,7 @@ MCP_RECORD_SOURCE = "com.fulcradynamics.mcp"
 
 
 @tools_mcp.tool(annotations={"title": "Record Data", "destructiveHint": False})
+@_friendly_http_errors
 async def record_data(
     data_type: str,
     value: str | None = None,
@@ -280,6 +340,8 @@ async def record_data(
 
     if end_time is not None and start_time is None:
         return "end_time requires start_time."
+    if start_time is not None and end_time is not None and end_time < start_time:
+        return "end_time must not be before start_time."
 
     record: dict = {"sources": [MCP_RECORD_SOURCE]}
     if annotation_source:
@@ -362,6 +424,7 @@ def _slim_entry(entry: dict) -> dict:
 
 
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_data_catalog(
     data_type: str | None = None,
     category: str | None = None,
@@ -396,6 +459,7 @@ async def get_data_catalog(
 
 
 @tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_time_series(
     data_type: str,
     start_time: AwareDatetime,
@@ -420,6 +484,17 @@ async def get_time_series(
             "mean", "uniques", "allpoints", "rollingmean"). Not supported on
             data types whose kind is "cumulative".
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
+    if sample_rate:
+        estimated = (end_time - start_time).total_seconds() / sample_rate
+        if estimated > MAX_SERIES_SAMPLES:
+            return (
+                f"This request would return about {int(estimated)} samples; the "
+                f"limit is {MAX_SERIES_SAMPLES}. Increase sample_rate (seconds "
+                "per sample) or narrow the time range — e.g. sample_rate=3600 "
+                "for hourly or 86400 for daily values."
+            )
     fulcra = get_fulcra_object()
     # Ensure defaults are passed correctly if None
     kwargs = {}
@@ -454,6 +529,7 @@ async def get_time_series(
 
 
 @tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_records(
     data_type: str,
     start_time: AwareDatetime,
@@ -477,6 +553,8 @@ async def get_records(
         end_time: Range end (exclusive). Must include tz (ISO8601).
         fulcra_userid: Retrieve data for another Fulcra user (if shared)
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
     fulcra = get_fulcra_object()
 
     # Support the "<BaseType>/<uuid>" shorthand for user-defined data types.
@@ -528,12 +606,21 @@ async def get_records(
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "
                 "Use get_data_catalog to see which tools can read each data type."
             )
+    if len(results) > MAX_RECORDS:
+        total = len(results)
+        return (
+            f"Records for {data_type} from {start_time} to {end_time} (showing "
+            f"the first {MAX_RECORDS} of {total}; narrow the time range for the "
+            "rest, or use get_time_series for per-interval aggregates): "
+            + json.dumps(results[:MAX_RECORDS])
+        )
     return f"Records for {data_type} from {start_time} to {end_time}: " + json.dumps(
         results
     )
 
 
 @tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_data_updates(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -561,12 +648,15 @@ async def get_data_updates(
           Changed files can be read with read_file — other agents may write
           files to pass data to this one.
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
     fulcra = get_fulcra_object()
     updates = fulcra.data_updates(start_time, end_time)
     return f"Data updates from {start_time} to {end_time}: " + json.dumps(updates)
 
 
 @tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_sleep(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -577,7 +667,7 @@ async def get_sleep(
     clip_to_range: bool | None = True,
     merge_overlapping: bool | None = None,
     merge_contiguous: bool | None = None,
-    mode: str | None = None,
+    mode: Literal["start", "end", "split"] | None = None,
     period: str | None = None,
     agg_functions: list[str] | None = None,
     time_zone: str | None = None,
@@ -610,6 +700,8 @@ async def get_sleep(
         agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
         time_zone: "aggregate" level only. IANA tz for time bounds; use user's local TZ
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
     fulcra = get_fulcra_object()
     kwargs = {}
     if cycle_gap is not None:
@@ -651,41 +743,41 @@ async def get_sleep(
 
 
 @tools_mcp.tool(annotations={"title": "Get Location at Time", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_location_at_time(
     time: AwareDatetime,
     window_size: int = 14400,
-    reverse_geocode: bool | None = False,
+    include_after: bool = True,
+    reverse_geocode: bool = True,
 ) -> str:
     """Gets the user's location at the given time.
 
     If no sample is available for the exact time, searches for the closest one up to
-    window_size seconds back.
+    window_size seconds away.
 
     Result timestamps will include time zones. Always translate timestamps to the user's local
     time zone when this is known.
 
     Args:
         time: The point in time to get the user's location for. Must include tz (ISO8601).
-        window_size: Optional. The size (in seconds) to look back (and optionally forward) for samples. Defaults to 14400.
-        include_after: Optional. When true, a sample that occurs after the requested time may be returned if it is the closest one. Defaults to False.
+        window_size: Optional. The size (in seconds) to search around `time` for samples. Defaults to 14400.
+        include_after: Optional. When true, a sample that occurs after the requested time may be returned if it is the closest one. Defaults to True.
+        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the location and include the details (e.g. address) in the result. Defaults to True.
     Returns:
         A JSON string representing the location data.
     """
     fulcra = get_fulcra_object()
-    kwargs = {}
-    if window_size is not None:
-        kwargs["window_size"] = window_size
-    kwargs["include_after"] = True
-    kwargs["reverse_geocode"] = True
-
     location_data = fulcra.location_at_time(
         time=time,
-        **kwargs,
+        window_size=window_size,
+        include_after=include_after,
+        reverse_geocode=reverse_geocode,
     )
     return f"Location info at {time}: " + json.dumps(location_data)
 
 
 @tools_mcp.tool(annotations={"title": "Get Location Time Series", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_location_time_series(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -705,6 +797,16 @@ async def get_location_time_series(
     Returns:
         A JSON string representing a list of location data points.
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
+    if sample_rate:
+        estimated = (end_time - start_time).total_seconds() / sample_rate
+        if estimated > MAX_SERIES_SAMPLES:
+            return (
+                f"This request would return about {int(estimated)} location "
+                f"samples; the limit is {MAX_SERIES_SAMPLES}. Increase "
+                "sample_rate (seconds per sample) or narrow the time range."
+            )
     fulcra = get_fulcra_object()
     kwargs = {}
     if change_meters is not None:
@@ -795,6 +897,7 @@ def _slim_event(
 
 
 @tools_mcp.tool(annotations={"title": "Get Calendars", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_calendars(fulcra_userid: str | None = None) -> str:
     """List the user's calendars, grouped by account/source.
 
@@ -812,6 +915,7 @@ async def get_calendars(fulcra_userid: str | None = None) -> str:
 
 
 @tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_calendar_events(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
@@ -835,6 +939,8 @@ async def get_calendar_events(
         include_participants: Include each event's participant list
         fulcra_userid: Retrieve events of another Fulcra user (if shared)
     """
+    if (err := _range_error(start_time, end_time)) is not None:
+        return err
     fulcra = get_fulcra_object()
     all_calendars = fulcra.calendars(fulcra_userid=fulcra_userid)
     calendar_names = {c["calendar_id"]: c.get("calendar_name") for c in all_calendars}
@@ -889,6 +995,7 @@ def _slim_file(f: dict) -> dict:
 
 
 @tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True})
+@_friendly_http_errors
 async def list_files(path: str = "/", include_versions: bool = False) -> str:
     """List the files stored in the user's Fulcra account.
 
@@ -928,6 +1035,7 @@ async def list_files(path: str = "/", include_versions: bool = False) -> str:
 
 
 @tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
+@_friendly_http_errors
 async def read_file(
     path: str,
     max_bytes: int = 100000,
@@ -981,6 +1089,7 @@ async def read_file(
 
 
 @tools_mcp.tool(annotations={"title": "Write File", "destructiveHint": False})
+@_friendly_http_errors
 async def write_file(path: str, content: str, content_type: str = "text/plain") -> str:
     """Write a text file to the user's Fulcra account.
 
@@ -1005,6 +1114,7 @@ async def write_file(path: str, content: str, content_type: str = "text/plain") 
 
 
 @tools_mcp.tool(annotations={"title": "Delete File", "destructiveHint": True})
+@_friendly_http_errors
 async def delete_file(path: str) -> str:
     """Delete a file stored in the user's Fulcra account.
 
@@ -1026,6 +1136,7 @@ async def delete_file(path: str) -> str:
 
 
 @tools_mcp.tool(annotations={"title": "Restore File Version", "destructiveHint": False})
+@_friendly_http_errors
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
 
@@ -1094,6 +1205,7 @@ if settings.fulcra_environment == "stdio":
 
 
 @tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
+@_friendly_http_errors
 async def get_user_info() -> str:
     """Return general info about the Context by Fulcra user.
 
