@@ -20,6 +20,20 @@ dependencies = [
 [tool.uv]
 exclude-newer = "2 weeks"
 exclude-newer-package = { fulcra = false, fulcra-api = false, fulcra-data-types = false }
+# fulcra-api mis-declares pytest<8 as a runtime dependency but never imports it;
+# override so the dev group can track current pytest.
+override-dependencies = ["pytest>=8"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-asyncio>=1.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 
 [build-system]
 requires = ["setuptools>=45", "wheel"]
