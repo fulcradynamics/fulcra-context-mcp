@@ -1,6 +1,4 @@
 import json
-import logging
-import sys
 
 import structlog
 import uvicorn
@@ -12,12 +10,9 @@ from mcp.server.session import ServerSession
 from .settings import settings
 from .provider import oauth_provider
 from .tools import tools_mcp
+from .logging_config import configure_logging
 
-logging.basicConfig(format="%(message)s", stream=sys.stderr, level=logging.INFO)
-# In stdio mode, stdout carries the JSON-RPC stream; logs must go to stderr.
-structlog.configure(
-    logger_factory=structlog.PrintLoggerFactory(sys.stderr),
-)
+configure_logging(settings.log_format)
 logger = structlog.getLogger(__name__)
 
 
