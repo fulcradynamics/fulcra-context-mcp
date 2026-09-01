@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pathlib import Path
+from typing import Literal
 
 
 class Settings(BaseSettings):
@@ -10,6 +11,7 @@ class Settings(BaseSettings):
     oidc_client_id: str | None = None
     fulcra_oidc_domain: str | None = None
     fulcra_api: str | None = None
+    log_format: Literal["console", "json"] = "console"
 
 
 settings = Settings()
