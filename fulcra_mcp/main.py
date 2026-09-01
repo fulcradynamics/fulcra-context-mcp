@@ -198,7 +198,12 @@ def main():
     else:
         settings.state_path.mkdir(parents=True, exist_ok=True)
 
-        uvicorn.run(app, host="0.0.0.0", port=settings.port)
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=settings.port,
+            access_log=settings.log_format != "json",
+        )
 
 
 if __name__ == "__main__":
