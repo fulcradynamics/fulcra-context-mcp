@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from fastmcp import FastMCP
 from mcp.server.session import ServerSession
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 
 from .settings import settings
 from .provider import oauth_provider
@@ -27,7 +29,25 @@ mcp = FastMCP(
 mcp.mount(tools_mcp)
 
 
-mcp_asgi_app = mcp.http_app(path="/")
+# Add CORS middleware for browser-based clients
+cors_middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # public server; auth is bearer-token, not cookies
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        # Starlette's "*" does not cover Authorization — list headers explicitly.
+        allow_headers=[
+            "mcp-protocol-version",
+            "mcp-session-id",
+            "Authorization",
+            "Content-Type",
+        ],
+        # Browser JS must read the session id from the initialize response.
+        expose_headers=["mcp-session-id"],
+    )
+]
+
+mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware)
 
 
 app = FastAPI(lifespan=mcp_asgi_app.lifespan, debug=True)
