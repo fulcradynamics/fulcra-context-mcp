@@ -1,5 +1,7 @@
 ## fulcra-context-mcp: An MCP server to access your Fulcra Context data
 
+<!-- mcp-name: com.fulcradynamics/context -->
+
 
 This is an MCP server that provides tools and resources to call the Fulcra API using [`fulcra-api`](https://github.com/fulcradynamics/fulcra-api-python).
 
