@@ -243,8 +243,20 @@ async def test_list_files_passes_user_id_and_maps_403(call, fake_fulcra):
     fake_fulcra.list_files.assert_called_once_with("/shared", fulcra_userid=PARTNER)
     assert PARTNER in text
     fake_fulcra.list_files.side_effect = http_error(403)
+    fake_fulcra.resolve_filepath.side_effect = Exception("File not found in Fulcra")
     text = await call("list_files", {"path": "/private/", "fulcra_userid": PARTNER})
     assert "has not shared" in text and "list_shares" in text
+
+
+async def test_list_files_resolves_single_shared_file_after_folder_403(call, fake_fulcra):
+    """Sharing exactly one file: listing it as a folder is denied, but resolving
+    the file under its parent folder succeeds."""
+    fake_fulcra.list_files.side_effect = http_error(403)
+    fake_fulcra.resolve_filepath.return_value = [{"id": "f1", "name": "notes.txt", "path": "/shared"}]
+    text = await call("list_files", {"path": "/shared/notes.txt", "fulcra_userid": PARTNER})
+    fake_fulcra.resolve_filepath.assert_called_once_with("/shared/notes.txt", fulcra_userid=PARTNER)
+    assert "has not shared" not in text
+    assert _payload(text)["files"][0]["id"] == "f1"
 
 
 async def test_list_files_without_user_id_keeps_old_error(call, fake_fulcra):

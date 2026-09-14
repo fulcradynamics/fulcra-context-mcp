@@ -1054,9 +1054,12 @@ async def list_files(
     try:
         listing = fulcra.list_files(path, fulcra_userid=fulcra_userid)
     except urllib.error.HTTPError as e:
+        # A single shared file is not a listable folder; fall through to
+        # resolving `path` as a file before concluding nothing is shared.
         if fulcra_userid and e.code == 403:
-            return _not_shared_message(path, fulcra_userid)
-        raise
+            listing = {}
+        else:
+            raise
     result = {
         "folders": listing.get("folders") or [],
         "files": [_slim_file(f) for f in listing.get("files") or []],
