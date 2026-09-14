@@ -80,6 +80,27 @@ async def test_create_share_root_folder_is_single_slash(call, fake_fulcra):
     assert fake_fulcra.create_datashare.call_args.kwargs["fulcra_data_types"] == ["file:/"]
 
 
+@pytest.mark.parametrize("bad", ["", " ", ".", "./", "/./", "/shared/../", "a/../.."])
+async def test_create_share_rejects_paths_that_could_widen_to_root(call, fake_fulcra, bad):
+    text = await call(
+        "create_share", {"name": "x", "with_user_ids": [PARTNER], "file_paths": [bad]}
+    )
+    assert "Invalid share path" in text
+    fake_fulcra.create_datashare.assert_not_called()
+
+
+async def test_create_share_normalizes_ordinary_paths(call, fake_fulcra):
+    fake_fulcra.create_datashare.return_value = {}
+    await call(
+        "create_share",
+        {"name": "x", "with_user_ids": [PARTNER], "file_paths": [" shared//trip/ ", "a/b.txt"]},
+    )
+    assert fake_fulcra.create_datashare.call_args.kwargs["fulcra_data_types"] == [
+        "file:/a/b.txt",
+        "file:/shared/trip/",
+    ]
+
+
 @pytest.mark.parametrize(
     "args, expected",
     [

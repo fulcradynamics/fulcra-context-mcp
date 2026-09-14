@@ -1215,9 +1215,22 @@ _FILE_SHARE_PREFIXES = ("file:", "filehistory:")
 
 
 def _share_path(path: str) -> str:
-    """Normalize a path for a file share, keeping a trailing "/" that marks a folder."""
-    normalized = _file_path(path)
-    if path.rstrip().endswith("/") and normalized != "/":
+    """Normalize a path for a file share, keeping a trailing "/" that marks a folder.
+
+    Only a literal "/" may name the root: empty or dot-only paths would
+    otherwise silently normalize to "/" and share every file.
+    """
+    stripped = path.strip()
+    if stripped == "/":
+        return "/"
+    parts = [seg for seg in stripped.split("/") if seg]
+    if not parts or any(seg in (".", "..") for seg in parts):
+        raise ValueError(
+            f"Invalid share path {path!r}: pass a file or folder path such as "
+            '"/shared/trip/", or exactly "/" to share every file.'
+        )
+    normalized = "/" + "/".join(parts)
+    if stripped.endswith("/"):
         normalized += "/"
     return normalized
 
@@ -1321,7 +1334,10 @@ async def create_share(
     """
     if not with_user_ids and not with_group_ids:
         return "Nothing to share with: pass at least one entry in with_user_ids or with_group_ids."
-    types = _share_types(file_paths, data_types, include_file_history)
+    try:
+        types = _share_types(file_paths, data_types, include_file_history)
+    except ValueError as e:
+        return str(e)
     if share_all_data and types:
         return "share_all_data cannot be combined with file_paths or data_types; pass one or the other."
     if not share_all_data and not types:
