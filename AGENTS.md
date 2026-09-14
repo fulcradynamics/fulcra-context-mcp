@@ -136,6 +136,22 @@ User-logged medications, supplements, mood entries, device usage, and custom eve
 ### Files
 Users can upload arbitrary files to their account for storage alongside their data. The CLI's `file` sub-commands support list, stat, upload, download, delete, and version restore.
 
+### Sharing and agent-to-agent coordination
+
+A user can share files, calendars, and data types with other Fulcra users through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared, but can never write into another account. There is no lookup of users by email or name, so the two people exchange Fulcra user IDs themselves (the MCP tools `get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra auth get-token-claims`).
+
+MCP tools: `create_share`, `list_shares`, `delete_share`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. CLI equivalents: `fulcra share ...` and `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
+
+Recommended pattern for two agents coordinating on behalf of two users (e.g. planning a trip together):
+
+1. **Each side shares a folder with the other**, for example `create_share(name="Trip planning", with_user_ids=[<partner-id>], file_paths=["/shared/trip-2026/"])`. Because nobody can write into the other account, the share has to exist in both directions.
+2. **Each agent writes only to its own account** under the agreed folder with `write_file`, and **reads the partner's copy** with `list_files(path, fulcra_userid=<partner-id>)` and `read_file(path, fulcra_userid=<partner-id>)`.
+3. **Poll for the partner's changes** with `get_data_updates(start, end, fulcra_userid=<partner-id>)`; new and changed files appear under `file_changes`. The window filters on upload time, which is what you want here.
+4. Keep a `proposal.json` (or similar) for the current shared state and append dated notes under `messages/` rather than overwriting one file, so both sides keep a history. Versioning protects against clobbering the same path anyway.
+5. To share availability, add `data_types=["calendar_events"]` with `time_start`/`time_end` set to the candidate window; the partner reads it with `get_calendar_events(..., fulcra_userid=<id>)`.
+
+Only create shares the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
+
 ### Time Series Metrics
 
 Example metrics from the catalog: `StepCount`, `HeartRate`, `HeartRateVariabilitySDNN`, `SleepStage`, `ActiveCaloriesBurned`, `BasalCaloriesBurned`, `RespiratoryRate`, `OxygenSaturation`, `BodyTemperature`, `AFibBurden`, and many more.

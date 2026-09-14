@@ -186,6 +186,18 @@ wheels = [
 ]
 
 [[package]]
+name = "click-option-group"
+version = "0.5.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ef/ff/d291d66595b30b83d1cb9e314b2c9be7cfc7327d4a0d40a15da2416ea97b/click_option_group-0.5.9.tar.gz", hash = "sha256:f94ed2bc4cf69052e0f29592bd1e771a1789bd7bfc482dd0bc482134aff95823", size = 22222, upload-time = "2025-10-09T09:38:01.474Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/45/54bb2d8d4138964a94bef6e9afe48b0be4705ba66ac442ae7d8a8dc4ffef/click_option_group-0.5.9-py3-none-any.whl", hash = "sha256:ad2599248bd373e2e19bec5407967c3eec1d0d4fc4a5e77b08a0481e75991080", size = 11553, upload-time = "2025-10-09T09:38:00.066Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -513,10 +525,11 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.38"
+version = "0.1.41"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
+    { name = "click-option-group" },
     { name = "dateparser" },
     { name = "jsonschema" },
     { name = "numpy" },
@@ -525,14 +538,14 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/74/53b9577ff9b4693da8001b3cfe94bab8ffdc671982cd0d0dfc9469fffe92/fulcra_api-0.1.38.tar.gz", hash = "sha256:eaf16d39edd8822eec22e2a4603919b9f6565aecb1e92ceacf1bca347d1879b6", size = 38334, upload-time = "2026-07-16T01:28:33.234Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/61/b19ca849731ee65b37e4817088cb1b5ebaa26f4c4f4a39b539716e08c60d/fulcra_api-0.1.41.tar.gz", hash = "sha256:a03293d27b13ef262ac651086e9265c797143971bc1f2d90f998e4e896a27535", size = 55037, upload-time = "2026-09-08T03:36:46.099Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/71/c24e120b5b21ad7b55a7da403023030b398604ddd29847e02753b472e3ba/fulcra_api-0.1.38-py3-none-any.whl", hash = "sha256:cdba2374c008e8227617e1deb5c543709be356e1cb282f36b1076d59dd0ea14d", size = 44682, upload-time = "2026-07-16T01:28:27.984Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/3e/791fb9defb4d1f88bdce6a0bf5484b20f8dfc95f178b69c90d51f7dc805e/fulcra_api-0.1.41-py3-none-any.whl", hash = "sha256:0f40950b70c1ca429d4fd876e351b1aae181bdad8094b22861fffa72460b4f29", size = 62908, upload-time = "2026-09-08T03:36:39.872Z" },
 ]
 
 [[package]]
 name = "fulcra-context-mcp"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
@@ -553,7 +566,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.0.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.38" },
+    { name = "fulcra-api", specifier = ">=0.1.41" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },
     { name = "structlog", specifier = ">=25.4.0" },
