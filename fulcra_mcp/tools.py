@@ -95,7 +95,11 @@ class AnnotationType(Enum):
 
 @tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True})
 @_friendly_http_errors
-async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> str:
+async def get_workouts(
+    start_time: AwareDatetime,
+    end_time: AwareDatetime,
+    fulcra_userid: str | None = None,
+) -> str:
     """Get details about the workouts that the user has done during a period of time.
     Result timestamps will include time zones. Always translate timestamps to the user's local
     time zone when this is known.
@@ -103,11 +107,12 @@ async def get_workouts(start_time: AwareDatetime, end_time: AwareDatetime) -> st
     Args:
         start_time: The starting time of the period. Must include tz (ISO8601).
         end_time: the ending time of the period. Must include tz (ISO8601).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared)
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
-    workouts = fulcra.apple_workouts(start_time, end_time)
+    workouts = fulcra.apple_workouts(start_time, end_time, fulcra_userid=fulcra_userid)
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
@@ -300,13 +305,13 @@ async def record_data(
 
     Args:
         data_type: The ID of the data type to record to.
-        value: The value to record, for types that take one (e.g. "75.5" for
-            numeric, "true" for boolean, "3" for scale).
+        value: The value to record, for types that take one.
+            E.g. "75.5" for numeric, "true" for boolean, "3" for scale.
         note: Free-text note stored with the record.
-        start_time: When the record occurred. Defaults to now. Must include
-            tz (ISO8601). Duration-style types require it.
-        end_time: When the recorded range ended; only for duration-style types
-            (required there).
+        start_time: When the record occurred; defaults to now. Must include tz.
+            ISO8601. Duration-style types require it.
+        end_time: When the recorded range ended. Must include tz (ISO8601).
+            Only for duration-style types, where it is required.
         tags: Tag names to attach; missing tags are created automatically.
     Returns:
         Confirmation including the upload ID and the recorded fields.
@@ -439,8 +444,9 @@ async def get_data_catalog(
 
     Args:
         data_type: Optional. Return only the data type with this exact ID.
-        category: Optional. Filter by category (e.g. "healthkit", "annotations",
-            "sleep", "mindfulness", "user_configured", "base_type").
+        category: Optional. Filter by category.
+            E.g. "healthkit", "annotations", "sleep", "mindfulness",
+            "user_configured", "base_type".
         name: Optional. Filter results by partial, case-insensitive name match.
     """
     fulcra = get_fulcra_object()
@@ -467,6 +473,7 @@ async def get_time_series(
     sample_rate: float | None = 60.0,
     replace_nulls: bool | None = False,
     calculations: list[str] | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
     """Get calculated per-interval time-series values for a single data type.
 
@@ -480,9 +487,10 @@ async def get_time_series(
         end_time: Range end (exclusive). Must include tz (ISO8601).
         sample_rate: Seconds per sample; may be fractional.
         replace_nulls: Replace missing values (NA) with 0.
-        calculations: Extra per-slice calculations ("max", "min", "delta",
-            "mean", "uniques", "allpoints", "rollingmean"). Not supported on
-            data types whose kind is "cumulative".
+        calculations: Extra per-slice calculations to include.
+            One or more of "max", "min", "delta", "mean", "uniques",
+            "allpoints", "rollingmean". Not supported on "cumulative" kinds.
+        fulcra_userid: Retrieve data for another Fulcra user (if shared)
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
@@ -504,6 +512,8 @@ async def get_time_series(
         kwargs["replace_nulls"] = replace_nulls
     if calculations is not None:
         kwargs["calculations"] = calculations
+    if fulcra_userid:
+        kwargs["fulcra_userid"] = fulcra_userid
 
     try:
         time_series_df = fulcra.metric_time_series(
@@ -624,6 +634,7 @@ async def get_records(
 async def get_data_updates(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
+    fulcra_userid: str | None = None,
 ) -> str:
     """Summarize the data that arrived in the user's account during a period of time.
 
@@ -636,6 +647,8 @@ async def get_data_updates(
     Args:
         start_time: The start of the time range (inclusive). Must include tz (ISO8601).
         end_time: The end of the time range (exclusive). Must include tz (ISO8601).
+        fulcra_userid: Check another Fulcra user's account instead.
+            Only what they share is reported; poll to notice their agent's writes.
     Returns:
         A JSON string with two keys:
         - "data_types": a map of each data type that had records processed
@@ -651,8 +664,9 @@ async def get_data_updates(
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
-    updates = fulcra.data_updates(start_time, end_time)
-    return f"Data updates from {start_time} to {end_time}: " + json.dumps(updates)
+    updates = fulcra.data_updates(start_time, end_time, fulcra_userid=fulcra_userid)
+    whose = f" in user {fulcra_userid}'s account" if fulcra_userid else ""
+    return f"Data updates{whose} from {start_time} to {end_time}: " + json.dumps(updates)
 
 
 @tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True})
@@ -695,10 +709,10 @@ async def get_sleep(
         clip_to_range: Clip results to the requested range (default True).
         merge_overlapping: "stages" level only. Merge overlapping stages (default True).
         merge_contiguous: "stages" level only. Merge adjacent same-stage samples (default True).
-        mode: "aggregate" level only. Assign by "start", "end", or "split" (default "end").
+        mode: "aggregate" only. Assign by "start", "end" or "split" (default "end").
         period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
         agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
-        time_zone: "aggregate" level only. IANA tz for time bounds; use user's local TZ
+        time_zone: "aggregate" only. IANA tz for period bounds; use the user's local one.
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
@@ -759,10 +773,10 @@ async def get_location_at_time(
     time zone when this is known.
 
     Args:
-        time: The point in time to get the user's location for. Must include tz (ISO8601).
-        window_size: Optional. The size (in seconds) to search around `time` for samples. Defaults to 14400.
-        include_after: Optional. When true, a sample that occurs after the requested time may be returned if it is the closest one. Defaults to True.
-        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the location and include the details (e.g. address) in the result. Defaults to True.
+        time: The point in time to locate the user at. Must include tz (ISO8601).
+        window_size: Seconds around `time` to search for samples (default 14400).
+        include_after: Allow the closest sample to be after `time` (default true).
+        reverse_geocode: Include the address of the location (default true).
     Returns:
         A JSON string representing the location data.
     """
@@ -789,11 +803,11 @@ async def get_location_time_series(
     Result timestamps will include time zones. Always translate timestamps to the user's local tz when this is known.
 
     Args:
-        start_time: The start of the time range (inclusive), as an ISO 8601 string or datetime object.
-        end_time: The end of the range (exclusive), as an ISO 8601 string or datetime object.
-        change_meters: Optional. When specified, subsequent samples that are fewer than this many meters away will not be included.
-        sample_rate: Optional. The length (in seconds) of each sample. Default is 900.
-        reverse_geocode: Optional. When true, Fulcra will attempt to reverse geocode the locations and include the details in the results. Default is False.
+        start_time: Range start (inclusive). Must include tz (ISO8601).
+        end_time: Range end (exclusive). Must include tz (ISO8601).
+        change_meters: Drop samples fewer than this many meters from the previous one.
+        sample_rate: Seconds per sample (default 900).
+        reverse_geocode: Include the address of each location (default false).
     Returns:
         A JSON string representing a list of location data points.
     """
@@ -935,8 +949,8 @@ async def get_calendar_events(
     Args:
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        calendars: choose specific calendars to get events from (names or IDs)
-        include_participants: Include each event's participant list
+        calendars: Only these calendars (names or IDs); default is all.
+        include_participants: Include each event's participant list.
         fulcra_userid: Retrieve events of another Fulcra user (if shared)
     """
     if (err := _range_error(start_time, end_time)) is not None:
@@ -994,10 +1008,21 @@ def _slim_file(f: dict) -> dict:
     return {k: f[k] for k in keep if f.get(k) not in (None, [], "")}
 
 
+def _not_shared_message(path: str, fulcra_userid: str) -> str:
+    return (
+        f"User {fulcra_userid} has not shared anything with this user at or under "
+        f"{path!r}. Use list_shares(direction='incoming') to see what they share."
+    )
+
+
 @tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True})
 @_friendly_http_errors
-async def list_files(path: str = "/", include_versions: bool = False) -> str:
-    """List the files stored in the user's Fulcra account.
+async def list_files(
+    path: str = "/",
+    include_versions: bool = False,
+    fulcra_userid: str | None = None,
+) -> str:
+    """List the files in the user's Fulcra account, or files another user shares.
 
     Files can be used to pass data between agents: one agent writes a file with
     `write_file`, others notice the change via `get_data_updates` and read it
@@ -1005,9 +1030,10 @@ async def list_files(path: str = "/", include_versions: bool = False) -> str:
 
     Args:
         path: A folder to list (default "/"), or a single file's full path.
-        include_versions: When true, `path` must be a single file's full path;
-            all stored versions of that file are returned, newest first. Version
-            IDs can be passed to `restore_file`.
+        include_versions: Return all stored versions of one file, newest first.
+            `path` must then be a single file's full path. Version IDs can be
+            passed to `restore_file`.
+        fulcra_userid: List another Fulcra user's files (only the paths they share).
     Returns:
         A JSON string with "folders" and "files" lists, or a list of versions.
     """
@@ -1015,23 +1041,41 @@ async def list_files(path: str = "/", include_versions: bool = False) -> str:
     path = _file_path(path)
     if include_versions:
         try:
-            versions = fulcra.resolve_filepath(path, all_versions=True)
+            versions = fulcra.resolve_filepath(
+                path, all_versions=True, fulcra_userid=fulcra_userid
+            )
         except Exception:
+            if fulcra_userid:
+                return _not_shared_message(path, fulcra_userid)
             return f"No file found at {path!r}. Use list_files without include_versions to browse folders."
         return f"Versions of {path}, newest first: " + json.dumps(
             [_slim_file(f) for f in versions]
         )
-    listing = fulcra.list_files(path)
+    try:
+        listing = fulcra.list_files(path, fulcra_userid=fulcra_userid)
+    except urllib.error.HTTPError as e:
+        # A single shared file is not a listable folder; fall through to
+        # resolving `path` as a file before concluding nothing is shared.
+        if fulcra_userid and e.code == 403:
+            listing = {}
+        else:
+            raise
     result = {
         "folders": listing.get("folders") or [],
         "files": [_slim_file(f) for f in listing.get("files") or []],
     }
     if not result["folders"] and not result["files"]:
         try:
-            result["files"] = [_slim_file(f) for f in fulcra.resolve_filepath(path)]
+            result["files"] = [
+                _slim_file(f)
+                for f in fulcra.resolve_filepath(path, fulcra_userid=fulcra_userid)
+            ]
         except Exception:
+            if fulcra_userid:
+                return _not_shared_message(path, fulcra_userid)
             return f"No folder or file found at {path!r}."
-    return f"Files at {path}: " + json.dumps(result)
+    whose = f" shared by user {fulcra_userid}" if fulcra_userid else ""
+    return f"Files at {path}{whose}: " + json.dumps(result)
 
 
 @tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
@@ -1040,16 +1084,18 @@ async def read_file(
     path: str,
     max_bytes: int = 100000,
     include_binary: bool = False,
+    fulcra_userid: str | None = None,
 ) -> str:
-    """Read the content of a file stored in the user's Fulcra account.
+    """Read a file from the user's Fulcra account, or one another user shares.
 
     Args:
         path: The full path of the file to read.
-        max_bytes: Text content beyond this many bytes is truncated
-            (default 100000). Pass a larger value only when the full content is
-            truly needed; large files consume a lot of context.
-        include_binary: Files that are not valid UTF-8 text are only returned
-            when this is true, base64-encoded. Defaults to False.
+        max_bytes: Truncate text content beyond this many bytes (default 100000).
+            Pass a larger value only when the full content is truly needed;
+            large files consume a lot of context.
+        include_binary: Return non-UTF-8 files base64-encoded (default false).
+            Otherwise binary files are refused with their size.
+        fulcra_userid: Read a file of another Fulcra user (if shared).
     Returns:
         The file's text content (possibly truncated), or its base64-encoded
         content for binary files.
@@ -1057,10 +1103,12 @@ async def read_file(
     fulcra = get_fulcra_object()
     path = _file_path(path)
     try:
-        file_record = fulcra.resolve_filepath(path)[0]
+        file_record = fulcra.resolve_filepath(path, fulcra_userid=fulcra_userid)[0]
     except Exception:
+        if fulcra_userid:
+            return _not_shared_message(path, fulcra_userid)
         return f"No file found at {path!r}. Use list_files to see available files."
-    data = fulcra.download_file(file_record["id"]).read()
+    data = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid).read()
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -1141,8 +1189,8 @@ async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
 
     Args:
-        version_id: The UUID of the file version to restore, as returned by
-            list_files with include_versions=true.
+        version_id: The UUID of the file version to restore.
+            Found via list_files with include_versions=true.
     Returns:
         A JSON string describing the restored file.
     """
@@ -1159,6 +1207,215 @@ async def restore_file(version_id: str) -> str:
     restored = fulcra.restore_file(file_version["id"])
     full_path = _file_path(file_version["path"], file_version["name"])
     return f"Restored {full_path}: " + json.dumps(_slim_file(restored))
+
+
+
+#
+# Sharing
+#
+
+_FILE_SHARE_PREFIXES = ("file:", "filehistory:")
+
+
+def _share_path(path: str) -> str:
+    """Normalize a path for a file share, keeping a trailing "/" that marks a folder.
+
+    Only a literal "/" may name the root: empty or dot-only paths would
+    otherwise silently normalize to "/" and share every file.
+    """
+    stripped = path.strip()
+    if stripped == "/":
+        return "/"
+    parts = [seg for seg in stripped.split("/") if seg]
+    if not parts or any(seg in (".", "..") for seg in parts):
+        raise ValueError(
+            f"Invalid share path {path!r}: pass a file or folder path such as "
+            '"/shared/trip/", or exactly "/" to share every file.'
+        )
+    normalized = "/" + "/".join(parts)
+    if stripped.endswith("/"):
+        normalized += "/"
+    return normalized
+
+
+def _share_types(
+    file_paths: list[str] | None,
+    data_types: list[str] | None,
+    include_file_history: bool,
+) -> list[str]:
+    """Build a datashare's fulcra_data_types list from paths and data type IDs."""
+    prefix = "filehistory:" if include_file_history else "file:"
+    types = [prefix + _share_path(p) for p in file_paths or []]
+    types += list(data_types or [])
+    return sorted(set(types))
+
+
+def _split_share_types(types: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """Split fulcra_data_types into (file_paths, file_history_paths, data_types)."""
+    files, history, data = [], [], []
+    for t in types:
+        if t.startswith("file:"):
+            files.append(t[len("file:"):])
+        elif t.startswith("filehistory:"):
+            history.append(t[len("filehistory:"):])
+        else:
+            data.append(t)
+    return files, history, data
+
+
+def _slim_share(s: dict) -> dict:
+    """Strip a datashare or received grant down to what an MCP client needs."""
+    keep = (
+        "datashare_id",
+        "grant_id",
+        "grant_type",
+        "datashare_name",
+        "sharing_fulcra_userid",
+        "sharing_fulcra_user_name",
+        "group_id",
+        "share_all_data",
+        "time_start",
+        "time_end",
+        "created_at",
+    )
+    out = {k: s[k] for k in keep if k in s}
+    files, history, data = _split_share_types(s.get("fulcra_data_types") or [])
+    out["file_paths"] = files
+    out["file_history_paths"] = history
+    out["data_types"] = data
+    out["with_user_ids"] = [
+        p["allowed_fulcra_userid"] for p in s.get("permissions") or []
+    ]
+    out["with_group_ids"] = [
+        p["allowed_group_id"] for p in s.get("group_permissions") or []
+    ]
+    return {k: v for k, v in out.items() if v not in (None, [], "")}
+
+
+def _own_userid(fulcra) -> str | None:
+    try:
+        return fulcra.get_fulcra_userid()
+    except Exception:
+        return None
+
+
+@tools_mcp.tool(annotations={"title": "Create Share", "destructiveHint": False})
+@_friendly_http_errors
+async def create_share(
+    name: str,
+    with_user_ids: list[str] | None = None,
+    with_group_ids: list[str] | None = None,
+    file_paths: list[str] | None = None,
+    data_types: list[str] | None = None,
+    share_all_data: bool = False,
+    time_start: AwareDatetime | None = None,
+    time_end: AwareDatetime | None = None,
+    include_file_history: bool = False,
+) -> str:
+    """Share files or data types from this account with other Fulcra users (read-only).
+
+    Recipients read them by passing this user's ID as `fulcra_userid` to the
+    file and data tools; they can never write here. For agent-to-agent
+    coordination, share a folder like "/shared/<topic>/" and have the other
+    user share one back; each agent writes to its own account and reads the
+    other's. Only share what the user asked to share.
+
+    Args:
+        name: A short label for the share, shown to recipients.
+        with_user_ids: Fulcra user IDs to share with.
+        with_group_ids: Fulcra data group IDs to share with (all members).
+        file_paths: Files or folders to share; a folder path must end with "/".
+        data_types: Data type IDs to share (see `get_data_catalog`).
+            Also accepts "calendars" and "calendar_events".
+        share_all_data: Share the entire account, only on explicit request.
+            Excludes file_paths and data_types.
+        time_start: Only share data records from this time on. Must include tz.
+            ISO8601. Not allowed with file_paths: file shares are never time-bounded.
+        time_end: Only share data records before this time. Must include tz.
+            ISO8601. Not allowed with file_paths.
+        include_file_history: Also share earlier versions of the files.
+    Returns:
+        A JSON string describing the created share, including its ID.
+    """
+    if not with_user_ids and not with_group_ids:
+        return "Nothing to share with: pass at least one entry in with_user_ids or with_group_ids."
+    try:
+        types = _share_types(file_paths, data_types, include_file_history)
+    except ValueError as e:
+        return str(e)
+    if share_all_data and types:
+        return "share_all_data cannot be combined with file_paths or data_types; pass one or the other."
+    if not share_all_data and not types:
+        return "Nothing to share: pass file_paths and/or data_types, or share_all_data=true."
+    if file_paths and (time_start or time_end):
+        return (
+            "File shares are never time-bounded, so time_start/time_end cannot be "
+            "combined with file_paths. Create one share for the files and a "
+            "separate, time-bounded one for the data types."
+        )
+    if time_start and time_end and (err := _range_error(time_start, time_end)):
+        return err
+    fulcra = get_fulcra_object()
+    result = fulcra.create_datashare(
+        datashare_name=name,
+        fulcra_data_types=types,
+        allowed_user_ids=with_user_ids or None,
+        share_all_data=share_all_data,
+        time_start=time_start,
+        time_end=time_end,
+        allowed_group_ids=with_group_ids or None,
+    )
+    return "Created share: " + json.dumps(_slim_share(result.get("datashare", result)))
+
+
+@tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True})
+@_friendly_http_errors
+async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both") -> str:
+    """List what this user shares with others and what others share with them.
+
+    Incoming entries show what another user shares (read it by passing their
+    `sharing_fulcra_userid` as `fulcra_userid` to the file and data tools).
+    Also reports this user's own ID, which others need in order to share
+    with them.
+
+    Args:
+        direction: Which shares to list: "outgoing", "incoming", or "both".
+    Returns:
+        A JSON string with "own_fulcra_userid", "outgoing" (entries carry a
+        "datashare_id" for `delete_share`) and/or "incoming".
+    """
+    fulcra = get_fulcra_object()
+    result: dict = {}
+    if own := _own_userid(fulcra):
+        result["own_fulcra_userid"] = own
+    if direction in ("outgoing", "both"):
+        result["outgoing"] = [_slim_share(s) for s in fulcra.get_datashares()]
+    if direction in ("incoming", "both"):
+        # The "self" grant only says the user can read their own data.
+        result["incoming"] = [
+            _slim_share(s)
+            for s in fulcra.get_shared_datasets()
+            if s.get("grant_type") != "self"
+        ]
+    return "Shares: " + json.dumps(result)
+
+
+@tools_mcp.tool(annotations={"title": "Delete Share", "destructiveHint": True})
+@_friendly_http_errors
+async def delete_share(share_id: str) -> str:
+    """Stop sharing: delete a share this user created, revoking all recipients' access.
+
+    Args:
+        share_id: The "datashare_id" from `list_shares(direction="outgoing")`.
+    """
+    fulcra = get_fulcra_object()
+    try:
+        fulcra.delete_datashare(share_id)
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 404):
+            return f"No share of this user found with ID {share_id!r}. Use list_shares to find share IDs."
+        raise
+    return f"Deleted share {share_id}; its recipients no longer have access."
 
 
 async def debug_token_info() -> str:
