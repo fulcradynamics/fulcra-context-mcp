@@ -118,6 +118,16 @@ async def test_create_share_argument_guards(call, fake_fulcra, args, expected):
     fake_fulcra.create_datashare.assert_not_called()
 
 
+@pytest.mark.parametrize("bounds", [{"time_start": START}, {"time_end": END}, {"time_start": START, "time_end": END}])
+async def test_create_share_rejects_time_bounds_on_file_shares(call, fake_fulcra, bounds):
+    text = await call(
+        "create_share",
+        {"name": "x", "with_user_ids": [PARTNER], "file_paths": ["/shared/"], **bounds},
+    )
+    assert "never time-bounded" in text
+    fake_fulcra.create_datashare.assert_not_called()
+
+
 async def test_create_share_rejects_naive_times(client, fake_fulcra):
     with pytest.raises(ToolError, match="time zone"):
         await client.call_tool(

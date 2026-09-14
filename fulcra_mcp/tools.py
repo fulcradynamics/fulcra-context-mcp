@@ -1326,8 +1326,10 @@ async def create_share(
             Also accepts "calendars" and "calendar_events".
         share_all_data: Share the entire account, only on explicit request.
             Excludes file_paths and data_types.
-        time_start: Only share data from this time on. Must include tz (ISO8601).
-        time_end: Only share data before this time. Must include tz (ISO8601).
+        time_start: Only share data records from this time on. Must include tz.
+            ISO8601. Not allowed with file_paths: file shares are never time-bounded.
+        time_end: Only share data records before this time. Must include tz.
+            ISO8601. Not allowed with file_paths.
         include_file_history: Also share earlier versions of the files.
     Returns:
         A JSON string describing the created share, including its ID.
@@ -1342,6 +1344,12 @@ async def create_share(
         return "share_all_data cannot be combined with file_paths or data_types; pass one or the other."
     if not share_all_data and not types:
         return "Nothing to share: pass file_paths and/or data_types, or share_all_data=true."
+    if file_paths and (time_start or time_end):
+        return (
+            "File shares are never time-bounded, so time_start/time_end cannot be "
+            "combined with file_paths. Create one share for the files and a "
+            "separate, time-bounded one for the data types."
+        )
     if time_start and time_end and (err := _range_error(time_start, time_end)):
         return err
     fulcra = get_fulcra_object()
