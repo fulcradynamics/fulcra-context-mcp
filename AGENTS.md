@@ -138,9 +138,9 @@ Users can upload arbitrary files to their account for storage alongside their da
 
 ### Sharing and agent-to-agent coordination
 
-A user can share files, calendars, and data types with other Fulcra users through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared, but can never write into another account. There is no lookup of users by email or name, so the two people exchange Fulcra user IDs themselves (the MCP tools `get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra auth get-token-claims`).
+A user can share files, calendars, and data types with other Fulcra users through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared, but can never write into another account. There is no lookup of users by email or name, so the two people exchange Fulcra user IDs themselves (the MCP tools `get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra user-info`).
 
-MCP tools: `create_share`, `list_shares`, `delete_share`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. CLI equivalents: `fulcra share ...` and `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
+MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. CLI equivalents: `fulcra share ...` and `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
 
 Recommended pattern for two agents coordinating on behalf of two users (e.g. planning a trip together):
 
@@ -150,7 +150,9 @@ Recommended pattern for two agents coordinating on behalf of two users (e.g. pla
 4. Keep a `proposal.json` (or similar) for the current shared state and append dated notes under `messages/` rather than overwriting one file, so both sides keep a history. Versioning protects against clobbering the same path anyway.
 5. To share availability, add `data_types=["calendar_events"]` with `time_start`/`time_end` set to the candidate window; the partner reads it with `get_calendar_events(..., fulcra_userid=<id>)`.
 
-Only create shares the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
+**Groups** extend this to more than two people. A group is a set of Fulcra users; one person creates it with `create_group` (no data types, so joining shares nothing), the others `join_group` it, and then everyone runs `create_share(..., with_group_ids=[<group-id>])` on their folder. Members find IDs with `get_groups`, and reads work exactly as above with each member's `fulcra_userid`. Groups can also *collect* data (a challenge or study): if a group lists data types, joining shares those with its owner, so agents must show the user the group's details before joining. Leaving a group is done in the Context app.
+
+Only create shares or groups the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
 
 ### Time Series Metrics
 

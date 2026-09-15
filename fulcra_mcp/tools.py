@@ -1323,7 +1323,7 @@ async def create_share(
     Args:
         name: A short label for the share, shown to recipients.
         with_user_ids: Fulcra user IDs to share with.
-        with_group_ids: Fulcra data group IDs to share with (all members).
+        with_group_ids: Group IDs (from `get_groups`) to share with all members of.
         file_paths: Files or folders to share; a folder path must end with "/".
         data_types: Data type IDs to share (see `get_data_catalog`).
             Also accepts "calendars" and "calendar_events".
@@ -1374,7 +1374,8 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
     """List what this user shares with others and what others share with them.
 
     Incoming entries show what another user shares (read it by passing their
-    `sharing_fulcra_userid` as `fulcra_userid` to the file and data tools).
+    `sharing_fulcra_userid` as `fulcra_userid` to the file and data tools);
+    a "group_id" on an entry means it came via a group (see `get_groups`).
     Also reports this user's own ID, which others need in order to share
     with them.
 
@@ -1416,6 +1417,174 @@ async def delete_share(share_id: str) -> str:
             return f"No share of this user found with ID {share_id!r}. Use list_shares to find share IDs."
         raise
     return f"Deleted share {share_id}; its recipients no longer have access."
+
+
+#
+# Groups
+#
+
+# Long-form fields omitted from group listings; fetch a single group for the
+# complete record.
+GROUP_LIST_DROP_FIELDS = frozenset(
+    (
+        "detail_markdown",
+        "agreement_markdown",
+        "withdraw_markdown",
+        "annotations",
+        "view_description",
+    )
+)
+
+# Resource names the group routes accept that are not v1 catalog IDs.
+GROUP_EXTRA_DATA_TYPES = frozenset(("apple_workouts",))
+
+
+def _slim_group(group: dict) -> dict:
+    return {
+        k: v
+        for k, v in group.items()
+        if k not in GROUP_LIST_DROP_FIELDS and v not in (None, [], {})
+    }
+
+
+def _group_http_error(e: urllib.error.HTTPError, group_id: str) -> str | None:
+    """Map common group HTTP failures to client-facing messages."""
+    if e.code == 404:
+        return f"No group found with ID {group_id!r}. Use get_groups to list groups."
+    if e.code in (401, 403):
+        return "Access denied: only the group's owner can do this."
+    return None
+
+
+@tools_mcp.tool(annotations={"title": "Get Groups", "readOnlyHint": True})
+@_friendly_http_errors
+async def get_groups(group_id: str | None = None, subscribed_only: bool = False) -> str:
+    """List Fulcra groups, or get one group's full details.
+
+    A group is a set of Fulcra users; share with all of them at once by
+    passing its ID as `with_group_ids` to `create_share`. Lists public and
+    owned groups with long-form fields omitted; pass `group_id` for one
+    group's complete record.
+
+    Args:
+        group_id: Return this single group in full detail.
+        subscribed_only: List only groups the user has joined.
+            Entries then include the user's participant_id and joined_at.
+    Returns:
+        A JSON string with the group list or the single group.
+    """
+    fulcra = get_fulcra_object()
+    if group_id is not None:
+        try:
+            group = fulcra.get_group(group_id)
+        except urllib.error.HTTPError as e:
+            if msg := _group_http_error(e, group_id):
+                return msg
+            raise
+        return f"Group {group_id}: " + json.dumps(group)
+    groups = fulcra.get_groups(subscribed_only=subscribed_only)
+    label = "Groups the user has joined" if subscribed_only else "Public and owned groups"
+    return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
+
+
+@tools_mcp.tool(annotations={"title": "Join Group", "destructiveHint": False})
+@_friendly_http_errors
+async def join_group(group_id: str) -> str:
+    """Join a Fulcra group on the user's behalf, at their explicit request.
+
+    Members can receive shares made to the group. If the group lists data
+    types (see `get_groups`), joining also shares those read-only with its
+    owner until the user leaves via the Context app. Show the user the
+    group's details first.
+
+    Args:
+        group_id: The group to join, from `get_groups`.
+    """
+    fulcra = get_fulcra_object()
+    try:
+        membership = fulcra.join_group(group_id)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return f"No group found with ID {group_id!r}. Use get_groups to list groups."
+        raise
+    return f"Joined group {group_id}: " + json.dumps(membership)
+
+
+@tools_mcp.tool(annotations={"title": "Create Group", "destructiveHint": False})
+@_friendly_http_errors
+async def create_group(
+    title: str,
+    description: str,
+    responsible_entity: str,
+    friendly_id: str | None = None,
+    data_types: list[str] | None = None,
+    time_start: AwareDatetime | None = None,
+    time_end: AwareDatetime | None = None,
+) -> str:
+    """Create a group of Fulcra users, e.g. to share with several people at once.
+
+    Without `data_types` joining shares nothing; members just use the group
+    as a target for `create_share`. With `data_types`, every member shares
+    those types (within the time range) read-only with the user until they
+    leave; this cannot be changed later. Only create a group the user asked for.
+
+    Args:
+        title: Group title shown to prospective members.
+        description: What the group is for.
+        responsible_entity: Person or organization responsible for the group.
+        friendly_id: Human-friendly ID (lowercase letters, digits, "-", "_").
+        data_types: Data type IDs members will share (see `get_data_catalog`).
+            Omit for a group that collects nothing.
+        time_start: Start of the shared-data range. Must include tz (ISO8601).
+        time_end: End of the shared-data range. Must include tz (ISO8601).
+    Returns:
+        A JSON string describing the created group, including its ID.
+    """
+    if time_start and time_end and (err := _range_error(time_start, time_end)):
+        return err
+    if (time_start or time_end) and not data_types:
+        return "time_start/time_end only apply to groups that collect data_types."
+    fulcra = get_fulcra_object()
+    if data_types:
+        valid_ids = {e["id"] for e in fulcra.v1_catalog()}
+        invalid = [
+            dt for dt in data_types
+            if dt not in valid_ids and dt not in GROUP_EXTRA_DATA_TYPES
+        ]
+        if invalid:
+            return (
+                "These are not group-shareable data types: "
+                + ", ".join(repr(dt) for dt in invalid)
+                + '. Use IDs from get_data_catalog (or "apple_workouts").'
+            )
+    group = fulcra.create_group(
+        title=title,
+        responsible_entity=responsible_entity,
+        description=description,
+        fulcra_data_types=data_types or None,
+        time_start=time_start,
+        time_end=time_end,
+        friendly_id=friendly_id,
+    )
+    return "Created group: " + json.dumps(_slim_group(group))
+
+
+@tools_mcp.tool(annotations={"title": "Delete Group", "destructiveHint": True})
+@_friendly_http_errors
+async def delete_group(group_id: str) -> str:
+    """Permanently delete a group the user owns, removing all its members.
+
+    Args:
+        group_id: The group to delete, from `get_groups`.
+    """
+    fulcra = get_fulcra_object()
+    try:
+        fulcra.delete_group(group_id)
+    except urllib.error.HTTPError as e:
+        if msg := _group_http_error(e, group_id):
+            return msg
+        raise
+    return f"Deleted group {group_id}; its members no longer belong to it."
 
 
 async def debug_token_info() -> str:
