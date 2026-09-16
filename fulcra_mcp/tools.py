@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from datetime import datetime
 import functools
@@ -64,6 +65,13 @@ def _friendly_http_errors(func):
                 f"The Fulcra API returned an unexpected error (HTTP {e.code}): {detail}. "
                 "Try again shortly; if the error persists, report it to support@fulcradynamics.com."
             )
+        except (TimeoutError, urllib.error.URLError) as e:
+            # HTTPError is a URLError subclass but is handled above; this is
+            # a connection failure or the process-wide socket timeout.
+            return (
+                f"The Fulcra API did not respond in time ({e}). Try again shortly; "
+                "if the error persists, report it to support@fulcradynamics.com."
+            )
 
     return wrapper
 
@@ -83,6 +91,7 @@ def _range_error(start_time: datetime, end_time: datetime) -> str | None:
 # context window instead of returning unbounded data dumps.
 MAX_SERIES_SAMPLES = 5000
 MAX_RECORDS = 2000
+MAX_SHARED_PEERS = 20
 
 
 class AnnotationType(Enum):
@@ -629,12 +638,57 @@ async def get_records(
     )
 
 
+def _collect_updates(
+    fulcra,
+    start_time: datetime,
+    end_time: datetime,
+    fulcra_userid: str | None,
+    include_shared: bool,
+) -> dict:
+    """Blocking part of get_data_updates: own updates plus, optionally, one
+    updates call per user who shares with this one. Sequential on purpose so
+    the shared client never refreshes tokens from two threads at once."""
+    updates = fulcra.data_updates(start_time, end_time, fulcra_userid=fulcra_userid)
+    if not include_shared:
+        return updates
+    # A share the user made to a group they belong to shows up as an
+    # incoming group grant from themselves; that is not a peer.
+    own = _own_userid(fulcra)
+    peers: dict[str, str | None] = {}
+    for grant in fulcra.get_shared_datasets():
+        if grant.get("grant_type") == "self":
+            continue
+        uid = grant.get("sharing_fulcra_userid")
+        if uid and uid != own and uid not in peers:
+            peers[uid] = grant.get("sharing_fulcra_user_name")
+    polled = list(peers.items())[:MAX_SHARED_PEERS]
+    shared = {}
+    for uid, name in polled:
+        try:
+            peer_updates = fulcra.data_updates(start_time, end_time, fulcra_userid=uid)
+        except urllib.error.HTTPError as e:
+            shared[uid] = {"name": name, "error": f"HTTP {e.code}"}
+            continue
+        except (TimeoutError, urllib.error.URLError):
+            shared[uid] = {"name": name, "error": "timeout"}
+            continue
+        if peer_updates.get("data_types") or peer_updates.get("file_changes"):
+            shared[uid] = {"name": name, **peer_updates}
+    updates["shared"] = shared
+    updates["peers_checked"] = len(polled)
+    if len(peers) > len(polled):
+        # Give the caller the rest explicitly so nobody is silently never polled.
+        updates["peers_skipped"] = [uid for uid, _ in list(peers.items())[len(polled):]]
+    return updates
+
+
 @tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_data_updates(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
     fulcra_userid: str | None = None,
+    include_shared: bool = False,
 ) -> str:
     """Summarize the data that arrived in the user's account during a period of time.
 
@@ -649,6 +703,10 @@ async def get_data_updates(
         end_time: The end of the time range (exclusive). Must include tz (ISO8601).
         fulcra_userid: Check another Fulcra user's account instead.
             Only what they share is reported; poll to notice their agent's writes.
+        include_shared: Also check every user who shares with this one.
+            Adds a "shared" map keyed by their user ID (peers with no changes
+            are omitted) and "peers_checked". At most 20 peers per call; any
+            more are listed in "peers_skipped" to poll via fulcra_userid.
     Returns:
         A JSON string with two keys:
         - "data_types": a map of each data type that had records processed
@@ -663,8 +721,14 @@ async def get_data_updates(
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
+    if fulcra_userid and include_shared:
+        return "Pass either fulcra_userid (one peer) or include_shared=true (all peers), not both."
     fulcra = get_fulcra_object()
-    updates = fulcra.data_updates(start_time, end_time, fulcra_userid=fulcra_userid)
+    # The client is synchronous; run the whole (possibly multi-request)
+    # sequence in one worker thread so other requests are not stalled.
+    updates = await asyncio.to_thread(
+        _collect_updates, fulcra, start_time, end_time, fulcra_userid, include_shared
+    )
     whose = f" in user {fulcra_userid}'s account" if fulcra_userid else ""
     return f"Data updates{whose} from {start_time} to {end_time}: " + json.dumps(updates)
 
@@ -1033,7 +1097,8 @@ async def list_files(
         include_versions: Return all stored versions of one file, newest first.
             `path` must then be a single file's full path. Version IDs can be
             passed to `restore_file`.
-        fulcra_userid: List another Fulcra user's files (only the paths they share).
+        fulcra_userid: List another Fulcra user's shared files.
+            Only shared paths, plus the parent folders leading to them, appear.
     Returns:
         A JSON string with "folders" and "files" lists, or a list of versions.
     """
@@ -1448,11 +1513,11 @@ def _slim_group(group: dict) -> dict:
 
 
 def _group_http_error(e: urllib.error.HTTPError, group_id: str) -> str | None:
-    """Map common group HTTP failures to client-facing messages."""
+    """Map a missing group to a client-facing message; anything else (401 =
+    session expired, 403 = not the owner) is left to the caller or to
+    _friendly_http_errors."""
     if e.code == 404:
         return f"No group found with ID {group_id!r}. Use get_groups to list groups."
-    if e.code in (401, 403):
-        return "Access denied: only the group's owner can do this."
     return None
 
 
@@ -1463,7 +1528,8 @@ async def get_groups(group_id: str | None = None, subscribed_only: bool = False)
 
     A group is a set of Fulcra users; share with all of them at once by
     passing its ID as `with_group_ids` to `create_share`. Lists public and
-    owned groups with long-form fields omitted; pass `group_id` for one
+    owned groups with long-form fields omitted (private groups the user
+    joined appear only with `subscribed_only`); pass `group_id` for one
     group's complete record.
 
     Args:
@@ -1495,7 +1561,7 @@ async def join_group(group_id: str) -> str:
     Members can receive shares made to the group. If the group lists data
     types (see `get_groups`), joining also shares those read-only with its
     owner until the user leaves via the Context app. Show the user the
-    group's details first.
+    group's details first. Anyone who knows a group's ID can join it.
 
     Args:
         group_id: The group to join, from `get_groups`.
@@ -1526,7 +1592,10 @@ async def create_group(
     Without `data_types` joining shares nothing; members just use the group
     as a target for `create_share`. With `data_types`, every member shares
     those types (within the time range) read-only with the user until they
-    leave; this cannot be changed later. Only create a group the user asked for.
+    leave; this cannot be changed later. Creating does not make the user a
+    member: call `join_group` too, or shares made to the group never reach
+    them. Anyone who learns the ID can join and the owner cannot remove
+    members, so treat it like a password. Only create a group the user asked for.
 
     Args:
         title: Group title shown to prospective members.
@@ -1583,6 +1652,8 @@ async def delete_group(group_id: str) -> str:
     except urllib.error.HTTPError as e:
         if msg := _group_http_error(e, group_id):
             return msg
+        if e.code == 403:
+            return f"Only the group's owner can delete it; this user does not own {group_id}."
         raise
     return f"Deleted group {group_id}; its members no longer belong to it."
 
