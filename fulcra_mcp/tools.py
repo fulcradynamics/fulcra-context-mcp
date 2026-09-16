@@ -9,13 +9,16 @@ from pathlib import PurePath
 from typing import Annotated, Literal
 from uuid import UUID
 
+import structlog
 from fastmcp import FastMCP
+from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
+logger = structlog.getLogger(__name__)
 
 
 def _require_time_zone(dt: datetime) -> datetime:
@@ -50,6 +53,16 @@ def _friendly_http_errors(func):
                 detail = ""
             detail = detail or getattr(e, "reason", None) or "no details provided"
             if e.code in (401, 403):
+                # Auth rejected by the Fulcra API despite a valid MCP token:
+                # the stored Fulcra credentials are bad. Log it so the rate is
+                # visible (Cloud Run request logs only see the MCP-side 200).
+                token = get_access_token()
+                logger.warning(
+                    "fulcra_api_auth_rejected",
+                    status=e.code,
+                    tool=func.__name__,
+                    client_id=token.client_id if token else None,
+                )
                 return (
                     f"The Fulcra API rejected this request (HTTP {e.code}): {detail}. "
                     "The session may have expired; re-authenticate with Fulcra and try again."
