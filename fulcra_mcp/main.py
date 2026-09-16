@@ -9,10 +9,10 @@ from mcp.server.session import ServerSession
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
-from .settings import settings
-from .provider import oauth_provider
-from .tools import tools_mcp
 from .logging_config import configure_logging
+from .provider import oauth_provider
+from .settings import settings
+from .tools import tools_mcp
 
 configure_logging(settings.log_format)
 logger = structlog.getLogger(__name__)
@@ -47,7 +47,14 @@ cors_middleware = [
     )
 ]
 
-mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware)
+# Stateless: every POST is self-contained, so nothing is lost when Cloud Run
+# replaces or redeploys the instance, and there is no per-session state to leak
+# (stateful sessions were never released - claude.ai never sends DELETE - and
+# the resulting memory growth recycled the instance every day or two, which in
+# turn broke users' stored Fulcra credentials; see docs/disconnect-diagnosis.md).
+# GET (server-initiated SSE stream) is not served in this mode; clients treat
+# the 405 as "unsupported" per the MCP spec. None of our tools need it.
+mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 
 
 app = FastAPI(lifespan=mcp_asgi_app.lifespan, debug=True)
@@ -192,7 +199,55 @@ class OpenAIWorkaroundMiddleware:
             await self.app(scope, receive, send)
 
 
+MCP_PATHS = ("/", "/mcp", "/mcp/", "/MCP", "/MCP/")
+
+
+class MCPErrorLoggingMiddleware:
+    """Log the body of 4xx responses on the MCP endpoint.
+
+    The transport returns JSON-RPC errors for bad requests without logging why;
+    the Cloud Run request log only shows the status. A small bounded capture
+    makes "why does this client get 400s" answerable from logs.
+    """
+
+    MAX_BODY = 1024
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] not in MCP_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        status = 0
+        chunks: list[bytes] = []
+        captured = 0
+
+        async def logging_send(message):
+            nonlocal status, captured
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            elif message["type"] == "http.response.body" and 400 <= status < 500:
+                body = message.get("body", b"")
+                if captured < self.MAX_BODY:
+                    chunks.append(body[: self.MAX_BODY - captured])
+                    captured += len(body)
+                if not message.get("more_body", False):
+                    logger.warning(
+                        "mcp_http_client_error",
+                        status=status,
+                        method=scope.get("method"),
+                        path=scope["path"],
+                        body=b"".join(chunks).decode("utf-8", errors="replace"),
+                    )
+            await send(message)
+
+        await self.app(scope, receive, logging_send)
+
+
 app.add_middleware(OpenAIWorkaroundMiddleware)
+app.add_middleware(MCPErrorLoggingMiddleware)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)
