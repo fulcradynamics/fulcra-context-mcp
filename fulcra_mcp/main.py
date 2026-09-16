@@ -1,9 +1,10 @@
 import json
+from pathlib import Path
 
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastmcp import FastMCP
 from mcp.server.session import ServerSession
 from starlette.middleware import Middleware
@@ -58,6 +59,19 @@ mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware, stateless_http
 
 
 app = FastAPI(lifespan=mcp_asgi_app.lifespan, debug=True)
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+# Glama's directory verifies ownership of the hosted server by fetching this
+# file. It is a single explicit route rather than a StaticFiles mount because
+# the fastmcp app mounted at "/" serves the OAuth discovery documents under the
+# same /.well-known prefix, and a mount there would shadow them.
+@app.get("/.well-known/glama.json", include_in_schema=False)
+async def glama_manifest() -> Response:
+    return FileResponse(
+        STATIC_DIR / ".well-known" / "glama.json", media_type="application/json"
+    )
 
 
 @app.get("/callback")
