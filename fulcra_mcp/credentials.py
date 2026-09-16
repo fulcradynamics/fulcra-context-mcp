@@ -1,6 +1,7 @@
 import os
 import sys
 import webbrowser
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import structlog
@@ -24,6 +25,20 @@ SESSION_EXPIRED = (
     "The Fulcra sign-in behind this connector has expired and could not be "
     "renewed. Reconnect the Fulcra connector (sign in again) and retry."
 )
+
+# Refresh this long before the Fulcra token expires. Otherwise a token that
+# runs out during the request is refreshed lazily inside fulcra-api, outside
+# the grant lock and with failures swallowed.
+REFRESH_MARGIN = timedelta(seconds=120)
+
+
+def _needs_refresh(creds: FulcraCredentials) -> bool:
+    # Naive datetimes on purpose: fulcra-api stamps and compares expirations
+    # with datetime.now() (see FulcraCredentials.is_expired), so a tz-aware
+    # comparison here would raise.
+    if creds.access_token is None or creds.access_token_expiration is None:
+        return True
+    return creds.access_token_expiration - datetime.now() < REFRESH_MARGIN  # noqa: DTZ005
 
 
 def _get_credentials_path() -> Path:
@@ -134,7 +149,11 @@ def get_fulcra_object() -> FulcraAPI:
     # errors, then sends the expired token anyway. Refresh up front instead,
     # serialised per grant, and fail with a message the user can act on.
     with oauth_provider.grant_lock(grant_id):
-        if creds.is_expired():
+        if _needs_refresh(creds):
+            # Another instance may already have refreshed this grant; its
+            # copy is on disk and our cached refresh token may be rotated out.
+            oauth_provider.reload_grant(grant_id)
+        if _needs_refresh(creds):
             try:
                 refreshed = fulcra.refresh_access_token()
             except Exception as exc:

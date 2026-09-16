@@ -252,3 +252,116 @@ async def test_token_without_grant_raises_actionable_error(hosted, monkeypatch):
     use_token(monkeypatch, "mcp_phantom")
     with pytest.raises(ToolError, match="not connected to a Fulcra account"):
         credentials_module.get_fulcra_object()
+
+
+# --- multi-instance and legacy-divergence hardening ---------------------------
+
+
+def creds_expiring_in(tag: str, delta: timedelta) -> FulcraCredentials:
+    return FulcraCredentials(
+        access_token=f"auth0-access-{tag}",
+        access_token_expiration=datetime.now() + delta,  # noqa: DTZ005 fulcra-api compares naive
+        refresh_token=f"auth0-refresh-{tag}",
+    )
+
+
+def write_legacy_record(provider, kind: str, token: str, creds: FulcraCredentials):
+    if kind == "access_tokens":
+        obj = AccessToken(
+            token=token,
+            client_id=CLIENT.client_id,
+            scopes=OIDC_SCOPES,
+            expires_at=int(time.time()) + 3600,
+        )
+    else:
+        obj = RefreshToken(token=token, client_id=CLIENT.client_id, scopes=OIDC_SCOPES)
+    path = provider._token_record_path(kind, token)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"token": obj.model_dump_json(), "credentials": creds.to_json()})
+    )
+
+
+@pytest.mark.parametrize("order", ["access_first", "refresh_first"])
+async def test_legacy_diverged_records_resolve_to_newest(state_path, order):
+    """A Fulcra refresh shortly before the fix deploys leaves the access record
+    newer than the refresh record. Whichever is loaded first, the client must
+    end up on the fresh credentials, not the rotated-out ones."""
+    seed = make_provider()
+    write_legacy_record(
+        seed,
+        "refresh_tokens",
+        "mcp_refresh_r1",
+        creds_expiring_in("v1", timedelta(hours=1)),
+    )
+    write_legacy_record(
+        seed, "access_tokens", "mcp_a1", creds_expiring_in("v2", timedelta(hours=24))
+    )
+
+    p1 = make_provider()
+    if order == "access_first":
+        assert (await p1.load_access_token("mcp_a1")) is not None
+        assert (await p1.load_refresh_token(CLIENT, "mcp_refresh_r1")) is not None
+    else:
+        assert (await p1.load_refresh_token(CLIENT, "mcp_refresh_r1")) is not None
+        assert (await p1.load_access_token("mcp_a1")) is not None
+
+    grant_id, creds = p1.credentials_for_token("mcp_a1")
+    assert grant_id == f"legacy-{CLIENT.client_id}"
+    assert p1.refresh_grant["mcp_refresh_r1"] == grant_id
+    assert creds.access_token == "auth0-access-v2"
+    assert creds.refresh_token == "auth0-refresh-v2"
+    persisted = FulcraCredentials.from_json(p1._grant_path(grant_id).read_text())
+    assert persisted.access_token == "auth0-access-v2"
+
+    # Restart, then the MCP refresh that used to promote the stale copy.
+    p2 = make_provider()
+    tokens = await refresh(p2, "mcp_refresh_r1")
+    _, creds2 = p2.credentials_for_token(tokens.access_token)
+    assert creds2.access_token == "auth0-access-v2"
+
+
+async def test_expired_cache_picks_up_grant_refreshed_elsewhere(hosted, monkeypatch):
+    """Another Cloud Run instance refreshed the grant on disk; this process
+    must adopt it instead of spending its rotated-out refresh token."""
+    tokens = await login(hosted, fresh_creds("v1", expired=True))
+    use_token(monkeypatch, tokens.access_token)
+    grant_id, creds = hosted.credentials_for_token(tokens.access_token)
+    hosted._grant_path(grant_id).write_text(fresh_creds("v2").to_json())
+
+    fake_api = MagicMock()
+    fake_api.refresh_access_token.return_value = False
+    monkeypatch.setattr(credentials_module, "FulcraAPI", lambda **kw: fake_api)
+
+    assert credentials_module.get_fulcra_object() is fake_api
+    fake_api.refresh_access_token.assert_not_called()
+    assert creds.access_token == "auth0-access-v2"
+    assert creds.refresh_token == "auth0-refresh-v2"
+    assert hosted.credentials_for_token(tokens.access_token)[1] is creds
+
+
+async def test_near_expiry_refreshes_up_front(hosted, monkeypatch):
+    """A token that would expire mid-request is refreshed before the request,
+    under the grant lock, rather than lazily inside fulcra-api."""
+    tokens = await login(hosted, creds_expiring_in("v1", timedelta(seconds=30)))
+    use_token(monkeypatch, tokens.access_token)
+    _, creds = hosted.credentials_for_token(tokens.access_token)
+    assert not creds.is_expired()
+
+    fake_api = MagicMock()
+
+    def refresh_ok():
+        fake_api.refresh_callback(fresh_creds("v2"))
+        return True
+
+    fake_api.refresh_access_token.side_effect = refresh_ok
+
+    def fake_ctor(**kwargs):
+        fake_api.refresh_callback = kwargs["refresh_callback"]
+        return fake_api
+
+    monkeypatch.setattr(credentials_module, "FulcraAPI", fake_ctor)
+
+    credentials_module.get_fulcra_object()
+    fake_api.refresh_access_token.assert_called_once()
+    assert creds.access_token == "auth0-access-v2"

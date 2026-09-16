@@ -29,6 +29,26 @@ OIDC_SCOPES = ["openid", "profile", "name", "email"]
 logger = structlog.getLogger(__name__)
 
 
+def _is_newer(candidate: FulcraCredentials, current: FulcraCredentials) -> bool:
+    """Whether ``candidate`` holds a later-expiring Fulcra access token."""
+    if candidate.access_token_expiration is None:
+        return False
+    if current.access_token_expiration is None:
+        return True
+    return candidate.access_token_expiration > current.access_token_expiration
+
+
+def _copy_credentials(src: FulcraCredentials, dst: FulcraCredentials) -> None:
+    """Copy the token fields of ``src`` into ``dst`` without changing identity."""
+    dst.access_token = src.access_token
+    dst.access_token_expiration = src.access_token_expiration
+    if src.refresh_token:
+        dst.refresh_token = src.refresh_token
+    dst.refresh_token_expiration = src.refresh_token_expiration
+    dst.id_token = src.id_token
+    dst.id_token_expiration = src.id_token_expiration
+
+
 class FulcraOAuthProvider(OAuthProvider):
     """OAuth provider that fronts Fulcra's Auth0 login for MCP clients.
 
@@ -47,7 +67,13 @@ class FulcraOAuthProvider(OAuthProvider):
     token copy; after a restart the refresh-token path rehydrated the stale copy
     and the next MCP refresh propagated it, leaving the grant with an expired
     Auth0 token and an already-rotated Auth0 refresh token. Such legacy records
-    are adopted into a grant on first load (see ``_adopt_legacy_credentials``).
+    are adopted into ``legacy-<client_id>`` grants on first load, the copy with
+    the latest expiry winning (see ``_adopt_legacy_credentials``).
+
+    The in-memory ``grant_credentials`` cache is per process. Cloud Run runs
+    more than one instance around restarts and deploys, so a refresh made by
+    another instance only exists on disk; ``reload_grant`` picks it up before
+    this process tries to spend a refresh token that may already be rotated.
     """
 
     def __init__(
@@ -153,18 +179,48 @@ class FulcraOAuthProvider(OAuthProvider):
         self.save_grant(grant_id)
         return grant_id
 
-    def _adopt_legacy_credentials(self, creds: FulcraCredentials) -> str:
+    def reload_grant(self, grant_id: str) -> FulcraCredentials | None:
+        """Re-read ``grant_id`` from disk and adopt it if it is newer.
+
+        Another instance may have refreshed the Fulcra token since this process
+        cached the grant. The cached object is updated *in place* because every
+        MCP token issued from the login shares it. Returns the cached object.
+        """
+        creds = self._load_grant(grant_id)
+        path = self._grant_path(grant_id)
+        if creds is None or path is None:
+            return creds
+        try:
+            on_disk = FulcraCredentials.from_json(path.read_text())
+        except FileNotFoundError:
+            return creds
+        except Exception as exc:
+            logger.error("failed to reload grant", grant_id=grant_id, exc_info=exc)
+            return creds
+        if _is_newer(on_disk, creds):
+            _copy_credentials(on_disk, creds)
+            logger.info("fulcra_grant_reloaded", grant_id=grant_id)
+        return creds
+
+    def _adopt_legacy_credentials(
+        self, creds: FulcraCredentials, client_id: str
+    ) -> str:
         """Map credentials embedded in a pre-grant token record onto a grant.
 
-        The id derives from the Auth0 refresh token so the access and refresh
-        records of one login land on the same grant. If that grant already
-        exists (in memory or on disk) it wins: it may carry a newer Fulcra
-        token than the record being adopted.
+        The id derives from the MCP client id (one connector install, one
+        Fulcra user) so every legacy record of that client lands on the same
+        grant, whichever record is loaded first. Records written before the
+        last Fulcra refresh carry an already-rotated Auth0 refresh token, so
+        when the grant already exists the copy with the later access-token
+        expiry wins.
         """
-        seed = creds.refresh_token or creds.access_token or ""
-        grant_id = "legacy-" + hashlib.sha256(seed.encode()).hexdigest()[:32]
-        if self._load_grant(grant_id) is None:
+        grant_id = f"legacy-{client_id}"
+        existing = self._load_grant(grant_id)
+        if existing is None:
             self.grant_credentials[grant_id] = creds
+            self.save_grant(grant_id)
+        elif _is_newer(creds, existing):
+            _copy_credentials(creds, existing)
             self.save_grant(grant_id)
         return grant_id
 
@@ -221,7 +277,8 @@ class FulcraOAuthProvider(OAuthProvider):
                     "failed to parse legacy credentials", kind=kind, exc_info=exc
                 )
                 return record["token"], None
-            grant_id = self._adopt_legacy_credentials(legacy)
+            client_id = json.loads(record["token"]).get("client_id", "unknown")
+            grant_id = self._adopt_legacy_credentials(legacy, client_id)
             logger.info("legacy_token_record_adopted", kind=kind, grant_id=grant_id)
             try:
                 path.write_text(
