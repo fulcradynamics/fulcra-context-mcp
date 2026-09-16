@@ -86,3 +86,20 @@ async def test_server_initiated_stream_is_unsupported(tmp_path):
             "/mcp", headers={"Accept": "text/event-stream"}
         )
         assert response.status_code == 405
+
+
+async def test_well_known_routes_coexist(tmp_path):
+    """The Glama manifest is an exact-path route in front of the "/" mount; it
+    must not shadow the OAuth discovery documents that share the prefix."""
+    async with mcp_client(tmp_path) as http_client:
+        glama = await http_client.get("/.well-known/glama.json")
+        assert glama.status_code == 200
+        assert "claim" in glama.json()
+
+        auth_server = await http_client.get("/.well-known/oauth-authorization-server")
+        assert auth_server.status_code == 200
+        assert "issuer" in auth_server.json()
+
+        resource = await http_client.get("/.well-known/oauth-protected-resource")
+        assert resource.status_code == 200
+        assert "resource" in resource.json()
