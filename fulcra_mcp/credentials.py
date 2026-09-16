@@ -1,6 +1,7 @@
 import structlog
 import os
 import sys
+import threading
 import webbrowser
 from pathlib import Path
 from .settings import settings
@@ -9,6 +10,27 @@ from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.middleware.auth_context import get_access_token
 from fastapi import HTTPException
+
+
+class SynchronizedFulcraAPI(FulcraAPI):
+    """A FulcraAPI whose token refresh is serialized across threads.
+
+    Tool calls can run in worker threads concurrently (e.g. the
+    get_data_updates fan-out) while sharing one credentials object. Refresh
+    tokens rotate, so two simultaneous refreshes of the same token would race
+    and could invalidate the grant. Under the lock the expiry is re-checked,
+    so a thread that lost the race reuses the winner's fresh token instead of
+    refreshing again.
+    """
+
+    _refresh_lock = threading.Lock()
+
+    def refresh_access_token(self) -> bool:
+        with self._refresh_lock:
+            creds = self.fulcra_credentials
+            if creds is not None and creds.access_token and not creds.is_expired():
+                return True
+            return super().refresh_access_token()
 
 logger = structlog.getLogger(__name__)
 
@@ -57,7 +79,7 @@ def get_fulcra_object() -> FulcraAPI:
                 _save_stdio_credentials(creds)
                 logger.info("stdio_credentials_refreshed")
 
-            stdio_fulcra = FulcraAPI(
+            stdio_fulcra = SynchronizedFulcraAPI(
                 credentials=creds,
                 refresh_callback=on_refresh,
             )
@@ -74,7 +96,7 @@ def get_fulcra_object() -> FulcraAPI:
                 file=sys.stderr,
             )
 
-        stdio_fulcra = FulcraAPI()
+        stdio_fulcra = SynchronizedFulcraAPI()
         stdio_fulcra.fulcra_credentials = stdio_fulcra.oidc.authorize_via_device_flow(
             prompt_callback=_stderr_prompt
         )
@@ -106,7 +128,7 @@ def get_fulcra_object() -> FulcraAPI:
             new_expires_at=str(new_creds.access_token_expiration),
         )
 
-    return FulcraAPI(
+    return SynchronizedFulcraAPI(
         oidc_client_id=settings.oidc_client_id,
         oidc_domain=settings.fulcra_oidc_domain,
         oidc_audience=settings.fulcra_api,

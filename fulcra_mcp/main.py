@@ -1,4 +1,5 @@
 import json
+import socket
 
 import structlog
 import uvicorn
@@ -16,6 +17,10 @@ from .logging_config import configure_logging
 
 configure_logging(settings.log_format)
 logger = structlog.getLogger(__name__)
+
+# The Fulcra client has no per-request timeout; bound every outbound request
+# so a stalled upstream cannot hold a worker (or the event loop) forever.
+socket.setdefaulttimeout(settings.http_timeout_seconds)
 
 
 mcp = FastMCP(
