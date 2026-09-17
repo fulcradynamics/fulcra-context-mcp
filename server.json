@@ -9,6 +9,15 @@
     "url": "https://github.com/fulcradynamics/fulcra-context-mcp",
     "source": "github"
   },
+  "icons": [
+    {
+      "src": "https://mcp.fulcradynamics.com/icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "256x256"
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
