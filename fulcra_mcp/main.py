@@ -6,7 +6,9 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from fastmcp import FastMCP
+from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.session import ServerSession
+from pydantic import AnyHttpUrl
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
@@ -72,6 +74,28 @@ async def glama_manifest() -> Response:
     return FileResponse(
         STATIC_DIR / ".well-known" / "glama.json", media_type="application/json"
     )
+
+
+# Listing icon for the MCP registry and connector directories (server.json
+# points here). Self-hosted so the URL is stable; the marketing site's assets
+# live on a hashed Webflow CDN path that changes whenever the image is replaced.
+@app.get("/icon.png", include_in_schema=False)
+async def icon() -> Response:
+    return FileResponse(STATIC_DIR / "icon.png", media_type="image/png")
+
+
+# RFC 9728 path-form discovery for the advertised /mcp endpoint. The fastmcp app
+# is mounted at "/" so it only publishes the root-form document, which declares
+# resource "<base>/". Clients that connect to <base>/mcp look for
+# /.well-known/oauth-protected-resource/mcp first, and spec-strict ones compare
+# the declared resource against the URL they connected to, so serve that
+# document with the matching identifier.
+for _route in create_protected_resource_routes(
+    resource_url=AnyHttpUrl(f"{str(oauth_provider.base_url).rstrip('/')}/mcp"),
+    authorization_servers=[oauth_provider.issuer_url],
+    scopes_supported=oauth_provider.client_registration_options.valid_scopes,
+):
+    app.router.routes.append(_route)
 
 
 @app.get("/callback")

@@ -17,3 +17,6 @@ wheels/
 .venv
 
 
+
+# MCP registry DNS signing key (see docs/registry-publishing.md); never commit
+key.pem
