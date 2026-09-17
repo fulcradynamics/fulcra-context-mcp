@@ -623,7 +623,7 @@ async def get_records(
             }
             if fulcra_userid:
                 params["fulcra_userid"] = fulcra_userid
-            results += json.loads(fulcra.fulcra_v1_api_path(path, params=params))
+            results += json.loads(fulcra.fulcra_v1alpha1_api_path(path, params=params))
         else:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "

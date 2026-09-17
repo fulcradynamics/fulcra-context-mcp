@@ -80,6 +80,25 @@ async def test_records_are_truncated_with_notice(call, fake_fulcra):
     assert len(payload) == 2000
 
 
+async def test_records_for_user_defined_type_use_v1alpha1_path(call, fake_fulcra):
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": "MomentAnnotation",
+            "api_version": "v1alpha1",
+            "record_spec": {"type": "event"},
+        }
+    ]
+    fake_fulcra.fulcra_v1alpha1_api_path.return_value = json.dumps([{"note": "hi"}])
+    type_id = "MomentAnnotation/84afda53-6b5f-495c-bb11-3a8535294a38"
+    text = await call(
+        "get_records",
+        {"data_type": type_id, "start_time": START, "end_time": END},
+    )
+    assert '"note": "hi"' in text
+    path = fake_fulcra.fulcra_v1alpha1_api_path.call_args.args[0]
+    assert path == "event/MomentAnnotation/84afda53-6b5f-495c-bb11-3a8535294a38"
+
+
 async def test_record_data_rejects_malformed_user_type_id(call, fake_fulcra):
     text = await call(
         "record_data",

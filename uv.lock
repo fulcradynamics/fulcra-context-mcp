@@ -525,7 +525,7 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.41"
+version = "0.1.42"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -538,9 +538,9 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/61/b19ca849731ee65b37e4817088cb1b5ebaa26f4c4f4a39b539716e08c60d/fulcra_api-0.1.41.tar.gz", hash = "sha256:a03293d27b13ef262ac651086e9265c797143971bc1f2d90f998e4e896a27535", size = 55037, upload-time = "2026-09-08T03:36:46.099Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/df/d8606fedffa790d92687ac1181a227bc0abc18ed7ba83fe53eeea0a38df3/fulcra_api-0.1.42.tar.gz", hash = "sha256:bfa7539763389378992e3961b137c12399a2210aefd37fc3662f932c413422a2", size = 57038, upload-time = "2026-09-14T20:13:55.129Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/3e/791fb9defb4d1f88bdce6a0bf5484b20f8dfc95f178b69c90d51f7dc805e/fulcra_api-0.1.41-py3-none-any.whl", hash = "sha256:0f40950b70c1ca429d4fd876e351b1aae181bdad8094b22861fffa72460b4f29", size = 62908, upload-time = "2026-09-08T03:36:39.872Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/a3/fba11a772eeb3eafd5ba4f8284c89d97cb363635ba157db8e08b8d10e97c/fulcra_api-0.1.42-py3-none-any.whl", hash = "sha256:d7d218989eccaec10b6bfae1954ff53f8516592d4d6f9346dbddc6486b0857bf", size = 65192, upload-time = "2026-09-14T20:13:48.995Z" },
 ]
 
 [[package]]
@@ -566,7 +566,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.0.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.41" },
+    { name = "fulcra-api", specifier = ">=0.1.42" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },
     { name = "structlog", specifier = ">=25.4.0" },
@@ -1697,8 +1697,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
