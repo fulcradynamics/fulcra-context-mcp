@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # "locked" tests exactly what uv.lock pins (what the hosted image runs).
+        # "latest-sdk" upgrades fulcra-api to the newest PyPI release first,
+        # which is what a fresh `uvx fulcra-context-mcp` install resolves to.
+        sdk: [locked, latest-sdk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Upgrade fulcra-api to latest
+        if: matrix.sdk == 'latest-sdk'
+        run: uv lock --upgrade-package fulcra-api
+      - name: Install
+        run: uv sync ${{ matrix.sdk == 'locked' && '--locked' || '' }}
+      - name: Show fulcra-api version
+        run: uv pip show fulcra-api | grep Version
+      - name: Test
+        run: uv run pytest -q

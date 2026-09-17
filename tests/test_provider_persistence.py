@@ -9,10 +9,11 @@ lost as soon as a restart rehydrated the refresh-token path's stale copy.
 import json
 import time
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import create_autospec
 
 import pytest
 from fastmcp.exceptions import ToolError
+from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.provider import (
     AccessToken,
@@ -209,7 +210,7 @@ async def test_expired_fulcra_token_is_refreshed_before_use(hosted, monkeypatch)
     use_token(monkeypatch, tokens.access_token)
     grant_id, creds = hosted.credentials_for_token(tokens.access_token)
 
-    fake_api = MagicMock()
+    fake_api = create_autospec(FulcraAPI, instance=True)
 
     def refresh_ok():
         fake_api.refresh_callback(fresh_creds("v2"))
@@ -233,7 +234,7 @@ async def test_expired_fulcra_token_is_refreshed_before_use(hosted, monkeypatch)
 async def test_failed_fulcra_refresh_raises_actionable_error(hosted, monkeypatch):
     tokens = await login(hosted, fresh_creds("v1", expired=True))
     use_token(monkeypatch, tokens.access_token)
-    fake_api = MagicMock()
+    fake_api = create_autospec(FulcraAPI, instance=True)
     fake_api.refresh_access_token.return_value = False
     monkeypatch.setattr(credentials_module, "FulcraAPI", lambda **kw: fake_api)
 
@@ -329,7 +330,7 @@ async def test_expired_cache_picks_up_grant_refreshed_elsewhere(hosted, monkeypa
     grant_id, creds = hosted.credentials_for_token(tokens.access_token)
     hosted._grant_path(grant_id).write_text(fresh_creds("v2").to_json())
 
-    fake_api = MagicMock()
+    fake_api = create_autospec(FulcraAPI, instance=True)
     fake_api.refresh_access_token.return_value = False
     monkeypatch.setattr(credentials_module, "FulcraAPI", lambda **kw: fake_api)
 
@@ -348,7 +349,7 @@ async def test_near_expiry_refreshes_up_front(hosted, monkeypatch):
     _, creds = hosted.credentials_for_token(tokens.access_token)
     assert not creds.is_expired()
 
-    fake_api = MagicMock()
+    fake_api = create_autospec(FulcraAPI, instance=True)
 
     def refresh_ok():
         fake_api.refresh_callback(fresh_creds("v2"))

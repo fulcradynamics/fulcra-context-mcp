@@ -7,7 +7,7 @@ import json
 import pytest
 from fastmcp.exceptions import ToolError
 
-from conftest import http_error
+from conftest import FAKE_USER_ID, http_error
 
 START = "2026-08-01T00:00:00-07:00"
 END = "2026-08-02T00:00:00-07:00"
@@ -67,8 +67,13 @@ async def test_time_series_unsupported_type_points_to_get_records(call, fake_ful
 
 
 async def test_records_are_truncated_with_notice(call, fake_fulcra):
-    fake_fulcra.v1_catalog.return_value = [
-        {"id": "heart_rate", "api_version": "v0", "record_spec": {"type": "metric"}}
+    fake_fulcra.resolve_data_type.return_value = [
+        {
+            "id": "heart_rate",
+            "api_version": "v0",
+            "record_spec": {"type": "metric"},
+            "fulcra_userid": FAKE_USER_ID,
+        }
     ]
     fake_fulcra.metric_samples.return_value = [{"n": i} for i in range(2500)]
     text = await call(
@@ -186,3 +191,54 @@ async def test_create_data_type_validates_scale_labels(call, fake_fulcra):
     )
     assert "exactly 5" in text
     fake_fulcra.create_annotation.assert_not_called()
+
+
+# --- get_records for user-defined (v1alpha1) annotation types -----------------
+#
+# These drive the real SDK dispatcher (fulcra_api.records.get_records) against
+# the autospec'd client, so a rename of the underlying SDK transport method
+# (which broke MCP 0.3.0 on fulcra-api 0.1.42) fails here.
+
+USER_TYPE_UUID = "6a0d0d5e-2b7a-4f5c-9c0e-3a3f1b2c4d5e"
+
+
+@pytest.mark.parametrize(
+    "base_type,record_type",
+    [("MomentAnnotation", "event"), ("NumericAnnotation", "metric")],
+)
+async def test_get_records_reads_user_defined_annotation(
+    call, fake_fulcra, base_type, record_type
+):
+    type_id = f"{base_type}/{USER_TYPE_UUID}"
+    fake_fulcra.resolve_data_type.return_value = [
+        {
+            "id": type_id,
+            "api_version": "v1alpha1",
+            "record_spec": {"type": record_type},
+            "fulcra_userid": FAKE_USER_ID,
+        }
+    ]
+    fake_fulcra.fulcra_v1alpha1_api_path.return_value = (
+        b'[{"value": 1, "note": "hello"}]'
+    )
+    text = await call(
+        "get_records",
+        {"data_type": type_id, "start_time": START, "end_time": END},
+    )
+    payload = json.loads(text[text.index("["):])
+    assert payload == [{"value": 1, "note": "hello"}]
+
+    fake_fulcra.resolve_data_type.assert_called_once_with(type_id, fulcra_userid=None)
+    (path, params), _ = fake_fulcra.fulcra_v1alpha1_api_path.call_args
+    assert path == f"{record_type}/{base_type}/{USER_TYPE_UUID}"
+    assert set(params) == {"start_time", "end_time"}
+
+
+async def test_get_records_unknown_type_is_friendly(call, fake_fulcra):
+    fake_fulcra.resolve_data_type.side_effect = ValueError("Type not found")
+    text = await call(
+        "get_records",
+        {"data_type": "NotAThing", "start_time": START, "end_time": END},
+    )
+    assert "No data type found" in text
+    assert "get_data_catalog" in text

@@ -28,7 +28,7 @@
     {
       "registryType": "pypi",
       "identifier": "fulcra-context-mcp",
-      "version": "0.3.0",
+      "version": "0.3.3",
       "transport": {
         "type": "stdio"
       }
