@@ -3,7 +3,7 @@
   "name": "com.fulcradynamics/context",
   "title": "Context by Fulcra",
   "description": "Connect your Fulcra Context personal datastore: access your metrics, events, agent data and more",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "websiteUrl": "https://fulcradynamics.com",
   "repository": {
     "url": "https://github.com/fulcradynamics/fulcra-context-mcp",
