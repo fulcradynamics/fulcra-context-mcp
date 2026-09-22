@@ -64,6 +64,8 @@ The user can either use the public MCP server instance at `https://mcp.fulcradyn
 
 You can run it locally (stdio transport) with `uvx fulcra-context-mcp@latest`. See the [PyPI page](https://pypi.org/project/fulcra-context-mcp/) for more docs.
 
+**A CLI login is not a hosted MCP login.** The hosted server at `https://mcp.fulcradynamics.com` runs its own OAuth2 service and only accepts access tokens it issued itself through that flow; it does not accept the access token that `fulcra auth login` (or `fulcra auth print-access-token`) writes to `~/.config/fulcra/credentials.json` — presenting that token as a bearer to the hosted server fails with a 401 `invalid_token`. If an agent has already authenticated via the CLI, running the MCP server locally (previous paragraph) picks up those same credentials automatically. To use the hosted server instead, the MCP client must complete its own OAuth2 authorization with `https://mcp.fulcradynamics.com` (a separate browser login), which is independent of any prior CLI login.
+
 #### MCP Client Configuration Examples
 
 Remote connection using proxy (for clients like Claude for Desktop that only support stdio):
