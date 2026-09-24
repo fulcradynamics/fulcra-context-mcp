@@ -10,13 +10,17 @@ from pathlib import PurePath
 from typing import Annotated, Literal
 from uuid import UUID
 
+import structlog
 from fastmcp import FastMCP
+from fulcra_api import records
+from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
+logger = structlog.getLogger(__name__)
 
 
 def _require_time_zone(dt: datetime) -> datetime:
@@ -51,6 +55,16 @@ def _friendly_http_errors(func):
                 detail = ""
             detail = detail or getattr(e, "reason", None) or "no details provided"
             if e.code in (401, 403):
+                # Auth rejected by the Fulcra API despite a valid MCP token:
+                # the stored Fulcra credentials are bad. Log it so the rate is
+                # visible (Cloud Run request logs only see the MCP-side 200).
+                token = get_access_token()
+                logger.warning(
+                    "fulcra_api_auth_rejected",
+                    status=e.code,
+                    tool=func.__name__,
+                    client_id=token.client_id if token else None,
+                )
                 return (
                     f"The Fulcra API rejected this request (HTTP {e.code}): {detail}. "
                     "The session may have expired; re-authenticate with Fulcra and try again."
@@ -576,51 +590,33 @@ async def get_records(
         return err
     fulcra = get_fulcra_object()
 
-    # Support the "<BaseType>/<uuid>" shorthand for user-defined data types.
-    base_type, _, user_annotation_id = data_type.partition("/")
+    # Validate the "<BaseType>/<uuid>" shorthand for user-defined data types
+    # up front so the user gets a precise message instead of a catalog miss.
+    _, _, user_annotation_id = data_type.partition("/")
     if user_annotation_id:
         try:
-            user_annotation_id = str(UUID(user_annotation_id))
+            UUID(user_annotation_id)
         except ValueError:
             return (
                 "User-defined data type IDs must take the form <BaseType>/<UUID>. "
                 "Use get_data_catalog to list valid IDs."
             )
 
+    # Resolve the catalog entries for this id (possibly one per api_version),
+    # then let the SDK pick the right endpoint for each. Endpoint dispatch lives
+    # in fulcra_api.records so the CLI and this server can't drift apart.
     try:
-        catalog_entries = fulcra.v1_catalog(data_type=base_type)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
-        raise
+        catalog_entries = fulcra.resolve_data_type(
+            data_type, fulcra_userid=fulcra_userid
+        )
+    except ValueError:
+        return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
 
     results = []
     for entry in catalog_entries:
-        record_type = (entry.get("record_spec") or {}).get("type")
-        if entry.get("api_version") == "v0" and record_type == "metric":
-            kwargs = {
-                "start_time": start_time,
-                "end_time": end_time,
-                "metric": entry["id"],
-            }
-            if fulcra_userid:
-                kwargs["fulcra_userid"] = fulcra_userid
-            results += fulcra.metric_samples(**kwargs)
-        elif entry.get("api_version") == "v1alpha1" and record_type in (
-            "metric",
-            "event",
-        ):
-            path = f"{record_type}/{entry['id']}"
-            if user_annotation_id:
-                path = f"{path}/{user_annotation_id}"
-            params = {
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(),
-            }
-            if fulcra_userid:
-                params["fulcra_userid"] = fulcra_userid
-            results += json.loads(fulcra.fulcra_v1_api_path(path, params=params))
-        else:
+        try:
+            results += records.get_records(fulcra, entry, start_time, end_time)
+        except ValueError:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "
                 "Use get_data_catalog to see which tools can read each data type."

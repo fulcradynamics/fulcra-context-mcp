@@ -1,19 +1,22 @@
 import json
 import socket
+from pathlib import Path
 
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastmcp import FastMCP
+from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.session import ServerSession
+from pydantic import AnyHttpUrl
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
-from .settings import settings
-from .provider import oauth_provider
-from .tools import tools_mcp
 from .logging_config import configure_logging
+from .provider import oauth_provider
+from .settings import settings
+from .tools import tools_mcp
 
 configure_logging(settings.log_format)
 logger = structlog.getLogger(__name__)
@@ -52,10 +55,52 @@ cors_middleware = [
     )
 ]
 
-mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware)
+# Stateless: every POST is self-contained, so nothing is lost when Cloud Run
+# replaces or redeploys the instance, and there is no per-session state to leak
+# (stateful sessions were never released - claude.ai never sends DELETE - and
+# the resulting memory growth recycled the instance every day or two, which in
+# turn broke users' stored Fulcra credentials; see docs/disconnect-diagnosis.md).
+# GET (server-initiated SSE stream) is not served in this mode; clients treat
+# the 405 as "unsupported" per the MCP spec. None of our tools need it.
+mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 
 
 app = FastAPI(lifespan=mcp_asgi_app.lifespan, debug=True)
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+# Glama's directory verifies ownership of the hosted server by fetching this
+# file. It is a single explicit route rather than a StaticFiles mount because
+# the fastmcp app mounted at "/" serves the OAuth discovery documents under the
+# same /.well-known prefix, and a mount there would shadow them.
+@app.get("/.well-known/glama.json", include_in_schema=False)
+async def glama_manifest() -> Response:
+    return FileResponse(
+        STATIC_DIR / ".well-known" / "glama.json", media_type="application/json"
+    )
+
+
+# Listing icon for the MCP registry and connector directories (server.json
+# points here). Self-hosted so the URL is stable; the marketing site's assets
+# live on a hashed Webflow CDN path that changes whenever the image is replaced.
+@app.get("/icon.png", include_in_schema=False)
+async def icon() -> Response:
+    return FileResponse(STATIC_DIR / "icon.png", media_type="image/png")
+
+
+# RFC 9728 path-form discovery for the advertised /mcp endpoint. The fastmcp app
+# is mounted at "/" so it only publishes the root-form document, which declares
+# resource "<base>/". Clients that connect to <base>/mcp look for
+# /.well-known/oauth-protected-resource/mcp first, and spec-strict ones compare
+# the declared resource against the URL they connected to, so serve that
+# document with the matching identifier.
+for _route in create_protected_resource_routes(
+    resource_url=AnyHttpUrl(f"{str(oauth_provider.base_url).rstrip('/')}/mcp"),
+    authorization_servers=[oauth_provider.issuer_url],
+    scopes_supported=oauth_provider.client_registration_options.valid_scopes,
+):
+    app.router.routes.append(_route)
 
 
 @app.get("/callback")
@@ -197,7 +242,55 @@ class OpenAIWorkaroundMiddleware:
             await self.app(scope, receive, send)
 
 
+MCP_PATHS = ("/", "/mcp", "/mcp/", "/MCP", "/MCP/")
+
+
+class MCPErrorLoggingMiddleware:
+    """Log the body of 4xx responses on the MCP endpoint.
+
+    The transport returns JSON-RPC errors for bad requests without logging why;
+    the Cloud Run request log only shows the status. A small bounded capture
+    makes "why does this client get 400s" answerable from logs.
+    """
+
+    MAX_BODY = 1024
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] not in MCP_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        status = 0
+        chunks: list[bytes] = []
+        captured = 0
+
+        async def logging_send(message):
+            nonlocal status, captured
+            if message["type"] == "http.response.start":
+                status = message["status"]
+            elif message["type"] == "http.response.body" and 400 <= status < 500:
+                body = message.get("body", b"")
+                if captured < self.MAX_BODY:
+                    chunks.append(body[: self.MAX_BODY - captured])
+                    captured += len(body)
+                if not message.get("more_body", False):
+                    logger.warning(
+                        "mcp_http_client_error",
+                        status=status,
+                        method=scope.get("method"),
+                        path=scope["path"],
+                        body=b"".join(chunks).decode("utf-8", errors="replace"),
+                    )
+            await send(message)
+
+        await self.app(scope, receive, logging_send)
+
+
 app.add_middleware(OpenAIWorkaroundMiddleware)
+app.add_middleware(MCPErrorLoggingMiddleware)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)
