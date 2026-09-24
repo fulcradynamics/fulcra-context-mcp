@@ -3,8 +3,8 @@
 Runs the real MCP tools (in-process FastMCP client) as two Fulcra accounts,
 A and B, switching between them by pointing XDG_CONFIG_HOME at two credential
 stores. Creates a private group, shares a folder to it, joins from B, reads
-both ways, checks the updates feed, exercises soft-delete retraction, and
-cleans everything up. Exit code 1 if any check fails.
+both ways, checks the updates feed, exercises soft-delete retraction, has B
+leave the group, and cleans everything up. Exit code 1 if any check fails.
 
 Log B in first (prints a device-flow URL to complete as B):
 
@@ -145,11 +145,19 @@ async def run(a: Account, b: Account, keep: bool):
         await a.call("delete_file", {"path": hello})
         t = await b.call("list_files", {"path": topic, "fulcra_userid": a.userid})
         check("hello.json no longer listed", "hello.json" not in t, t)
+
+        print("\nPhase 10 (B): leave the group")
+        t = await b.call("leave_group", {"group_id": g["id"]})
+        check("leave group", "no longer a member" in t, t)
+        joined = payload(await b.call("get_groups", {"subscribed_only": True}))
+        check("group gone from B's joined list", not any(x.get("id") == g["id"] for x in joined), json.dumps(joined)[:300])
+        inc = payload(await b.call("list_shares", {"direction": "incoming"}))["incoming"]
+        check("A's group grant gone after leaving", not any(e.get("group_id") == g["id"] for e in inc), json.dumps(inc)[:300])
     finally:
         if keep:
             print("\n--keep: skipping cleanup; created =", created)
         else:
-            print("\nPhase 10: cleanup")
+            print("\nPhase 11: cleanup")
             for key, acct in (("a_group_share", a), ("a_user_share", a), ("b_share", b)):
                 if created[key]:
                     await acct.call("delete_share", {"share_id": created[key]})
