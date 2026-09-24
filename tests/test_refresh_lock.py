@@ -16,7 +16,8 @@ from fulcra_mcp.credentials import SynchronizedFulcraAPI
 def _expired() -> FulcraCredentials:
     return FulcraCredentials(
         access_token="old",
-        access_token_expiration=datetime.now() - timedelta(minutes=1),
+        # Naive on purpose: fulcra-api compares expirations with datetime.now().
+        access_token_expiration=datetime.now() - timedelta(minutes=1),  # noqa: DTZ005
         refresh_token="r1",
     )
 
@@ -28,7 +29,7 @@ def _slow_oidc() -> MagicMock:
         time.sleep(0.05)  # long enough for both threads to be inside
         return FulcraCredentials(
             access_token="new",
-            access_token_expiration=datetime.now() + timedelta(hours=1),
+            access_token_expiration=datetime.now() + timedelta(hours=1),  # noqa: DTZ005
             refresh_token="r2",
         )
 

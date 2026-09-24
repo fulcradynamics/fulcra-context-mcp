@@ -1556,7 +1556,7 @@ async def join_group(group_id: str) -> str:
 
     Members can receive shares made to the group. If the group lists data
     types (see `get_groups`), joining also shares those read-only with its
-    owner until the user leaves via the Context app. Show the user the
+    owner until the user leaves (see `leave_group`). Show the user the
     group's details first. Anyone who knows a group's ID can join it.
 
     Args:
@@ -1570,6 +1570,28 @@ async def join_group(group_id: str) -> str:
             return f"No group found with ID {group_id!r}. Use get_groups to list groups."
         raise
     return f"Joined group {group_id}: " + json.dumps(membership)
+
+
+@tools_mcp.tool(annotations={"title": "Leave Group", "destructiveHint": True})
+@_friendly_http_errors
+async def leave_group(group_id: str) -> str:
+    """Leave a Fulcra group on the user's behalf, at their explicit request.
+
+    The user stops sharing the group's data types with its owner and stops
+    receiving shares made to the group.
+
+    Args:
+        group_id: The group to leave, from `get_groups(subscribed_only=true)`.
+    """
+    fulcra = get_fulcra_object()
+    try:
+        # The server also returns success when the user was not a member.
+        fulcra.leave_group(group_id)
+    except urllib.error.HTTPError as e:
+        if msg := _group_http_error(e, group_id):
+            return msg
+        raise
+    return f"The user is no longer a member of group {group_id}."
 
 
 @tools_mcp.tool(annotations={"title": "Create Group", "destructiveHint": False})

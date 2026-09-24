@@ -1,9 +1,8 @@
 """Group tools: listing, joining, creating, and deleting groups of users."""
 
 import pytest
-from fastmcp.exceptions import ToolError
-
 from conftest import http_error
+from fastmcp.exceptions import ToolError
 
 GROUP = "0c47fa97-ac33-4dd8-a229-721ed66e1377"
 START = "2026-08-01T00:00:00-07:00"
@@ -57,6 +56,16 @@ async def test_join_group_calls_through_and_maps_404(call, fake_fulcra):
     assert "Joined group" in text and "p1" in text
     fake_fulcra.join_group.side_effect = http_error(404)
     assert "No group found" in await call("join_group", {"group_id": "nope"})
+
+
+async def test_leave_group_calls_through_and_maps_errors(call, fake_fulcra):
+    text = await call("leave_group", {"group_id": GROUP})
+    fake_fulcra.leave_group.assert_called_once_with(GROUP)
+    assert "no longer a member" in text
+    fake_fulcra.leave_group.side_effect = http_error(404)
+    assert "No group found" in await call("leave_group", {"group_id": "nope"})
+    fake_fulcra.leave_group.side_effect = http_error(401)
+    assert "re-authenticate" in await call("leave_group", {"group_id": GROUP})
 
 
 async def test_create_group_defaults_to_audience_group(call, fake_fulcra):

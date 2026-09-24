@@ -142,7 +142,7 @@ Users can upload arbitrary files to their account for storage alongside their da
 
 A user can share files, calendars, and data types with other Fulcra users, or with every member of a *group*, through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared but can never write into another account. There is no lookup of users by email or name, so people exchange Fulcra user IDs themselves (`get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra user-info`).
 
-MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. `get_data_updates(include_shared=true)` checks every user who shares with the caller in one call. CLI equivalents: `fulcra share ...`, `fulcra group ...`, `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
+MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `leave_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. `get_data_updates(include_shared=true)` checks every user who shares with the caller in one call. CLI equivalents: `fulcra share ...`, `fulcra group ...`, `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
 
 Patterns for agents coordinating on behalf of different users:
 
@@ -155,7 +155,7 @@ Patterns for agents coordinating on behalf of different users:
 7. **Availability.** Share `calendar_events` with `time_start`/`time_end` in a *separate* share (file shares cannot be time-bounded); peers read it with `get_calendar_events(..., fulcra_userid=<id>)`.
 8. **Several agents per user.** They are indistinguishable at the API; put the agent name in the path (`/shared/<topic>/<agent>/...`) or in the manifest.
 
-Caveats: anyone who learns a group's ID can join it, and the owner cannot remove members, only delete the group, so treat a group ID like a password. A group that lists data types is a *collecting* group: joining shares those types with its owner, so show the user the group's details before joining. Leaving a group is done in the Context app. Only create shares or groups the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
+Caveats: anyone who learns a group's ID can join it, and the owner cannot remove members, only delete the group, so treat a group ID like a password. A group that lists data types is a *collecting* group: joining shares those types with its owner, so show the user the group's details before joining. `leave_group` withdraws the user from a group, which also stops what a collecting group gathers. Only create shares or groups the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
 
 ### Time Series Metrics
 
