@@ -140,19 +140,22 @@ Users can upload arbitrary files to their account for storage alongside their da
 
 ### Sharing and agent-to-agent coordination
 
-A user can share files, calendars, and data types with other Fulcra users through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared, but can never write into another account. There is no lookup of users by email or name, so the two people exchange Fulcra user IDs themselves (the MCP tools `get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra auth get-token-claims`).
+A user can share files, calendars, and data types with other Fulcra users, or with every member of a *group*, through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared but can never write into another account. There is no lookup of users by email or name, so people exchange Fulcra user IDs themselves (`get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra user-info`).
 
-MCP tools: `create_share`, `list_shares`, `delete_share`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. CLI equivalents: `fulcra share ...` and `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
+MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `leave_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. `get_data_updates(include_shared=true)` checks every user who shares with the caller in one call. CLI equivalents: `fulcra share ...`, `fulcra group ...`, `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
 
-Recommended pattern for two agents coordinating on behalf of two users (e.g. planning a trip together):
+Patterns for agents coordinating on behalf of different users:
 
-1. **Each side shares a folder with the other**, for example `create_share(name="Trip planning", with_user_ids=[<partner-id>], file_paths=["/shared/trip-2026/"])`. Because nobody can write into the other account, the share has to exist in both directions.
-2. **Each agent writes only to its own account** under the agreed folder with `write_file`, and **reads the partner's copy** with `list_files(path, fulcra_userid=<partner-id>)` and `read_file(path, fulcra_userid=<partner-id>)`.
-3. **Poll for the partner's changes** with `get_data_updates(start, end, fulcra_userid=<partner-id>)`; new and changed files appear under `file_changes`. The window filters on upload time, which is what you want here.
-4. Keep a `proposal.json` (or similar) for the current shared state and append dated notes under `messages/` rather than overwriting one file, so both sides keep a history. Versioning protects against clobbering the same path anyway.
-5. To share availability, add `data_types=["calendar_events"]` with `time_start`/`time_end` set to the candidate window; the partner reads it with `get_calendar_events(..., fulcra_userid=<id>)`.
+1. **Mailbox per peer (two people).** Each side shares a folder such as `/shared/trip-2026/` with the other via `create_share(file_paths=[...], with_user_ids=[<id>])`. Each agent writes only to its own account with `write_file` and reads the peer's copy with `list_files`/`read_file` passing the peer's `fulcra_userid`. The share must exist in both directions.
+2. **Group bulletin board (several people).** One person runs `create_group` with no data types (joining then shares nothing), **everyone including the creator** runs `join_group` by ID (creating a group does not make you a member), and everyone shares their folder with `with_group_ids=[<group-id>]`. Members discover each other **by sharing**: `list_shares(direction="incoming")` lists every peer who has shared to the group, with their user ID and name.
+3. **Manifest plus append-only messages.** In each writer's folder keep a small `manifest.json` (current state, schema version, last update) and dated notes under `messages/<timestamp>-<agent>.md`. Nobody can overwrite another account's files; do not rely on write order across accounts.
+4. **Proposal and acknowledgement by version.** One side writes `proposal-v<N>.json`; the other answers with `ack-v<N>.json` or `counter-v<N+1>.json`. Reconcile by version number, not timestamp.
+5. **Polling.** `get_data_updates(start, end, fulcra_userid=<peer>)` reports a peer's shared file changes; `include_shared=true` does this for all peers at once. The window filters on upload time. A chat session cannot wait, so put the poll in a scheduled agent that records its last poll time in its own account.
+6. **Retraction.** `delete_file` is a soft delete that hides the file from every current-version share immediately; use it to withdraw a proposal. Avoid `include_file_history` on coordination folders, since history shares keep old versions visible.
+7. **Availability.** Share `calendar_events` with `time_start`/`time_end` in a *separate* share (file shares cannot be time-bounded); peers read it with `get_calendar_events(..., fulcra_userid=<id>)`.
+8. **Several agents per user.** They are indistinguishable at the API; put the agent name in the path (`/shared/<topic>/<agent>/...`) or in the manifest.
 
-Only create shares the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
+Caveats: anyone who learns a group's ID can join it, and the owner cannot remove members, only delete the group, so treat a group ID like a password. A group that lists data types is a *collecting* group: joining shares those types with its owner, so show the user the group's details before joining. `leave_group` withdraws the user from a group, which also stops what a collecting group gathers. Only create shares or groups the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
 
 ### Time Series Metrics
 

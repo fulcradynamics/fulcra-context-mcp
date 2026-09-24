@@ -1,4 +1,5 @@
 import json
+import socket
 from pathlib import Path
 
 import structlog
@@ -19,6 +20,10 @@ from .tools import tools_mcp
 
 configure_logging(settings.log_format)
 logger = structlog.getLogger(__name__)
+
+# The Fulcra client has no per-request timeout; bound every outbound request
+# so a stalled upstream cannot hold a worker (or the event loop) forever.
+socket.setdefaulttimeout(settings.http_timeout_seconds)
 
 
 mcp = FastMCP(

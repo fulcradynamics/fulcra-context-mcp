@@ -316,3 +316,175 @@ async def test_time_series_passes_user_id_only_when_given(call, fake_fulcra):
         },
     )
     assert fake_fulcra.metric_time_series.call_args.kwargs["fulcra_userid"] == PARTNER
+
+
+# --- get_data_updates(include_shared=True) ---------------------------------
+
+PEER2 = "22222222-3333-4444-5555-666666666666"
+
+
+def _incoming(*uids, with_self=True):
+    grants = [{"grant_type": "self", "sharing_fulcra_userid": ME}] if with_self else []
+    for uid in uids:
+        grants.append(
+            {"grant_type": "user", "sharing_fulcra_userid": uid, "sharing_fulcra_user_name": "N-" + uid[:2]}
+        )
+    return grants
+
+
+async def test_include_shared_fans_out_dedupes_and_skips_self(call, fake_fulcra):
+    # PARTNER appears twice (a user grant and a group grant on the same data);
+    # ME appears as a group grant from the user's own share to a group they joined.
+    fake_fulcra.get_fulcra_userid.return_value = ME
+    fake_fulcra.get_shared_datasets.return_value = _incoming(PARTNER, PARTNER, ME, PEER2)
+    own = {"data_types": {"StepCount": 3}, "file_changes": []}
+    changed = {"data_types": {}, "file_changes": [{"full_name": "/shared/x.json"}]}
+    quiet = {"data_types": {}, "file_changes": []}
+    fake_fulcra.data_updates.side_effect = lambda s, e, fulcra_userid=None: {
+        None: own, PARTNER: changed, PEER2: quiet
+    }[fulcra_userid]
+    text = await call(
+        "get_data_updates", {"start_time": START, "end_time": END, "include_shared": True}
+    )
+    result = _payload(text)
+    assert result["data_types"] == {"StepCount": 3}
+    assert result["peers_checked"] == 2
+    assert list(result["shared"]) == [PARTNER]
+    assert result["shared"][PARTNER]["name"] == "N-11"
+    assert result["shared"][PARTNER]["file_changes"][0]["full_name"] == "/shared/x.json"
+    called = [c.kwargs.get("fulcra_userid") for c in fake_fulcra.data_updates.call_args_list]
+    assert called == [None, PARTNER, PEER2]
+
+
+async def test_include_shared_isolates_a_failing_peer(call, fake_fulcra):
+    fake_fulcra.get_shared_datasets.return_value = _incoming(PARTNER, PEER2)
+    changed = {"data_types": {"HeartRate": 1}, "file_changes": []}
+
+    def updates(s, e, fulcra_userid=None):
+        if fulcra_userid == PARTNER:
+            raise http_error(403)
+        return changed if fulcra_userid == PEER2 else {"data_types": {}, "file_changes": []}
+
+    fake_fulcra.data_updates.side_effect = updates
+    result = _payload(
+        await call("get_data_updates", {"start_time": START, "end_time": END, "include_shared": True})
+    )
+    assert result["shared"][PARTNER] == {"name": "N-11", "error": "HTTP 403"}
+    assert result["shared"][PEER2]["data_types"] == {"HeartRate": 1}
+    assert result["peers_checked"] == 2
+
+
+async def test_include_shared_with_no_peers(call, fake_fulcra):
+    fake_fulcra.get_shared_datasets.return_value = _incoming()
+    fake_fulcra.data_updates.return_value = {"data_types": {}, "file_changes": []}
+    result = _payload(
+        await call("get_data_updates", {"start_time": START, "end_time": END, "include_shared": True})
+    )
+    assert result["shared"] == {} and result["peers_checked"] == 0
+
+
+async def test_include_shared_and_user_id_are_exclusive(call, fake_fulcra):
+    text = await call(
+        "get_data_updates",
+        {"start_time": START, "end_time": END, "include_shared": True, "fulcra_userid": PARTNER},
+    )
+    assert "not both" in text
+    fake_fulcra.data_updates.assert_not_called()
+
+
+async def test_flag_off_does_not_consult_shares(call, fake_fulcra):
+    fake_fulcra.data_updates.return_value = {"data_types": {}, "file_changes": []}
+    result = _payload(await call("get_data_updates", {"start_time": START, "end_time": END}))
+    fake_fulcra.get_shared_datasets.assert_not_called()
+    assert "shared" not in result
+
+
+# --- fan-out runs off the event loop, sequentially, bounded ----------------
+
+
+async def test_include_shared_does_not_block_the_event_loop(call, fake_fulcra):
+    import asyncio
+    import threading
+    import time
+
+    loop_thread = threading.get_ident()
+    seen_threads: list[int] = []
+
+    def slow_updates(s, e, fulcra_userid=None):
+        seen_threads.append(threading.get_ident())
+        time.sleep(0.05)
+        return {"data_types": {}, "file_changes": []}
+
+    fake_fulcra.get_fulcra_userid.return_value = ME
+    fake_fulcra.get_shared_datasets.return_value = _incoming(PARTNER, PEER2, "3" * 36, "4" * 36)
+    fake_fulcra.data_updates.side_effect = slow_updates
+
+    ticks = 0
+
+    async def ticker(stop: asyncio.Event):
+        nonlocal ticks
+        while not stop.is_set():
+            ticks += 1
+            await asyncio.sleep(0.005)
+
+    stop = asyncio.Event()
+    task = asyncio.create_task(ticker(stop))
+    result = _payload(
+        await call("get_data_updates", {"start_time": START, "end_time": END, "include_shared": True})
+    )
+    stop.set()
+    await task
+    # 5 blocking calls x 50 ms = 250 ms; a blocked loop would tick ~once.
+    assert ticks >= 10, f"event loop only ticked {ticks} times during the fan-out"
+    assert result["peers_checked"] == 4
+    assert loop_thread not in seen_threads, "network calls ran on the event loop thread"
+    assert len(set(seen_threads)) == 1, "peer calls should be sequential in one worker thread"
+
+
+async def test_include_shared_caps_peer_count(call, fake_fulcra):
+    fake_fulcra.get_fulcra_userid.return_value = ME
+    fake_fulcra.get_shared_datasets.return_value = _incoming(*[f"{i:08d}-0000-4000-8000-000000000000" for i in range(25)])
+    fake_fulcra.data_updates.return_value = {"data_types": {}, "file_changes": []}
+    result = _payload(
+        await call("get_data_updates", {"start_time": START, "end_time": END, "include_shared": True})
+    )
+    assert result["peers_checked"] == 20
+    assert result["peers_skipped"] == [f"{i:08d}-0000-4000-8000-000000000000" for i in range(20, 25)]
+    assert fake_fulcra.data_updates.call_count == 1 + 20
+    # The skipped IDs are exactly the ones the caller can poll one at a time.
+    assert not set(result["peers_skipped"]) & set(result["shared"])
+
+
+async def test_include_shared_isolates_a_timed_out_peer(call, fake_fulcra):
+    fake_fulcra.get_fulcra_userid.return_value = ME
+    fake_fulcra.get_shared_datasets.return_value = _incoming(PARTNER, PEER2)
+
+    def updates(s, e, fulcra_userid=None):
+        if fulcra_userid == PARTNER:
+            raise TimeoutError("timed out")
+        return {"data_types": {"HeartRate": 1}, "file_changes": []} if fulcra_userid else {"data_types": {}, "file_changes": []}
+
+    fake_fulcra.data_updates.side_effect = updates
+    result = _payload(
+        await call("get_data_updates", {"start_time": START, "end_time": END, "include_shared": True})
+    )
+    assert result["shared"][PARTNER]["error"] == "timeout"
+    assert result["shared"][PEER2]["data_types"] == {"HeartRate": 1}
+
+
+async def test_network_timeout_is_reported_not_raised(call, fake_fulcra):
+    import urllib.error
+
+    fake_fulcra.data_updates.side_effect = urllib.error.URLError("timed out")
+    text = await call("get_data_updates", {"start_time": START, "end_time": END})
+    assert "did not respond" in text and "support@fulcradynamics.com" in text
+
+
+def test_server_startup_sets_network_timeout():
+    import socket
+
+    import fulcra_mcp.main  # noqa: F401  (module import applies the setting)
+    from fulcra_mcp.settings import settings
+
+    assert settings.http_timeout_seconds == 30.0
+    assert socket.getdefaulttimeout() == settings.http_timeout_seconds
