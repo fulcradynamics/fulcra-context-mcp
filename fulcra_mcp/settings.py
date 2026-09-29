@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     fulcra_oidc_domain: str | None = None
     fulcra_api: str | None = None
     log_format: Literal["console", "json"] = "console"
+    # Process-wide bound on every outbound HTTP request (the fulcra-api client
+    # uses urllib, which honors socket.setdefaulttimeout).
+    http_timeout_seconds: float = 30.0
 
 
 settings = Settings()
