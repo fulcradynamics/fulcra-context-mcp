@@ -7,7 +7,7 @@ import re
 import urllib.error
 from enum import Enum
 from pathlib import PurePath
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
@@ -309,6 +309,20 @@ async def restore_data_type(data_type: str) -> str:
 # "com.fulcradynamics.cli".
 MCP_RECORD_SOURCE = "com.fulcradynamics.mcp"
 
+# Record fields record_data sets from its own parameters; `fields` can't set them.
+RECORD_FIELDS_SET_BY_TOOL = frozenset(
+    {"id", "sources", "tags", "start_time", "end_time", "recorded_at"}
+)
+
+# Schema properties every record has, which aren't worth listing as a type's fields.
+RECORD_PLUMBING_FIELDS = frozenset({"id", "sources", "tags"})
+
+
+def _recordable_fields(properties: dict) -> list[str]:
+    """The field names worth telling an agent about, from a record schema's
+    properties."""
+    return sorted(k for k in properties if k not in RECORD_PLUMBING_FIELDS)
+
 
 @tools_mcp.tool(annotations={"title": "Record Data", "destructiveHint": False})
 @_friendly_http_errors
@@ -319,6 +333,7 @@ async def record_data(
     start_time: AwareDatetime | None = None,
     end_time: AwareDatetime | None = None,
     tags: list[str] | None = None,
+    fields: dict[str, Any] | None = None,
 ) -> str:
     """Record a single record for a recordable data type.
 
@@ -336,18 +351,18 @@ async def record_data(
         end_time: When the recorded range ended. Must include tz (ISO8601).
             Only for duration-style types, where it is required.
         tags: Tag names to attach; missing tags are created automatically.
+        fields: Values for the data type's own fields, e.g.
+            {"mood": "calm", "energy": 7}. get_data_catalog with data_type
+            set lists a user-defined type's fields.
     Returns:
         Confirmation including the upload ID and the recorded fields.
     """
     fulcra = get_fulcra_object()
 
     base_type, _, annotation_uuid = data_type.partition("/")
-    annotation_source = None
     if annotation_uuid:
         try:
-            annotation_source = (
-                f"com.fulcradynamics.annotation.{str(UUID(annotation_uuid)).lower()}"
-            )
+            annotation_uuid = str(UUID(annotation_uuid)).lower()
         except ValueError:
             return (
                 "User-defined data type IDs must take the form <BaseType>/<UUID>. "
@@ -371,9 +386,26 @@ async def record_data(
     if start_time is not None and end_time is not None and end_time < start_time:
         return "end_time must not be before start_time."
 
+    fields = fields or {}
+    if reserved := sorted(RECORD_FIELDS_SET_BY_TOOL & fields.keys()):
+        return (
+            f"fields can't set {', '.join(reserved)}; use the start_time, end_time "
+            "and tags parameters instead."
+        )
+    for name, given in (("value", value), ("note", note)):
+        if given is not None and name in fields:
+            return f"{name} is given both as a parameter and in fields; give it once."
+
+    api_version = entry["api_version"]
+    # v1 records go to the type's own ID and carry start_time/end_time. v1alpha1
+    # annotation records go to the base type, linked to their annotation by a
+    # source, and carry recorded_at.
+    is_v1 = api_version == "v1"
+    target_type = data_type if is_v1 else base_type
+
     record: dict = {"sources": [MCP_RECORD_SOURCE]}
-    if annotation_source:
-        record["sources"].append(annotation_source)
+    if annotation_uuid and not is_v1:
+        record["sources"].append(f"com.fulcradynamics.annotation.{annotation_uuid}")
     if value is not None:
         try:
             record["value"] = json.loads(value)
@@ -381,21 +413,37 @@ async def record_data(
             record["value"] = value
     if note is not None:
         record["note"] = note
-    if start_time is not None and end_time is not None:
+    record.update(fields)
+    if is_v1:
+        if start_time is not None:
+            record["start_time"] = start_time.isoformat()
+        if end_time is not None:
+            record["end_time"] = end_time.isoformat()
+    elif start_time is not None and end_time is not None:
         record["recorded_at"] = {
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
         }
     elif start_time is not None:
         record["recorded_at"] = start_time.isoformat()
+
+    # Send an error if the user tries to record a field that's not in the schema
+    schema = fulcra.v1_catalog_schema(target_type, api_version)
+    declared = schema.get("properties") if isinstance(schema, dict) else None
+    if isinstance(declared, dict):
+        if unknown := sorted(k for k in record if k not in declared):
+            return (
+                f"{data_type} has no field {', '.join(map(repr, unknown))}; its "
+                f"fields are: {', '.join(_recordable_fields(declared))}."
+            )
+
     if tags:
         try:
             record["tags"] = [t["id"] for t in fulcra.create_tags(tags)]
         except urllib.error.HTTPError as e:
             return f"Could not resolve tags (HTTP {e.code})."
 
-    api_version = entry["api_version"]
-    validation_errors = fulcra.validate_records(base_type, [record], api_version)
+    validation_errors = fulcra.validate_records(target_type, [record], api_version)
     if validation_errors:
         _, error_msg, _ = validation_errors[0]
         hint = ""
@@ -403,7 +451,7 @@ async def record_data(
             hint = " This type records a time range; pass both start_time and end_time."
         return f"Record is not valid for {data_type}: {error_msg}.{hint}"
 
-    resp = fulcra.record_data_type(base_type, [record], api_version)
+    resp = fulcra.record_data_type(target_type, [record], api_version)
     return (
         f"Recorded 1 {data_type} record (upload ID {resp.get('upload_id')}): "
         + json.dumps(record)
@@ -451,6 +499,36 @@ def _slim_entry(entry: dict) -> dict:
     return slim
 
 
+def _schema_type(prop: dict) -> str:
+    """A short type name for a schema property: "string", "number", ...; for
+    Pydantic's nullable anyOf, the non-null type."""
+    if isinstance(prop.get("type"), str):
+        return prop["type"]
+    types = [
+        option["type"]
+        for option in prop.get("anyOf", [])
+        if isinstance(option, dict) and option.get("type") not in (None, "null")
+    ]
+    return "|".join(types) or "any"
+
+
+def _is_user_defined_v1(entry: dict) -> bool:
+    return entry.get("api_version") == "v1" and "/" in entry.get("id", "")
+
+
+def _user_defined_fields(schema: dict) -> dict[str, str]:
+    """A user-defined v1 type's fields and their types (what record_data takes
+    in `fields`), from its record schema."""
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if not isinstance(properties, dict):
+        return {}
+    return {
+        name: _schema_type(properties[name])
+        for name in _recordable_fields(properties)
+        if name not in RECORD_FIELDS_SET_BY_TOOL and isinstance(properties[name], dict)
+    }
+
+
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_data_catalog(
@@ -467,6 +545,8 @@ async def get_data_catalog(
 
     Args:
         data_type: Optional. Return only the data type with this exact ID.
+            For a user-defined type, this also lists its fields (what
+            record_data takes in `fields`).
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_configured", "base_type".
@@ -483,7 +563,13 @@ async def get_data_catalog(
         catalog = [e for e in catalog if name.lower() in (e.get("name") or "").lower()]
     grouped: dict[str, list[dict]] = {}
     for entry in catalog:
-        grouped.setdefault(_compatible_tools(entry), []).append(_slim_entry(entry))
+        slim = _slim_entry(entry)
+        # The catalog doesn't carry schemas; fetch one only for a single type.
+        if data_type and len(catalog) == 1 and _is_user_defined_v1(entry):
+            schema = fulcra.v1_catalog_schema(entry["id"], "v1")
+            if fields := _user_defined_fields(schema):
+                slim["fields"] = fields
+        grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
 
