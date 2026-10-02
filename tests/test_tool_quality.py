@@ -372,7 +372,7 @@ async def test_record_data_refuses_a_value_on_an_event_type(call, fake_fulcra):
     fake_fulcra.record_data_type.assert_not_called()
 
 
-@pytest.mark.parametrize("key", ["start_time", "sources", "tags", "recorded_at"])
+@pytest.mark.parametrize("key", ["start_time", "end_time", "sources", "tags", "id"])
 async def test_record_data_fields_cannot_set_what_parameters_set(call, fake_fulcra, key):
     type_id = f"Event/{V1_UUID}"
     _v1_type(fake_fulcra, type_id, CHECK_IN_SCHEMA)
@@ -381,6 +381,63 @@ async def test_record_data_fields_cannot_set_what_parameters_set(call, fake_fulc
 
     assert text.startswith(f"fields can't set {key};")
     fake_fulcra.record_data_type.assert_not_called()
+
+
+async def test_record_data_fields_cannot_set_recorded_at_on_v1alpha1(call, fake_fulcra):
+    """v1alpha1 annotation records carry their time as recorded_at, which the tool sets"""
+    type_id = f"NumericAnnotation/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": type_id, "api_version": "v1alpha1", "recordable": True}
+    ]
+
+    text = await call(
+        "record_data", {"data_type": type_id, "fields": {"recorded_at": START}}
+    )
+
+    assert text.startswith("fields can't set recorded_at;")
+    fake_fulcra.record_data_type.assert_not_called()
+
+
+RECORDED_AT_SCHEMA = _v1_schema(recorded_at={"type": "string"}, mood={"type": "string"})
+RECORDED_AT_SCHEMA["required"] = ["recorded_at"]
+
+
+async def test_record_data_v1_type_can_have_its_own_recorded_at_field(call, fake_fulcra):
+    """recorded_at is only the tool's on v1alpha1; a v1 type may declare (and
+    require) a field of that name, set through `fields`"""
+    type_id = f"Event/{V1_UUID}"
+    _v1_type(fake_fulcra, type_id, RECORDED_AT_SCHEMA)
+
+    text = await call(
+        "record_data",
+        {
+            "data_type": type_id,
+            "start_time": START,
+            "fields": {"recorded_at": "by hand", "mood": "calm"},
+        },
+    )
+
+    assert "upload ID up-1" in text
+    _, record, _ = _recorded(fake_fulcra)
+    assert record == {
+        "sources": ["com.fulcradynamics.mcp"],
+        "recorded_at": "by hand",
+        "mood": "calm",
+        "start_time": "2026-08-01T00:00:00-07:00",
+    }
+
+
+async def test_catalog_lists_a_v1_types_own_recorded_at_field(call, fake_fulcra):
+    user_type = f"Event/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": user_type, "api_version": "v1", "record_spec": {"type": "event"}}
+    ]
+    fake_fulcra.v1_catalog_schema.return_value = RECORDED_AT_SCHEMA
+
+    text = await call("get_data_catalog", {"data_type": user_type})
+
+    [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+    assert entry["fields"] == {"mood": "string", "recorded_at": "string"}
 
 
 async def test_record_data_value_given_twice_is_refused(call, fake_fulcra):

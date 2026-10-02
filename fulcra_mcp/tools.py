@@ -309,10 +309,15 @@ async def restore_data_type(data_type: str) -> str:
 # "com.fulcradynamics.cli".
 MCP_RECORD_SOURCE = "com.fulcradynamics.mcp"
 
-# Record fields record_data sets from its own parameters; `fields` can't set them.
-RECORD_FIELDS_SET_BY_TOOL = frozenset(
-    {"id", "sources", "tags", "start_time", "end_time", "recorded_at"}
-)
+# The v1alpha1 types include `recorded_at` as a builtin field, but v1 don't.
+V1_RECORD_FIELDS_SET_BY_TOOL = frozenset({"id", "sources", "tags", "start_time", "end_time"})
+V1ALPHA1_RECORD_FIELDS_SET_BY_TOOL = frozenset({"id", "sources", "tags", "recorded_at"})
+
+
+def _fields_set_by_tool(api_version: str) -> frozenset[str]:
+    if api_version == "v1":
+        return V1_RECORD_FIELDS_SET_BY_TOOL
+    return V1ALPHA1_RECORD_FIELDS_SET_BY_TOOL
 
 # Schema properties every record has, which aren't worth listing as a type's fields.
 RECORD_PLUMBING_FIELDS = frozenset({"id", "sources", "tags"})
@@ -386,8 +391,9 @@ async def record_data(
     if start_time is not None and end_time is not None and end_time < start_time:
         return "end_time must not be before start_time."
 
+    api_version = entry["api_version"]
     fields = fields or {}
-    if reserved := sorted(RECORD_FIELDS_SET_BY_TOOL & fields.keys()):
+    if reserved := sorted(_fields_set_by_tool(api_version) & fields.keys()):
         return (
             f"fields can't set {', '.join(reserved)}; use the start_time, end_time "
             "and tags parameters instead."
@@ -396,7 +402,6 @@ async def record_data(
         if given is not None and name in fields:
             return f"{name} is given both as a parameter and in fields; give it once."
 
-    api_version = entry["api_version"]
     # v1 records go to the type's own ID and carry start_time/end_time. v1alpha1
     # annotation records go to the base type, linked to their annotation by a
     # source, and carry recorded_at.
@@ -525,7 +530,7 @@ def _user_defined_fields(schema: dict) -> dict[str, str]:
     return {
         name: _schema_type(properties[name])
         for name in _recordable_fields(properties)
-        if name not in RECORD_FIELDS_SET_BY_TOOL and isinstance(properties[name], dict)
+        if name not in V1_RECORD_FIELDS_SET_BY_TOOL and isinstance(properties[name], dict)
     }
 
 
