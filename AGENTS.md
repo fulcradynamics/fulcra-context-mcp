@@ -1,11 +1,11 @@
-# AGENTS.md - Context by Fulcra
+# AGENTS.md - Fulcra
 
-> Context by Fulcra - bridging the gap between agents and humans.
+> Fulcra - bridging the gap between agents, other agents, and humans. A context lake for all your data.
 
 ## About
 
-[Context by Fulcra](https://fulcradynamics.com/) is a personal data platform that provides humans a place to collect and store real-world personal data - from wearables, calendars, location, medical devices, and more. Hundreds of data sources and types supported.
-In addition, there are facilities to help users record new free-form data:  their own subjective feelings (to record your mood, sleep, etc.) and track progress toward a goal. 
+[Fulcra](https://fulcradynamics.com/) is a personal data platform that gives humans and their agents a place to collect, store, and share real-world personal data - calendars, location, files, records that people and agents write, and data from phones, wearables, and other connected devices. Hundreds of data sources and types are supported.
+Users and agents can also record new data of their own - events, measurements, notes, and progress toward a goal - and define their own data types for it.
 
 Data is primarily collected through the human's phone; the human installs [Context by Fulcra](https://apps.apple.com/us/app/context-by-fulcra-health-hub/id1633037434) and lets the app sync their data to their account.
 
@@ -123,17 +123,11 @@ definitions should be earning them.
 
 ## Available Data
 
-### Health & Biometrics
-Sleep stages, sleep duration, sleep efficiency, HRV (heart rate variability), heart rate, resting heart rate, blood oxygen (SpO2), respiratory rate, wrist temperature, steps, calories burned (active and basal), workouts, body composition (weight, body fat), atrial fibrillation burden. Sources include Apple Health, Garmin, Oura, Whoop, and other connected devices.
-
-### Glucose & Nutrition
-Continuous glucose monitor (CGM) readings from Dexcom and Libre, meal logs, macronutrient tracking, calorie intake, hydration data. Enables correlation of nutrition with biometric outcomes.
-
 ### Location & Calendar
 Real-time and historical location data, plus calendar events and meeting schedules synced from the user's device calendars (Apple Calendar, including any subscribed Google or other calendars). The location tools return a fused interpretation of where the user was at a given time, combining whatever underlying data sources are available rather than exposing raw per-source samples.
 
-### Annotations & Custom Events
-User-logged medications, supplements, mood entries, device usage, and custom events. These can be discovered, classified, and correlated with biometric streams over time. Users (and agents, via the CLI's `data-type` and `tag` commands) can define new data types to track.
+### User-Defined Data Types & Annotations
+Events, measurements, and notes that users and agents record themselves, in data types they define - anything from project milestones and habits to device usage. Users (and agents, via the CLI's `data-type` and `tag` commands, or the `create_data_type` and `record_data` MCP tools) can define new data types to track; `get_records` reads them back.
 
 ### Files
 Users can upload arbitrary files to their account for storage alongside their data. The CLI's `file` sub-commands support list, stat, upload, download, delete, and version restore.
@@ -157,24 +151,27 @@ Patterns for agents coordinating on behalf of different users:
 
 Caveats: anyone who learns a group's ID can join it, and the owner cannot remove members, only delete the group, so treat a group ID like a password. A group that lists data types is a *collecting* group: joining shares those types with its owner, so show the user the group's details before joining. `leave_group` withdraws the user from a group, which also stops what a collecting group gathers. Only create shares or groups the user has asked for, and never use `share_all_data` unless they explicitly want their entire account shared.
 
-### Time Series Metrics
+### Device and Sensor Data
 
-Example metrics from the catalog: `StepCount`, `HeartRate`, `HeartRateVariabilitySDNN`, `SleepStage`, `ActiveCaloriesBurned`, `BasalCaloriesBurned`, `RespiratoryRate`, `OxygenSaturation`, `BodyTemperature`, `AFibBurden`, and many more.
+Data synced from phones, wearables, and other connected devices (via Apple Health and similar sources), such as activity, workouts, and sleep. `get_data_catalog` lists exactly which types a user has; numeric ones (e.g. `StepCount`) can be read as time series with `get_time_series`.
 
 ## Best Practices for Agents
 
 - **Use appropriate sample rates.** When querying time series data, choose a `sample_rate` that balances resolution with performance. For daily overviews, 3600 seconds (hourly) works well. For detailed analysis, 60-300 seconds.
-- **Sleep spans midnight.** Sleep cycles typically start on day N and end on day N+1. When querying sleep data, account for this by extending your date range.
-- **Correlate across domains.** The real power of Context is combining data streams - sleep quality with nutrition, HRV with training load, location with calendar events. Look for patterns across domains.
+- **Correlate across domains.** The real power of Fulcra is combining data streams - location with calendar events, the user's own records with what their devices measured, one person's shared data with another's. Look for patterns across domains.
+- **Records can span midnight.** Duration records (calendar events, sleep sessions, workouts) can start on day N and end on day N+1; extend your date range to catch them.
 
 ### Example: Querying Data with the CLI
 
 ```sh
 # Discover available data types (supports --name, --category, and --data-type filters)
-fulcra catalog --name heart
+fulcra catalog --category user_configured
 
-# Get heart rate data for a day (hourly resolution)
-fulcra metric-time-series HeartRate "2025-01-01T00:00:00-08:00" "2025-01-02T00:00:00-08:00" --sample-rate 3600
+# Calendar events for a day
+fulcra calendar-events "2025-01-01T00:00:00-08:00" "2025-01-02T00:00:00-08:00"
+
+# Where the user was at a given time
+fulcra location-at-time "2025-01-01T12:00:00-08:00"
 
 # Raw records for any catalog data type; time ranges can also be relative
 fulcra get-records StepCount "1 day"
@@ -193,18 +190,19 @@ fulcra.authorize()
 # Discover available data types (metrics, events, annotations)
 catalog = fulcra.v1_catalog()
 
-# Get heart rate data for a day (hourly resolution)
-data = fulcra.metric_time_series(
-    metric="HeartRate",
+# Calendar events for a day
+events = fulcra.calendar_events(
     start_time="2025-01-01T00:00:00-08:00",
     end_time="2025-01-02T00:00:00-08:00",
-    sample_rate=3600
 )
+
+# Where the user was at a given time
+location = fulcra.location_at_time(time="2025-01-01T12:00:00-08:00")
 ```
 
 ### Jupyter Notebook Demos
 
-Ready-to-run demo notebooks are available at the [Fulcra demos repository](https://github.com/fulcradynamics/demos). These notebooks walk through common use cases like querying health metrics, analyzing sleep, and correlating data across domains. They can also be opened directly in [Google Colab](https://colab.research.google.com/) for one-click, zero-install demos.
+Ready-to-run demo notebooks are available at the [Fulcra demos repository](https://github.com/fulcradynamics/demos). These notebooks walk through common use cases like querying and visualizing data and correlating it across domains. They can also be opened directly in [Google Colab](https://colab.research.google.com/) for one-click, zero-install demos.
 
 ## Support
 
