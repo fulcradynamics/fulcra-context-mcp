@@ -226,7 +226,6 @@ async def test_v1_nested_workspace_and_peer_read(call, local_fulcra):
         await call("archive_data_type", {"data_type": type_id})
 
 
-@pytest.mark.xfail(strict=True, reason="data-service rebuilds custom schemas and loses nested constraints")
 async def test_nested_schema_constraints_survive_catalog_roundtrip(call, local_fulcra):
     fields = {"properties": {"coord": {"type": "object", "required": ["body"],
                                         "properties": {"body": {"type": "string"}}}},

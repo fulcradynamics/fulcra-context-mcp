@@ -931,3 +931,61 @@ async def test_catalog_scoped_to_a_user_who_shares_nothing(call, fake_fulcra):
         f"No data types for user {stranger} match. If this is another user, they "
         "share nothing matching with you; list_shares shows who shares what."
     )
+
+
+NESTED_MESSAGE_SCHEMA = _v1_schema(
+    msg={
+        "type": "object",
+        "title": "Msg",
+        "properties": {
+            "kind": {"type": "string", "enum": ["directive", "response"]},
+            "body": {"type": "string"},
+        },
+        "required": ["kind", "body"],
+    },
+    pri=_nullable({"type": "integer", "minimum": 1, "maximum": 3}),
+    note={"type": "string", "description": "What happened"},
+    mood={"type": "string", "title": "Mood", "default": None},
+)
+NESTED_MESSAGE_SCHEMA["required"] = ["msg", "mood"]
+
+
+async def test_catalog_lists_the_full_schema_of_fields_with_rules(call, fake_fulcra):
+    """an agent can build a valid record from the catalog alone: nested fields
+    and their required keys, allowed values and ranges are all listed; a plain
+    field is still just its type"""
+    user_type = f"Event/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        _catalog_entry(user_type, FAKE_USER_ID, "event", shared=False)
+    ]
+    fake_fulcra.v1_catalog_schema.return_value = NESTED_MESSAGE_SCHEMA
+
+    [entry] = _entries(await call("get_data_catalog", {"data_type": user_type}))
+
+    assert entry["fields"] == {
+        "msg": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["directive", "response"]},
+                "body": {"type": "string"},
+            },
+            "required": ["kind", "body"],
+        },
+        # nullable, so unwrapped: whether it's required is listed separately
+        "pri": {"type": "integer", "minimum": 1, "maximum": 3},
+        "note": {"type": "string", "description": "What happened"},
+        "mood": "string",
+    }
+    assert entry["required_fields"] == ["mood", "msg"]
+
+
+async def test_catalog_lists_no_required_fields_when_there_are_none(call, fake_fulcra):
+    user_type = f"Event/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        _catalog_entry(user_type, FAKE_USER_ID, "event", shared=False)
+    ]
+    fake_fulcra.v1_catalog_schema.return_value = CHECK_IN_SCHEMA
+
+    [entry] = _entries(await call("get_data_catalog", {"data_type": user_type}))
+
+    assert "required_fields" not in entry

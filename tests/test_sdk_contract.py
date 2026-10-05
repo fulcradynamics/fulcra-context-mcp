@@ -48,7 +48,7 @@ V1_UUID = "df10403a-2115-4254-9e49-e48ca0af6f5d"
 
 
 def _v1_spec(type_id: str, record_spec: dict) -> dict:
-    """a v1 data type spec as input-service returns it"""
+    """a v1 data type spec as the API returns it"""
     return {"id": type_id, "api_version": "v1", "record_spec": record_spec}
 
 

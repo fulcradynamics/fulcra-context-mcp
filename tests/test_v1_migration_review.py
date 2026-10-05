@@ -144,7 +144,6 @@ async def test_shared_v1_catalog_schema_uses_owner(call, fake_fulcra, base):
     fake_fulcra.v1_catalog_schema.assert_called_once_with(type_id, "v1", fulcra_userid=PEER)
 
 
-@pytest.mark.xfail(strict=True, reason="catalog strips owner ID, preventing shared entries from identifying their read scope")
 async def test_shared_catalog_preserves_owner(call, fake_fulcra):
     fake_fulcra.v1_catalog.return_value = [{
         "id": f"Event/{TYPE_UUID}", "api_version": "v1", "class": "event",
@@ -155,7 +154,6 @@ async def test_shared_catalog_preserves_owner(call, fake_fulcra):
     assert entries[0]["fulcra_userid"] == PEER
 
 
-@pytest.mark.xfail(strict=True, reason="catalog summarizes an object schema to 'object' and omits its required keys")
 async def test_catalog_exposes_nested_message_schema(call, fake_fulcra):
     type_id = f"Event/{TYPE_UUID}"
     fake_fulcra.v1_catalog.return_value = [{"id": type_id, "api_version": "v1", "class": "event"}]

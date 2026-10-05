@@ -217,8 +217,12 @@ def _slim_v1_spec(spec: dict) -> dict:
             schema = json.loads(schema)
         except json.JSONDecodeError:
             schema = None
-    if isinstance(schema, dict) and (fields := _user_defined_fields(schema)):
-        slim["fields"] = fields
+    if isinstance(schema, dict):
+        fields, required = _user_defined_fields(schema)
+        if fields:
+            slim["fields"] = fields
+        if required:
+            slim["required_fields"] = required
     return slim
 
 
@@ -652,17 +656,41 @@ def _is_user_defined_v1(entry: dict) -> bool:
     return entry.get("api_version") == "v1" and "/" in entry.get("id", "")
 
 
-def _user_defined_fields(schema: dict) -> dict[str, str]:
-    """A user-defined v1 type's fields and their types (what record_data takes
-    in `fields`), from its record schema."""
+# Schema keywords that say nothing about what a valid value is
+SCHEMA_NOISE_KEYWORDS = frozenset({"title", "default"})
+
+
+def _field_schema(prop: dict) -> str | dict:
+    """How to fill one field: just its type name when that's all there is to it,
+    otherwise its JSON Schema (nested fields and their required keys, allowed
+    values, ranges, a description). Pydantic's nullable anyOf is unwrapped,
+    since whether a field is required is listed separately."""
+    options = [o for o in prop.get("anyOf", []) if isinstance(o, dict)]
+    non_null = [o for o in options if o.get("type") != "null"]
+    if options and len(non_null) == 1:
+        prop = {**{k: v for k, v in prop.items() if k != "anyOf"}, **non_null[0]}
+    if isinstance(prop.get("type"), list):
+        prop = {**prop, "type": _schema_type(prop)}
+    schema = {k: v for k, v in prop.items() if k not in SCHEMA_NOISE_KEYWORDS}
+    if set(schema) <= {"type"}:
+        return _schema_type(prop)
+    return schema
+
+
+def _user_defined_fields(schema: dict) -> tuple[dict[str, str | dict], list[str]]:
+    """A user-defined v1 type's fields (what record_data takes in `fields`) and
+    which of them are required, from its record schema."""
     properties = schema.get("properties") if isinstance(schema, dict) else None
     if not isinstance(properties, dict):
-        return {}
-    return {
-        name: _schema_type(properties[name])
+        return {}, []
+    fields = {
+        name: _field_schema(properties[name])
         for name in _recordable_fields(properties)
         if name not in V1_RECORD_FIELDS_SET_BY_TOOL and isinstance(properties[name], dict)
     }
+    required = schema.get("required")
+    required = sorted(f for f in required if f in fields) if isinstance(required, list) else []
+    return fields, required
 
 
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
@@ -684,7 +712,8 @@ async def get_data_catalog(
     Args:
         data_type: Optional. Return only the data type with this exact ID.
             For a user-defined type, this also lists its fields (what
-            record_data takes in `fields`).
+            record_data takes in `fields`): a type name, or the field's JSON
+            Schema if it has nested fields or rules; plus required_fields.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_configured", "base_type".
@@ -726,8 +755,11 @@ async def get_data_catalog(
                     "data_type_schema_unavailable", data_type=entry["id"], status=e.code
                 )
             else:
-                if fields := _user_defined_fields(schema):
+                fields, required = _user_defined_fields(schema)
+                if fields:
                     slim["fields"] = fields
+                if required:
+                    slim["required_fields"] = required
         grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
