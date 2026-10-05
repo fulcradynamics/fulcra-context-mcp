@@ -520,3 +520,182 @@ async def test_catalog_fetches_no_schema_otherwise(call, fake_fulcra, entries, d
 
     fake_fulcra.v1_catalog_schema.assert_not_called()
     assert '"fields"' not in text
+
+
+# --- create / archive / restore for v1 (Event / Metric) types -----------------
+
+
+@pytest.mark.parametrize("base_type", ["event", "metric"])
+@pytest.mark.parametrize("description", [None, "  "])
+async def test_create_v1_data_type_requires_a_description(
+    call, fake_fulcra, base_type, description
+):
+    args = {"base_type": base_type, "name": "Check-in"}
+    if description is not None:
+        args["description"] = description
+    text = await call("create_data_type", args)
+    assert text == f"base_type='{base_type}' requires a description of what the type tracks."
+    fake_fulcra.create_data_type.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "base_type, option, value, message",
+    [
+        ("event", "unit", "mg", "unit can only be used with base_type 'metric' or 'numeric'."),
+        ("event", "metric_kind", "discrete", "metric_kind can only be used with base_type 'metric' or 'boolean' or 'numeric' or 'scale'."),
+        ("event", "scale", {"min": 1, "max": 5}, "scale can only be used with base_type 'metric'."),
+        ("event", "value_map", {"1": "low"}, "value_map can only be used with base_type 'metric'."),
+        ("metric", "tags", ["work"], "tags can only be used with base_type 'moment' or 'duration' or 'boolean' or 'numeric' or 'scale'."),
+        ("metric", "default_value", "1", "default_value can only be used with base_type 'boolean' or 'numeric'."),
+        ("metric", "scale_labels", ["a"] * 5, "scale_labels can only be used with base_type 'scale'."),
+        ("numeric", "fields", {"properties": {"mood": {"type": "string"}}}, "fields can only be used with base_type 'event' or 'metric'."),
+        ("moment", "scale", {"min": 1, "max": 5}, "scale can only be used with base_type 'metric'."),
+    ],
+)
+async def test_create_data_type_refuses_options_for_another_base(
+    call, fake_fulcra, base_type, option, value, message
+):
+    text = await call(
+        "create_data_type",
+        {"base_type": base_type, "name": "X", "description": "d", option: value},
+    )
+    assert text == message
+    fake_fulcra.create_data_type.assert_not_called()
+    fake_fulcra.create_annotation.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"mood": {"type": "string"}}, {"properties": {}}, {"properties": "mood"}],
+    ids=["no-properties", "empty", "not-an-object"],
+)
+async def test_create_v1_data_type_refuses_fields_without_properties(call, fake_fulcra, fields):
+    text = await call(
+        "create_data_type",
+        {"base_type": "event", "name": "X", "description": "d", "fields": fields},
+    )
+    assert 'must define the fields to add under "properties"' in text
+    fake_fulcra.create_data_type.assert_not_called()
+
+
+async def test_create_v1_metric_scale_needs_min_and_max(call, fake_fulcra):
+    text = await call(
+        "create_data_type",
+        {"base_type": "metric", "name": "X", "description": "d", "scale": {"max": 5}},
+    )
+    assert text.startswith('scale needs "min" and "max"')
+    fake_fulcra.create_data_type.assert_not_called()
+
+
+async def test_create_v1_data_type_surfaces_the_servers_reason(call, fake_fulcra):
+    fake_fulcra.create_data_type.side_effect = http_error(
+        422, b'{"detail": "record_spec.schema: field \\"value\\" is reserved"}'
+    )
+    text = await call(
+        "create_data_type",
+        {
+            "base_type": "event",
+            "name": "X",
+            "description": "d",
+            "fields": {"properties": {"value": {"type": "string"}}},
+        },
+    )
+    assert text == (
+        'Could not create data type (HTTP 422): record_spec.schema: field "value" is reserved'
+    )
+
+
+async def test_create_annotation_data_type_is_unchanged(call, fake_fulcra):
+    fake_fulcra.create_annotation.return_value = {"id": USER_TYPE_UUID}
+    text = await call(
+        "create_data_type",
+        {"base_type": "boolean", "name": "Took meds", "default_value": "yes", "tags": ["health"]},
+    )
+    fake_fulcra.create_annotation.assert_called_once_with(
+        annotation_type="boolean",
+        name="Took meds",
+        description=None,
+        tags=["health"],
+        metric_kind=None,
+        value=True,
+        unit=None,
+        scale_labels=None,
+    )
+    fake_fulcra.create_data_type.assert_not_called()
+    assert text.startswith(f"Created data type BooleanAnnotation/{USER_TYPE_UUID}")
+
+
+@pytest.mark.parametrize("tool", ["archive_data_type", "restore_data_type"])
+@pytest.mark.parametrize("data_type", ["Event", "Metric", "HeartRate", "heart_rate"])
+async def test_built_in_types_cannot_be_archived_or_restored(call, fake_fulcra, tool, data_type):
+    text = await call(tool, {"data_type": data_type})
+    assert text.startswith(f"{data_type!r} is not a user-defined data type ID. Built-in types")
+    assert "get_data_catalog" in text
+    fake_fulcra.update_data_type.assert_not_called()
+    fake_fulcra.delete_annotation.assert_not_called()
+    fake_fulcra.restore_annotation.assert_not_called()
+
+
+@pytest.mark.parametrize("tool", ["archive_data_type", "restore_data_type"])
+async def test_archive_refuses_a_malformed_v1_id(call, fake_fulcra, tool):
+    text = await call(tool, {"data_type": "Event/not-a-uuid"})
+    assert "'Event/<uuid>'" in text
+    fake_fulcra.update_data_type.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "tool, message",
+    [
+        ("archive_data_type", "No user-defined data type"),
+        ("restore_data_type", "No archived data type"),
+    ],
+)
+async def test_archive_unknown_v1_id_is_actionable(call, fake_fulcra, tool, message):
+    fake_fulcra.update_data_type.side_effect = http_error(404)
+    text = await call(tool, {"data_type": f"Metric/{V1_UUID}"})
+    assert text.startswith(message)
+
+
+async def test_record_data_reports_every_error_from_strict_validation(call, fake_fulcra):
+    """drive the SDK's own validate_records (strict since fulcra-api 0.1.43)
+    against the type's schema"""
+    from fulcra_api.core import FulcraAPI
+
+    type_id = f"Event/{V1_UUID}"
+    _v1_type(fake_fulcra, type_id, {**CHECK_IN_SCHEMA, "required": ["mood"]})
+    fake_fulcra.validate_records.side_effect = (
+        lambda *args, **kwargs: FulcraAPI.validate_records(fake_fulcra, *args, **kwargs)
+    )
+
+    text = await call(
+        "record_data",
+        {"data_type": type_id, "start_time": START, "fields": {"energy": "high"}},
+    )
+    assert text == (
+        f"Record is not valid for {type_id}: 'mood' is a required property; "
+        "'high' is not of type 'number' (path: energy)."
+    )
+    fake_fulcra.record_data_type.assert_not_called()
+
+    # a valid record passes strict validation: everything the tool adds is declared
+    await call(
+        "record_data",
+        {
+            "data_type": type_id,
+            "start_time": START,
+            "end_time": END,
+            "tags": ["work"],
+            "fields": {"mood": "calm"},
+        },
+    )
+    fake_fulcra.record_data_type.assert_called_once()
+
+
+@pytest.mark.parametrize("record_type", ["event", "metric"])
+async def test_catalog_points_v1_types_to_get_records(call, fake_fulcra, record_type):
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": "Event", "api_version": "v1", "class": record_type},
+        {"id": "DeletedRecord", "api_version": "v1", "class": "tombstone", "queryable": False},
+    ]
+    grouped = json.loads((text := await call("get_data_catalog"))[text.index("{"):])
+    assert [e["id"] for e in grouped["data types usable with: get_records"]] == ["Event"]
