@@ -142,22 +142,26 @@ async def get_workouts(
 @tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
 @_friendly_http_errors
 async def annotations_catalog() -> str:
-    """
-    Get the list of all annotation data types the user has defined.
-    This does not get the actual values the user has recorded; for that, use the `get_records` tool.
-    Use this tool to get the IDs and types to pass to `get_records`.
+    """Deprecated: use get_data_catalog(category="user_configured") instead.
+
+    That lists every user-defined type, including Event/Metric ones, with the
+    IDs get_records takes; this lists only older annotation types, by bare UUID.
     """
     fulcra = get_fulcra_object()
     catalog = fulcra.annotations_catalog()
     return "Defined annotations: " + json.dumps(catalog)
 
 
-# Base annotation types; ids rooted in one of these (including custom
-# "<Base>/<uuid>" types) are readable with the `get_records` tool.
-ANNOTATION_BASE_TYPES = tuple(f"{t.name}Annotation" for t in AnnotationType)
 ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
 NO_TOOL_GROUP = "data types not yet readable through this server"
+
+# v0 event types with a dedicated tool of their own
+V0_TYPE_TOOLS = {
+    "apple_workouts": "get_workouts",
+    "calendars": "get_calendars",
+    "calendar_events": "get_calendar_events",
+}
 
 
 def _parse_annotation_id(data_type: str) -> str | None:
@@ -594,11 +598,10 @@ def _compatible_tools(entry: dict) -> str:
             return "data types usable with: get_time_series | get_records"
         if entry.get("class") == "location":
             return "data types usable with: get_location_at_time | get_location_time_series"
-    if entry.get("id", "").startswith(ANNOTATION_BASE_TYPES):
-        return "data types usable with: get_records"
-    if entry.get("api_version") == "v1alpha1":
-        return "data types usable with: get_records"
-    if entry.get("api_version") == "v1" and entry.get("class") in ("metric", "event"):
+        if entry.get("id") in V0_TYPE_TOOLS:
+            return f"data types usable with: {V0_TYPE_TOOLS[entry['id']]}"
+    # Annotations (built-in and user-defined) and v1 types, user-defined included
+    if entry.get("api_version") in ("v1alpha1", "v1"):
         return "data types usable with: get_records"
     return NO_TOOL_GROUP
 
@@ -623,6 +626,10 @@ def _slim_entry(entry: dict) -> dict:
         slim["value_map"] = record_spec["value_map"]
     if entry.get("recordable") is False:
         slim["recordable"] = False
+    # A shared type's owner: the account a read of it has to name, and the only
+    # thing telling it apart from the caller's own type of the same ID.
+    if "shared_type" in (entry.get("categories") or []) and entry.get("fulcra_userid"):
+        slim["fulcra_userid"] = entry["fulcra_userid"]
     return slim
 
 
@@ -664,13 +671,15 @@ async def get_data_catalog(
     data_type: str | None = None,
     category: str | None = None,
     name: str | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
     """Get all data types available for this user, grouped by relevant MCP tool.
     Includes location, events, user-defined types and annotations, and
     measurements from connected devices.
 
     Call this before requesting time-series data or raw records, and only use a
-    data type with the tools named in its group.
+    data type with the tools named in its group. A type shared by another user
+    carries that user's fulcra_userid; pass it to read their data.
 
     Args:
         data_type: Optional. Return only the data type with this exact ID.
@@ -680,24 +689,45 @@ async def get_data_catalog(
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_configured", "base_type".
         name: Optional. Filter results by partial, case-insensitive name match.
+        fulcra_userid: Optional. Only the types this Fulcra user shares with
+            you (your own ID: only your own types).
     """
     fulcra = get_fulcra_object()
+    owner = f" for user {fulcra_userid}" if fulcra_userid else ""
     try:
-        catalog = fulcra.v1_catalog(data_type=data_type, category=category)
+        catalog = fulcra.v1_catalog(
+            data_type=data_type, category=category, fulcra_userid=fulcra_userid
+        )
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return f"No data type found with ID {data_type!r}. Call get_data_catalog without arguments to list all available types."
+            return f"No data type found with ID {data_type!r}{owner}. Call get_data_catalog without arguments to list all available types."
         raise
     if name:
         catalog = [e for e in catalog if name.lower() in (e.get("name") or "").lower()]
+    if fulcra_userid and not catalog:
+        return (
+            f"No data types{owner} match. If this is another user, they share "
+            "nothing matching with you; list_shares shows who shares what."
+        )
     grouped: dict[str, list[dict]] = {}
     for entry in catalog:
         slim = _slim_entry(entry)
         # The catalog doesn't carry schemas; fetch one only for a single type.
+        # A shared type is looked up in its owner's account, not the caller's.
+        # The field list is a bonus: if the schema can't be fetched, still
+        # return the entry rather than failing the whole call.
         if data_type and len(catalog) == 1 and _is_user_defined_v1(entry):
-            schema = fulcra.v1_catalog_schema(entry["id"], "v1")
-            if fields := _user_defined_fields(schema):
-                slim["fields"] = fields
+            try:
+                schema = fulcra.v1_catalog_schema(
+                    entry["id"], "v1", fulcra_userid=entry.get("fulcra_userid")
+                )
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "data_type_schema_unavailable", data_type=entry["id"], status=e.code
+                )
+            else:
+                if fields := _user_defined_fields(schema):
+                    slim["fields"] = fields
         grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
@@ -728,7 +758,8 @@ async def get_time_series(
         calculations: Extra per-slice calculations to include.
             One or more of "max", "min", "delta", "mean", "uniques",
             "allpoints", "rollingmean". Not supported on "cumulative" kinds.
-        fulcra_userid: Retrieve data for another Fulcra user (if shared)
+        fulcra_userid: Retrieve data for another Fulcra user (if shared); a
+            shared type's get_data_catalog entry carries its owner's ID.
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
@@ -799,7 +830,8 @@ async def get_records(
         data_type: The data type ID, as returned by `get_data_catalog`.
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        fulcra_userid: Retrieve data for another Fulcra user (if shared)
+        fulcra_userid: Retrieve data for another Fulcra user (if shared); a
+            shared type's get_data_catalog entry carries its owner's ID.
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err

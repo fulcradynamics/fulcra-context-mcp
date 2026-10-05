@@ -487,13 +487,16 @@ async def test_catalog_lists_the_fields_of_one_user_defined_v1_type(call, fake_f
             "api_version": "v1",
             "categories": ["user_configured"],
             "record_spec": {"type": "event"},
+            "fulcra_userid": FAKE_USER_ID,
         }
     ]
     fake_fulcra.v1_catalog_schema.return_value = CHECK_IN_SCHEMA
 
     text = await call("get_data_catalog", {"data_type": user_type})
 
-    fake_fulcra.v1_catalog_schema.assert_called_once_with(user_type, "v1")
+    fake_fulcra.v1_catalog_schema.assert_called_once_with(
+        user_type, "v1", fulcra_userid=FAKE_USER_ID
+    )
     [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
     assert entry["fields"] == {"energy": "number", "mood": "string", "rested": "boolean"}
 
@@ -699,3 +702,232 @@ async def test_catalog_points_v1_types_to_get_records(call, fake_fulcra, record_
     ]
     grouped = json.loads((text := await call("get_data_catalog"))[text.index("{"):])
     assert [e["id"] for e in grouped["data types usable with: get_records"]] == ["Event"]
+
+
+async def test_catalog_points_types_with_their_own_tools_to_them(call, fake_fulcra):
+    """v0 types with dedicated tools are grouped under them, annotations under
+    get_records, and only unknown kinds are left as not yet readable"""
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": "apple_workouts", "api_version": "v0", "class": "event"},
+        {"id": "calendars", "api_version": "v0", "class": "event"},
+        {"id": "calendar_events", "api_version": "v0", "class": "event"},
+        {"id": "MomentAnnotation", "api_version": "v1alpha1", "class": "event"},
+        {"id": f"NumericAnnotation/{V1_UUID}", "api_version": "v1alpha1", "class": "metric"},
+        {"id": "SomethingNew", "api_version": "v0", "class": "event"},
+    ]
+    grouped = json.loads((text := await call("get_data_catalog"))[text.index("{"):])
+    ids = {group: [e["id"] for e in entries] for group, entries in grouped.items()}
+    assert ids == {
+        "data types usable with: get_workouts": ["apple_workouts"],
+        "data types usable with: get_calendars": ["calendars"],
+        "data types usable with: get_calendar_events": ["calendar_events"],
+        "data types usable with: get_records": [
+            "MomentAnnotation",
+            f"NumericAnnotation/{V1_UUID}",
+        ],
+        "data types not yet readable through this server": ["SomethingNew"],
+    }
+
+
+SHARER_ID = "5a7a9a1e-0000-4000-8000-0000000000a1"
+
+
+def _shared_check_in(fake_fulcra):
+    """the catalog entry for a Check-in type another user shared with the caller"""
+    user_type = f"Event/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": user_type,
+            "name": "Check-in",
+            "api_version": "v1",
+            "class": "event",
+            "categories": ["user_configured", "shared_type"],
+            "fulcra_userid": SHARER_ID,
+        }
+    ]
+    return user_type
+
+
+async def test_catalog_reads_a_shared_types_fields_from_its_owner(call, fake_fulcra):
+    """a shared type lives in its owner's account, so its schema has to be asked
+    for there; asked for in the caller's own account, it isn't found (404)"""
+    user_type = _shared_check_in(fake_fulcra)
+
+    def schema(data_type, api_version, fulcra_userid=None):
+        if fulcra_userid != SHARER_ID:
+            raise http_error(404, b'{"detail": "not found"}')
+        return CHECK_IN_SCHEMA
+
+    fake_fulcra.v1_catalog_schema.side_effect = schema
+
+    text = await call("get_data_catalog", {"data_type": user_type})
+
+    [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+    assert entry["fields"] == {"energy": "number", "mood": "string", "rested": "boolean"}
+
+
+async def test_catalog_still_lists_a_type_whose_schema_cant_be_fetched(call, fake_fulcra):
+    """the field list is extra; failing to fetch it doesn't fail the lookup"""
+    user_type = _shared_check_in(fake_fulcra)
+    fake_fulcra.v1_catalog_schema.side_effect = http_error(404, b'{"detail": "not found"}')
+
+    text = await call("get_data_catalog", {"data_type": user_type})
+
+    assert text.startswith("Available data types")
+    [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+    assert entry["id"] == user_type
+    assert "fields" not in entry
+
+
+def _catalog_entry(id: str, owner: str, record_type: str, shared: bool) -> dict:
+    return {
+        "id": id,
+        "api_version": "v1",
+        "class": record_type,
+        "record_spec": {"type": record_type},
+        "fulcra_userid": owner,
+        "categories": (["shared_type"] if shared else [])
+        + (["user_configured"] if "/" in id else []),
+        **({"recordable": False} if shared else {}),
+    }
+
+
+def _entries(text: str) -> list[dict]:
+    return [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+
+
+@pytest.mark.parametrize("base_type, record_type", [("Event", "event"), ("Metric", "metric")])
+async def test_catalog_listing_names_the_owner_of_shared_types(
+    call, fake_fulcra, base_type, record_type
+):
+    """a shared built-in type has the same ID as the caller's own; only its owner
+    tells them apart, and it's the fulcra_userid a read of it needs"""
+    user_type = f"{base_type}/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        _catalog_entry(base_type, FAKE_USER_ID, record_type, shared=False),
+        _catalog_entry(base_type, SHARER_ID, record_type, shared=True),
+        _catalog_entry(user_type, SHARER_ID, record_type, shared=True),
+    ]
+
+    entries = _entries(await call("get_data_catalog"))
+
+    owners = [(e["id"], e.get("fulcra_userid")) for e in entries]
+    # own entries stay as they were: no need to repeat the caller's own ID
+    assert owners == [(base_type, None), (base_type, SHARER_ID), (user_type, SHARER_ID)]
+
+
+@pytest.mark.parametrize("base_type, record_type", [("Event", "event"), ("Metric", "metric")])
+async def test_catalog_lookup_names_the_owner_of_a_shared_type(
+    call, fake_fulcra, base_type, record_type
+):
+    user_type = f"{base_type}/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        _catalog_entry(user_type, SHARER_ID, record_type, shared=True)
+    ]
+    fake_fulcra.v1_catalog_schema.return_value = CHECK_IN_SCHEMA
+
+    [entry] = _entries(await call("get_data_catalog", {"data_type": user_type}))
+
+    assert entry["fulcra_userid"] == SHARER_ID
+    assert entry["fields"] == {"energy": "number", "mood": "string", "rested": "boolean"}
+
+
+OTHER_SHARER_ID = "5a7a9a1e-0000-4000-8000-0000000000b2"
+
+
+def _scoped_catalog(fake_fulcra):
+    """a catalog that, like data-service, narrows to one owner's entries when
+    given fulcra_userid: the caller's own types, plus types two users share"""
+    entries = [
+        _catalog_entry("Event", FAKE_USER_ID, "event", shared=False),
+        _catalog_entry("Event", SHARER_ID, "event", shared=True),
+        _catalog_entry(f"Event/{V1_UUID}", SHARER_ID, "event", shared=True),
+        _catalog_entry("Metric", OTHER_SHARER_ID, "metric", shared=True),
+    ]
+    entries[2]["name"] = "Check-in"
+
+    def v1_catalog(data_type=None, category=None, fulcra_userid=None):
+        found = [
+            e
+            for e in entries
+            if (data_type is None or e["id"] == data_type)
+            and (category is None or category in e["categories"])
+            and (fulcra_userid is None or e["fulcra_userid"] == fulcra_userid)
+        ]
+        if data_type and not found:
+            raise http_error(404, b'{"detail": "Type not found"}')
+        return found
+
+    fake_fulcra.v1_catalog.side_effect = v1_catalog
+    fake_fulcra.v1_catalog_schema.return_value = CHECK_IN_SCHEMA
+
+
+async def test_catalog_can_be_scoped_to_one_sharer(call, fake_fulcra):
+    _scoped_catalog(fake_fulcra)
+
+    entries = _entries(await call("get_data_catalog", {"fulcra_userid": SHARER_ID}))
+
+    fake_fulcra.v1_catalog.assert_called_once_with(
+        data_type=None, category=None, fulcra_userid=SHARER_ID
+    )
+    # only that sharer's types: not the caller's own, nor another sharer's
+    assert [(e["id"], e["fulcra_userid"]) for e in entries] == [
+        ("Event", SHARER_ID),
+        (f"Event/{V1_UUID}", SHARER_ID),
+    ]
+
+
+async def test_catalog_unscoped_still_lists_shared_types(call, fake_fulcra):
+    _scoped_catalog(fake_fulcra)
+
+    entries = _entries(await call("get_data_catalog"))
+
+    assert len(entries) == 4
+
+
+@pytest.mark.parametrize(
+    "filters, expected",
+    [
+        ({"category": "user_configured"}, [f"Event/{V1_UUID}"]),
+        ({"name": "check"}, [f"Event/{V1_UUID}"]),
+        ({"data_type": f"Event/{V1_UUID}"}, [f"Event/{V1_UUID}"]),
+    ],
+    ids=["category", "name", "data_type"],
+)
+async def test_catalog_filters_work_within_a_sharers_scope(call, fake_fulcra, filters, expected):
+    _scoped_catalog(fake_fulcra)
+
+    entries = _entries(
+        await call("get_data_catalog", {**filters, "fulcra_userid": SHARER_ID})
+    )
+
+    assert [e["id"] for e in entries] == expected
+    if "data_type" in filters:
+        # the field list is read from the owner's account
+        fake_fulcra.v1_catalog_schema.assert_called_once_with(
+            f"Event/{V1_UUID}", "v1", fulcra_userid=SHARER_ID
+        )
+        assert entries[0]["fields"]
+
+
+async def test_catalog_lookup_of_a_type_outside_the_scope(call, fake_fulcra):
+    """another sharer's type isn't found within this sharer's scope"""
+    _scoped_catalog(fake_fulcra)
+
+    text = await call(
+        "get_data_catalog", {"data_type": "Metric", "fulcra_userid": SHARER_ID}
+    )
+
+    assert text.startswith(f"No data type found with ID 'Metric' for user {SHARER_ID}.")
+
+
+async def test_catalog_scoped_to_a_user_who_shares_nothing(call, fake_fulcra):
+    _scoped_catalog(fake_fulcra)
+    stranger = "5a7a9a1e-0000-4000-8000-0000000000c3"
+
+    text = await call("get_data_catalog", {"fulcra_userid": stranger})
+
+    assert text == (
+        f"No data types for user {stranger} match. If this is another user, they "
+        "share nothing matching with you; list_shares shows who shares what."
+    )

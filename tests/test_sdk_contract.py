@@ -195,7 +195,9 @@ async def test_get_data_catalog(call, fake_fulcra):
         }
     ]
     text = await call("get_data_catalog")
-    fake_fulcra.v1_catalog.assert_called_once_with(data_type=None, category=None)
+    fake_fulcra.v1_catalog.assert_called_once_with(
+        data_type=None, category=None, fulcra_userid=None
+    )
     assert "heart_rate" in text
 
 
