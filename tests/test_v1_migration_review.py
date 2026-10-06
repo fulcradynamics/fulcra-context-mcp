@@ -165,9 +165,28 @@ async def test_catalog_exposes_nested_message_schema(call, fake_fulcra):
     assert '"body"' in text and '"required"' in text
 
 
-@pytest.mark.xfail(strict=True, reason="SDK parse_v1_shorthand ignores extra path segments, so malformed IDs mutate a real type")
 @pytest.mark.parametrize("tool", ["archive_data_type", "restore_data_type"])
-async def test_malformed_v1_lifecycle_ids_do_not_mutate_types(call, fake_fulcra, tool):
+@pytest.mark.parametrize("data_type", [
+    f"Event/{TYPE_UUID}/unexpected",
+    f"Metric/{TYPE_UUID}x",
+    f"MomentAnnotation/{TYPE_UUID}/unexpected",
+    f"BooleanAnnotation/{TYPE_UUID}x",
+    f"NotAType/{TYPE_UUID}",
+    f"/{TYPE_UUID}",
+])
+async def test_malformed_lifecycle_ids_do_not_mutate_types(call, fake_fulcra, tool, data_type):
     fake_fulcra.update_data_type.return_value = {"id": f"Event/{TYPE_UUID}"}
-    await call(tool, {"data_type": f"Event/{TYPE_UUID}/unexpected"})
+    text = await call(tool, {"data_type": data_type})
+    assert "not a valid ID" in text or "not a user-defined data type ID" in text, text
     fake_fulcra.update_data_type.assert_not_called()
+    fake_fulcra.delete_annotation.assert_not_called()
+    fake_fulcra.restore_annotation.assert_not_called()
+
+
+@pytest.mark.parametrize("tool", ["archive_data_type", "restore_data_type"])
+async def test_annotation_lifecycle_uses_its_uuid(call, fake_fulcra, tool):
+    fake_fulcra.restore_annotation.return_value = {"id": TYPE_UUID}
+    text = await call(tool, {"data_type": f"MomentAnnotation/{TYPE_UUID}"})
+    assert text.startswith("Archived" if tool.startswith("archive") else "Restored"), text
+    method = fake_fulcra.delete_annotation if tool.startswith("archive") else fake_fulcra.restore_annotation
+    method.assert_called_once_with(TYPE_UUID)

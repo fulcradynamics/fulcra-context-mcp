@@ -164,15 +164,6 @@ V0_TYPE_TOOLS = {
 }
 
 
-def _parse_annotation_id(data_type: str) -> str | None:
-    """Extract the annotation UUID from a '<BaseType>/<uuid>' ID or a bare UUID."""
-    candidate = data_type.rsplit("/", 1)[-1]
-    try:
-        return str(UUID(candidate))
-    except ValueError:
-        return None
-
-
 # The v1 custom base types create_data_type offers, by base_type choice.
 V1_BASE_BY_TYPE = {"event": "Event", "metric": "Metric"}
 ANNOTATION_TYPES = tuple(t.value for t in AnnotationType)
@@ -360,8 +351,17 @@ def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | 
             return data_type_management.parse_v1_shorthand(data_type)
         except ValueError:
             return f"{data_type!r} is not a valid ID; v1 user-defined types take the form '{base}/<uuid>'."
-    if (ann_id := _parse_annotation_id(data_type)) is not None:
-        return None, ann_id
+    if sep and base in data_type_management.ANNOTATION_BASE_TYPES:
+        try:
+            return None, data_type_management.parse_annotation_shorthand(data_type)[1]
+        except ValueError:
+            return f"{data_type!r} is not a valid ID; annotation types take the form '{base}/<uuid>'."
+    # A bare annotation UUID, as older clients pass.
+    if not sep:
+        try:
+            return None, str(UUID(data_type))
+        except ValueError:
+            pass
     return (
         f"{data_type!r} is not a user-defined data type ID. Built-in types "
         f"(e.g. Event, HeartRate) can't be {action}; only user-defined types "
