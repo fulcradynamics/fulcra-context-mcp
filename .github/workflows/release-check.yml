@@ -1,0 +1,35 @@
+name: release metadata
+
+# Catches a bad release PR in review rather than halfway through publishing:
+# pyproject.toml and server.json must agree, server.json must pass the
+# registry's checks, and any change to it must raise its version.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  MCP_PUBLISHER_VERSION: v1.8.1
+
+jobs:
+  # A required status check in the branch ruleset (infrastructure:
+  # tf/github/repos/fulcra-context-mcp), matched by this job name.
+  release-metadata:
+    name: release-metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - name: Check versions and server.json
+        run: >
+          uv run --no-project --with jsonschema
+          python scripts/release.py check --github --base "origin/${{ github.base_ref }}"
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+      - name: Validate with the registry's own rules
+        run: ./mcp-publisher validate
