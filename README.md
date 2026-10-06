@@ -31,6 +31,8 @@ Example Claude Desktop config using `uvx`:
 
 ### Debugging / Developer Tools
 
+- [AICQ Hello World MCP App](docs/hello-app.md): run this checkout through a private development tunnel and test the ChatGPT sidebar UI. The HTML ships with this server, not a separate plugin server.
+
 - Both the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) and [mcp-remote](https://github.com/geelen/mcp-remote) tools can be useful in debugging.
 
 #### Viewing Tools

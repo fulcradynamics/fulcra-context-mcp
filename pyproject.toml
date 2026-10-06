@@ -43,3 +43,6 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 fulcra-context-mcp = "fulcra_mcp.main:main"
+
+[tool.setuptools.package-data]
+fulcra_mcp = ["ui/*.html", "static/icon.png", "static/.well-known/*.json"]

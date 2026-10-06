@@ -13,6 +13,7 @@ from pydantic import AnyHttpUrl
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
+from .apps import app_mcp
 from .logging_config import configure_logging
 from .provider import oauth_provider
 from .settings import settings
@@ -35,6 +36,7 @@ mcp = FastMCP(
     auth=oauth_provider,
 )
 mcp.mount(tools_mcp)
+mcp.mount(app_mcp)
 
 
 # Add CORS middleware for browser-based clients
