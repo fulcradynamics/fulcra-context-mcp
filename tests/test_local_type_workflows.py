@@ -20,6 +20,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import jsonschema
 import pytest
 from fulcra_api.core import FulcraAPI
 
@@ -263,13 +264,40 @@ async def test_peer_can_discover_shared_v1_fields(call, local_fulcra):
         share_id = shared["datashare_id"]
         peer = LocalFulcra(peer_id)
         tools_module.get_fulcra_object = lambda: peer
-        text = await call("get_data_catalog", {"data_type": type_id})
+        text = await call("get_data_catalog", {
+            "data_type": type_id, "fulcra_userid": local_fulcra.user_id,
+        })
         assert text.startswith("Available data types"), text
         entries = [entry for group in payload(text).values() for entry in group]
         assert entries[0]["fields"] == {"note": "string"}
         assert entries[0]["recordable"] is False
+        assert entries[0]["fulcra_userid"] == local_fulcra.user_id
     finally:
         tools_module.get_fulcra_object = lambda: local_fulcra
         if share_id:
             await call("delete_share", {"share_id": share_id})
+        await call("archive_data_type", {"data_type": type_id})
+
+
+@pytest.mark.xfail(strict=True, raises=jsonschema.ValidationError,
+                   reason="MCP catalog discards nullable custom field semantics")
+@pytest.mark.parametrize("field", [
+    {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+    {"type": ["string", "null"], "minLength": 1},
+])
+async def test_nullable_schema_catalog_matches_sdk_validation(call, local_fulcra, field):
+    created = await call("create_data_type", {
+        "base_type": "event", "name": f"mcp-nullability-audit-{uuid4()}",
+        "description": "Disposable schema fidelity audit",
+        "fields": {"properties": {"state": field}, "required": ["state"]},
+    })
+    assert created.startswith("Created data type "), created
+    type_id = created.split(": ", 1)[0].removeprefix("Created data type ")
+    try:
+        assert not local_fulcra.validate_records(type_id, [{"state": None}], "v1")
+        catalog = payload(await call("get_data_catalog", {"data_type": type_id}))
+        [entry] = [e for group in catalog.values() for e in group]
+        assert entry["required_fields"] == ["state"]
+        jsonschema.validate(None, entry["fields"]["state"])
+    finally:
         await call("archive_data_type", {"data_type": type_id})

@@ -2,6 +2,7 @@
 
 import json
 
+import jsonschema
 import pytest
 from fulcra_api.core import FulcraAPI
 
@@ -163,6 +164,28 @@ async def test_catalog_exposes_nested_message_schema(call, fake_fulcra):
     }
     text = await call("get_data_catalog", {"data_type": type_id})
     assert '"body"' in text and '"required"' in text
+
+
+@pytest.mark.xfail(strict=True, raises=(jsonschema.ValidationError, jsonschema.SchemaError),
+                   reason="catalog field summaries discard nullability and rewrite union types")
+@pytest.mark.parametrize("field,value", [
+    ({"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}, None),
+    ({"type": ["string", "null"], "minLength": 1}, None),
+    ({"type": ["string", "number"], "enum": ["pending", 1]}, 1),
+])
+async def test_catalog_field_rules_preserve_valid_values(call, fake_fulcra, field, value):
+    type_id = f"Event/{TYPE_UUID}"
+    fake_fulcra.v1_catalog.return_value = [{"id": type_id, "api_version": "v1", "class": "event"}]
+    fake_fulcra.v1_catalog_schema.return_value = {
+        "properties": {"state": field}, "required": ["state"],
+    }
+    jsonschema.validate(value, field)
+    text = await call("get_data_catalog", {"data_type": type_id})
+    [entry] = [e for g in json.loads(text[text.index("{"):]).values() for e in g]
+    assert entry["required_fields"] == ["state"]
+    # Fields with constraints are documented as JSON Schema, so they must
+    # remain valid schemas accepting the original field's valid values.
+    jsonschema.validate(value, entry["fields"]["state"])
 
 
 @pytest.mark.parametrize("tool", ["archive_data_type", "restore_data_type"])
