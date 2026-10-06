@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # release.yml runs these before publishing.
+  workflow_call:
 
 jobs:
   test:
