@@ -3,7 +3,7 @@
   "name": "com.fulcradynamics/context",
   "title": "Fulcra",
   "description": "Connect your Fulcra Context personal datastore: access your metrics, events, agent data and more",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "websiteUrl": "https://fulcradynamics.com",
   "repository": {
     "url": "https://github.com/fulcradynamics/fulcra-context-mcp",
@@ -28,7 +28,7 @@
     {
       "registryType": "pypi",
       "identifier": "fulcra-context-mcp",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       }
