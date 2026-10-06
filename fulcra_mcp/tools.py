@@ -12,7 +12,7 @@ from uuid import UUID
 
 import structlog
 from fastmcp import FastMCP
-from fulcra_api import records
+from fulcra_api import data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
@@ -142,74 +142,172 @@ async def get_workouts(
 @tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
 @_friendly_http_errors
 async def annotations_catalog() -> str:
-    """
-    Get the list of all annotation data types the user has defined.
-    This does not get the actual values the user has recorded; for that, use the `get_records` tool.
-    Use this tool to get the IDs and types to pass to `get_records`.
+    """Deprecated: use get_data_catalog(category="user_configured") instead.
+
+    That lists every user-defined type, including Event/Metric ones, with the
+    IDs get_records takes; this lists only older annotation types, by bare UUID.
     """
     fulcra = get_fulcra_object()
     catalog = fulcra.annotations_catalog()
     return "Defined annotations: " + json.dumps(catalog)
 
 
-# Base annotation types; ids rooted in one of these (including custom
-# "<Base>/<uuid>" types) are readable with the `get_records` tool.
-ANNOTATION_BASE_TYPES = tuple(f"{t.name}Annotation" for t in AnnotationType)
 ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
 NO_TOOL_GROUP = "data types not yet readable through this server"
 
+# v0 event types with a dedicated tool of their own
+V0_TYPE_TOOLS = {
+    "apple_workouts": "get_workouts",
+    "calendars": "get_calendars",
+    "calendar_events": "get_calendar_events",
+}
 
-def _parse_annotation_id(data_type: str) -> str | None:
-    """Extract the annotation UUID from a '<BaseType>/<uuid>' ID or a bare UUID."""
-    candidate = data_type.rsplit("/", 1)[-1]
+
+# The v1 custom base types create_data_type offers, by base_type choice.
+V1_BASE_BY_TYPE = {"event": "Event", "metric": "Metric"}
+ANNOTATION_TYPES = tuple(t.value for t in AnnotationType)
+
+# The base_type values each create_data_type option applies to.
+CREATE_OPTION_BASES = {
+    "fields": ("event", "metric"),
+    "scale": ("metric",),
+    "value_map": ("metric",),
+    "unit": ("metric", "numeric"),
+    "metric_kind": ("metric", "boolean", "numeric", "scale"),
+    "default_value": ("boolean", "numeric"),
+    "scale_labels": ("scale",),
+    "tags": ANNOTATION_TYPES,
+}
+
+
+def _http_error_detail(e: urllib.error.HTTPError) -> str:
+    """The server's reason for an HTTP error: a JSON body's "detail" when there
+    is one, else the start of the raw body."""
     try:
-        return str(UUID(candidate))
-    except ValueError:
-        return None
+        body = e.read().decode("utf-8", errors="replace")
+    except Exception:
+        body = ""
+    try:
+        detail = json.loads(body).get("detail")
+    except (json.JSONDecodeError, AttributeError):
+        detail = None
+    if detail:
+        return detail if isinstance(detail, str) else json.dumps(detail)[:300]
+    return body[:300].strip() or str(getattr(e, "reason", "")) or "no details provided"
+
+
+def _slim_v1_spec(spec: dict) -> dict:
+    """A v1 data type spec with its record schema (a long JSON string merged
+    with the base type's fields) replaced by just the type's own fields."""
+    record_spec = dict(spec.get("record_spec") or {})
+    schema = record_spec.pop("schema", None)
+    slim = {**spec, "record_spec": record_spec}
+    if isinstance(schema, str):
+        try:
+            schema = json.loads(schema)
+        except json.JSONDecodeError:
+            schema = None
+    if isinstance(schema, dict):
+        fields, required = _user_defined_fields(schema)
+        if fields:
+            slim["fields"] = fields
+        if required:
+            slim["required_fields"] = required
+    return slim
 
 
 @tools_mcp.tool(annotations={"title": "Create Data Type", "destructiveHint": False})
 @_friendly_http_errors
 async def create_data_type(
-    base_type: Literal["moment", "duration", "boolean", "numeric", "scale"],
+    base_type: Literal["event", "metric", "moment", "duration", "boolean", "numeric", "scale"],
     name: str,
     description: str | None = None,
+    fields: dict[str, Any] | None = None,
     tags: list[str] | None = None,
     metric_kind: Literal["cumulative", "discrete"] | None = None,
     default_value: str | None = None,
     unit: str | None = None,
+    scale: dict[str, int] | None = None,
+    value_map: dict[int, str] | None = None,
     scale_labels: list[str] | None = None,
 ) -> str:
     """Create a user-defined data type so the user can track something new.
 
-    Choose base_type by what gets recorded: "moment" (a point in time),
-    "duration" (a time range), "boolean" (yes/no), "numeric" (a number,
-    optionally with a unit), or "scale" (a 1-5 rating with labels).
+    For new tracking prefer base_type "event" (something that happens, at a
+    time or over a range) or "metric" (a measured number); both can add custom
+    fields. The older annotation bases "moment", "duration", "boolean",
+    "numeric" and "scale" (a 1-5 rating) still work but take no fields.
 
-    The new type appears in get_data_catalog, and recorded values are readable
-    with get_records. Creation is reversible with archive_data_type.
+    Record with record_data (custom fields go in its `fields`);
+    get_data_catalog(data_type=<id>) lists a type's fields; get_records reads
+    it back. Reversible with archive_data_type.
 
     Args:
         base_type: What kind of values this type records (see above).
         name: Human-readable name (e.g. "Caffeine Intake").
-        description: Optional description of what the type tracks.
-        tags: Optional tag names to attach; missing tags are created automatically.
-        metric_kind: "cumulative" or "discrete". boolean/numeric/scale only.
+        description: What the type tracks. Required for event/metric.
+        fields: JSON Schema of custom fields. event/metric only. E.g.
+            {"properties": {"mood": {"type": "string"}}, "required": ["mood"]}.
+        tags: Tag names to attach; missing tags are created. Annotation bases only.
+        metric_kind: "cumulative" or "discrete". metric/boolean/numeric/scale only.
         default_value: Value pre-filled when recording. boolean/numeric only.
-        unit: Unit for recorded values (e.g. "mg"). numeric only.
+        unit: Unit for recorded values (e.g. "mg"). metric/numeric only.
+        scale: Value range, {"min": 1, "max": 10, "step": 1}. metric only.
+        value_map: Labels for values, e.g. {"1": "low", "5": "high"}. metric only.
         scale_labels: Exactly 5 labels for the 1-5 scale values. scale only.
     Returns:
         The created data type, including its "<BaseType>/<uuid>" ID.
     """
-    if scale_labels is not None and base_type != "scale":
-        return "scale_labels can only be used with base_type='scale'."
+    given = {
+        "fields": fields,
+        "scale": scale,
+        "value_map": value_map,
+        "unit": unit,
+        "metric_kind": metric_kind,
+        "default_value": default_value,
+        "scale_labels": scale_labels,
+        "tags": tags,
+    }
+    for option, value in given.items():
+        bases = CREATE_OPTION_BASES[option]
+        if value is not None and base_type not in bases:
+            return (
+                f"{option} can only be used with base_type "
+                + " or ".join(f"'{b}'" for b in bases)
+                + "."
+            )
+
+    fulcra = get_fulcra_object()
+
+    if base_type in V1_BASE_BY_TYPE:
+        if description is None or not description.strip():
+            return f"base_type='{base_type}' requires a description of what the type tracks."
+        if scale is not None:
+            if "min" not in scale or "max" not in scale:
+                return 'scale needs "min" and "max" (and optionally "step"), e.g. {"min": 1, "max": 10}.'
+            # the server doesn't default the step itself
+            scale = {"step": 1, **scale}
+        try:
+            created = data_type_management.create_data_type(
+                fulcra,
+                {"id": V1_BASE_BY_TYPE[base_type], "api_version": "v1"},
+                name,
+                description=description,
+                unit=unit,
+                aggregation=metric_kind,
+                scale=scale,
+                value_map=value_map,
+                fields_schema=fields,
+            )
+        except ValueError as e:
+            return str(e)
+        except urllib.error.HTTPError as e:
+            return f"Could not create data type (HTTP {e.code}): {_http_error_detail(e)}"
+        return f"Created data type {created['id']}: " + json.dumps(_slim_v1_spec(created))
+
     if base_type == "scale" and len(scale_labels or []) != 5:
         return "base_type='scale' requires exactly 5 scale_labels, one per value 1-5."
-    if unit is not None and base_type != "numeric":
-        return "unit can only be used with base_type='numeric'."
-    if metric_kind is not None and base_type in ("moment", "duration"):
-        return "metric_kind can only be used with boolean, numeric, or scale types."
 
     value = None
     if default_value is not None:
@@ -221,15 +319,12 @@ async def create_data_type(
                 value = False
             else:
                 return f"default_value {default_value!r} is not a valid boolean."
-        elif base_type == "numeric":
+        else:
             try:
                 value = float(default_value)
             except ValueError:
                 return f"default_value {default_value!r} is not a valid number."
-        else:
-            return "default_value can only be used with boolean or numeric types."
 
-    fulcra = get_fulcra_object()
     try:
         ann = fulcra.create_annotation(
             annotation_type=base_type,
@@ -242,9 +337,37 @@ async def create_data_type(
             scale_labels=scale_labels,
         )
     except urllib.error.HTTPError as e:
-        return f"Could not create data type (HTTP {e.code}): {e.read().decode('utf-8', errors='replace')[:300]}"
+        return f"Could not create data type (HTTP {e.code}): {_http_error_detail(e)}"
     catalog_id = f"{ANNOTATION_ID_BY_TYPE[base_type]}/{ann['id']}"
     return f"Created data type {catalog_id}: " + json.dumps(ann)
+
+
+def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | str:
+    """(v1 base type or None for an annotation, the type's UUID) from a
+    user-defined type ID, or an error message if it isn't one."""
+    base, sep, _ = data_type.partition("/")
+    if sep and data_type_management.is_v1_base_type(base):
+        try:
+            return data_type_management.parse_v1_shorthand(data_type)
+        except ValueError:
+            return f"{data_type!r} is not a valid ID; v1 user-defined types take the form '{base}/<uuid>'."
+    if sep and base in data_type_management.ANNOTATION_BASE_TYPES:
+        try:
+            return None, data_type_management.parse_annotation_shorthand(data_type)[1]
+        except ValueError:
+            return f"{data_type!r} is not a valid ID; annotation types take the form '{base}/<uuid>'."
+    # A bare annotation UUID, as older clients pass.
+    if not sep:
+        try:
+            return None, str(UUID(data_type))
+        except ValueError:
+            pass
+    return (
+        f"{data_type!r} is not a user-defined data type ID. Built-in types "
+        f"(e.g. Event, HeartRate) can't be {action}; only user-defined types "
+        "can, by their '<BaseType>/<uuid>' ID (see get_data_catalog, category "
+        "'user_configured')."
+    )
 
 
 @tools_mcp.tool(annotations={"title": "Archive Data Type", "destructiveHint": True})
@@ -257,17 +380,18 @@ async def archive_data_type(data_type: str) -> str:
     can be archived.
 
     Args:
-        data_type: The "<BaseType>/<uuid>" ID from get_data_catalog, or the bare UUID.
+        data_type: The "<BaseType>/<uuid>" ID from get_data_catalog.
     """
-    ann_id = _parse_annotation_id(data_type)
-    if ann_id is None:
-        return (
-            "data_type must be a user-defined type ID of the form '<BaseType>/<uuid>' "
-            "(see get_data_catalog, category 'user_configured') or a bare UUID."
-        )
+    parsed = _user_defined_type(data_type, "archived")
+    if isinstance(parsed, str):
+        return parsed
+    v1_base, type_uuid = parsed
     fulcra = get_fulcra_object()
     try:
-        fulcra.delete_annotation(ann_id)
+        if v1_base:
+            data_type_management.archive_data_type(fulcra, v1_base, type_uuid)
+        else:
+            fulcra.delete_annotation(type_uuid)
     except urllib.error.HTTPError as e:
         # The server responds 403 for IDs that don't exist or belong to another user.
         if e.code in (403, 404):
@@ -286,23 +410,26 @@ async def restore_data_type(data_type: str) -> str:
     """Restore an archived user-defined data type.
 
     Args:
-        data_type: The "<BaseType>/<uuid>" ID of the archived type, or the bare UUID.
+        data_type: The "<BaseType>/<uuid>" ID of the archived type.
     """
-    ann_id = _parse_annotation_id(data_type)
-    if ann_id is None:
-        return (
-            "data_type must be a user-defined type ID of the form '<BaseType>/<uuid>' "
-            "or a bare UUID."
-        )
+    parsed = _user_defined_type(data_type, "restored")
+    if isinstance(parsed, str):
+        return parsed
+    v1_base, type_uuid = parsed
     fulcra = get_fulcra_object()
     try:
-        ann = fulcra.restore_annotation(ann_id)
+        if v1_base:
+            restored = _slim_v1_spec(
+                data_type_management.restore_data_type(fulcra, v1_base, type_uuid)
+            )
+        else:
+            restored = fulcra.restore_annotation(type_uuid)
     except urllib.error.HTTPError as e:
         # The server responds 403 for IDs that don't exist or belong to another user.
         if e.code in (403, 404):
             return f"No archived data type of this user found with ID {data_type!r}."
         raise
-    return f"Restored data type {data_type}: " + json.dumps(ann)
+    return f"Restored data type {data_type}: " + json.dumps(restored)
 
 
 # Stamped into every record written through this server, mirroring the CLI's
@@ -450,7 +577,8 @@ async def record_data(
 
     validation_errors = fulcra.validate_records(target_type, [record], api_version)
     if validation_errors:
-        _, error_msg, _ = validation_errors[0]
+        # every error for the one record, most relevant first
+        error_msg = "; ".join(dict.fromkeys(msg for _, msg, _ in validation_errors))
         hint = ""
         if "recorded_at" in error_msg and "object" in error_msg:
             hint = " This type records a time range; pass both start_time and end_time."
@@ -474,9 +602,10 @@ def _compatible_tools(entry: dict) -> str:
             return "data types usable with: get_time_series | get_records"
         if entry.get("class") == "location":
             return "data types usable with: get_location_at_time | get_location_time_series"
-    if entry.get("id", "").startswith(ANNOTATION_BASE_TYPES):
-        return "data types usable with: get_records"
-    if entry.get("api_version") == "v1alpha1":
+        if entry.get("id") in V0_TYPE_TOOLS:
+            return f"data types usable with: {V0_TYPE_TOOLS[entry['id']]}"
+    # Annotations (built-in and user-defined) and v1 types, user-defined included
+    if entry.get("api_version") in ("v1alpha1", "v1"):
         return "data types usable with: get_records"
     return NO_TOOL_GROUP
 
@@ -501,6 +630,10 @@ def _slim_entry(entry: dict) -> dict:
         slim["value_map"] = record_spec["value_map"]
     if entry.get("recordable") is False:
         slim["recordable"] = False
+    # A shared type's owner: the account a read of it has to name, and the only
+    # thing telling it apart from the caller's own type of the same ID.
+    if "shared_type" in (entry.get("categories") or []) and entry.get("fulcra_userid"):
+        slim["fulcra_userid"] = entry["fulcra_userid"]
     return slim
 
 
@@ -509,6 +642,8 @@ def _schema_type(prop: dict) -> str:
     Pydantic's nullable anyOf, the non-null type."""
     if isinstance(prop.get("type"), str):
         return prop["type"]
+    if isinstance(prop.get("type"), list):
+        return "|".join(t for t in prop["type"] if t != "null") or "any"
     types = [
         option["type"]
         for option in prop.get("anyOf", [])
@@ -521,17 +656,41 @@ def _is_user_defined_v1(entry: dict) -> bool:
     return entry.get("api_version") == "v1" and "/" in entry.get("id", "")
 
 
-def _user_defined_fields(schema: dict) -> dict[str, str]:
-    """A user-defined v1 type's fields and their types (what record_data takes
-    in `fields`), from its record schema."""
+# Schema keywords that say nothing about what a valid value is
+SCHEMA_NOISE_KEYWORDS = frozenset({"title", "default"})
+
+
+def _field_schema(prop: dict) -> str | dict:
+    """How to fill one field: just its type name when that's all there is to it,
+    otherwise its JSON Schema (nested fields and their required keys, allowed
+    values, ranges, a description). Pydantic's nullable anyOf is unwrapped,
+    since whether a field is required is listed separately."""
+    options = [o for o in prop.get("anyOf", []) if isinstance(o, dict)]
+    non_null = [o for o in options if o.get("type") != "null"]
+    if options and len(non_null) == 1:
+        prop = {**{k: v for k, v in prop.items() if k != "anyOf"}, **non_null[0]}
+    if isinstance(prop.get("type"), list):
+        prop = {**prop, "type": _schema_type(prop)}
+    schema = {k: v for k, v in prop.items() if k not in SCHEMA_NOISE_KEYWORDS}
+    if set(schema) <= {"type"}:
+        return _schema_type(prop)
+    return schema
+
+
+def _user_defined_fields(schema: dict) -> tuple[dict[str, str | dict], list[str]]:
+    """A user-defined v1 type's fields (what record_data takes in `fields`) and
+    which of them are required, from its record schema."""
     properties = schema.get("properties") if isinstance(schema, dict) else None
     if not isinstance(properties, dict):
-        return {}
-    return {
-        name: _schema_type(properties[name])
+        return {}, []
+    fields = {
+        name: _field_schema(properties[name])
         for name in _recordable_fields(properties)
         if name not in V1_RECORD_FIELDS_SET_BY_TOOL and isinstance(properties[name], dict)
     }
+    required = schema.get("required")
+    required = sorted(f for f in required if f in fields) if isinstance(required, list) else []
+    return fields, required
 
 
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
@@ -540,40 +699,67 @@ async def get_data_catalog(
     data_type: str | None = None,
     category: str | None = None,
     name: str | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
     """Get all data types available for this user, grouped by relevant MCP tool.
     Includes location, events, user-defined types and annotations, and
     measurements from connected devices.
 
     Call this before requesting time-series data or raw records, and only use a
-    data type with the tools named in its group.
+    data type with the tools named in its group. A type shared by another user
+    carries that user's fulcra_userid; pass it to read their data.
 
     Args:
         data_type: Optional. Return only the data type with this exact ID.
             For a user-defined type, this also lists its fields (what
-            record_data takes in `fields`).
+            record_data takes in `fields`): a type name, or the field's JSON
+            Schema if it has nested fields or rules; plus required_fields.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_configured", "base_type".
         name: Optional. Filter results by partial, case-insensitive name match.
+        fulcra_userid: Optional. Only the types this Fulcra user shares with
+            you (your own ID: only your own types).
     """
     fulcra = get_fulcra_object()
+    owner = f" for user {fulcra_userid}" if fulcra_userid else ""
     try:
-        catalog = fulcra.v1_catalog(data_type=data_type, category=category)
+        catalog = fulcra.v1_catalog(
+            data_type=data_type, category=category, fulcra_userid=fulcra_userid
+        )
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return f"No data type found with ID {data_type!r}. Call get_data_catalog without arguments to list all available types."
+            return f"No data type found with ID {data_type!r}{owner}. Call get_data_catalog without arguments to list all available types."
         raise
     if name:
         catalog = [e for e in catalog if name.lower() in (e.get("name") or "").lower()]
+    if fulcra_userid and not catalog:
+        return (
+            f"No data types{owner} match. If this is another user, they share "
+            "nothing matching with you; list_shares shows who shares what."
+        )
     grouped: dict[str, list[dict]] = {}
     for entry in catalog:
         slim = _slim_entry(entry)
         # The catalog doesn't carry schemas; fetch one only for a single type.
+        # A shared type is looked up in its owner's account, not the caller's.
+        # The field list is a bonus: if the schema can't be fetched, still
+        # return the entry rather than failing the whole call.
         if data_type and len(catalog) == 1 and _is_user_defined_v1(entry):
-            schema = fulcra.v1_catalog_schema(entry["id"], "v1")
-            if fields := _user_defined_fields(schema):
-                slim["fields"] = fields
+            try:
+                schema = fulcra.v1_catalog_schema(
+                    entry["id"], "v1", fulcra_userid=entry.get("fulcra_userid")
+                )
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "data_type_schema_unavailable", data_type=entry["id"], status=e.code
+                )
+            else:
+                fields, required = _user_defined_fields(schema)
+                if fields:
+                    slim["fields"] = fields
+                if required:
+                    slim["required_fields"] = required
         grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
@@ -604,7 +790,8 @@ async def get_time_series(
         calculations: Extra per-slice calculations to include.
             One or more of "max", "min", "delta", "mean", "uniques",
             "allpoints", "rollingmean". Not supported on "cumulative" kinds.
-        fulcra_userid: Retrieve data for another Fulcra user (if shared)
+        fulcra_userid: Retrieve data for another Fulcra user (if shared); a
+            shared type's get_data_catalog entry carries its owner's ID.
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
@@ -675,7 +862,8 @@ async def get_records(
         data_type: The data type ID, as returned by `get_data_catalog`.
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        fulcra_userid: Retrieve data for another Fulcra user (if shared)
+        fulcra_userid: Retrieve data for another Fulcra user (if shared); a
+            shared type's get_data_catalog entry carries its owner's ID.
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err

@@ -44,6 +44,111 @@ async def test_create_data_type(call, fake_fulcra):
     assert text.startswith(f"Created data type NumericAnnotation/{ANN_UUID}")
 
 
+V1_UUID = "df10403a-2115-4254-9e49-e48ca0af6f5d"
+
+
+def _v1_spec(type_id: str, record_spec: dict) -> dict:
+    """a v1 data type spec as the API returns it"""
+    return {"id": type_id, "api_version": "v1", "record_spec": record_spec}
+
+
+async def test_create_v1_event_data_type(call, fake_fulcra):
+    type_id = f"Event/{V1_UUID}"
+    fields = {"properties": {"mood": {"type": "string"}}, "required": ["mood"]}
+    fake_fulcra.create_data_type.return_value = _v1_spec(
+        type_id,
+        {
+            "type": "event",
+            "schema": json.dumps(
+                {"properties": {"id": {"type": "string"}, "mood": {"type": "string"}}}
+            ),
+        },
+    )
+    text = await call(
+        "create_data_type",
+        {
+            "base_type": "event",
+            "name": "Check-in",
+            "description": "How I feel",
+            "fields": fields,
+        },
+    )
+    fake_fulcra.create_data_type.assert_called_once_with(
+        "Event",
+        {
+            "name": "Check-in",
+            "description": "How I feel",
+            "record_spec": {"schema": json.dumps(fields)},
+        },
+    )
+    fake_fulcra.create_annotation.assert_not_called()
+    assert text.startswith(f"Created data type {type_id}: ")
+    created = json.loads(text.split(": ", 1)[1])
+    # the merged record schema is summarized as the type's own fields
+    assert "schema" not in created["record_spec"]
+    assert created["fields"] == {"mood": "string"}
+
+
+async def test_create_v1_metric_data_type(call, fake_fulcra):
+    type_id = f"Metric/{V1_UUID}"
+    fake_fulcra.create_data_type.return_value = _v1_spec(type_id, {"type": "metric"})
+    text = await call(
+        "create_data_type",
+        {
+            "base_type": "metric",
+            "name": "Caffeine",
+            "description": "Caffeine intake",
+            "unit": "mg",
+            "metric_kind": "cumulative",
+            "scale": {"min": 0, "max": 500},
+            "value_map": {"0": "none"},
+        },
+    )
+    fake_fulcra.create_data_type.assert_called_once_with(
+        "Metric",
+        {
+            "name": "Caffeine",
+            "description": "Caffeine intake",
+            "record_spec": {
+                "unit": "mg",
+                "aggregation": "cumulative",
+                # the server doesn't default the step, so the tool does
+                "scale": {"step": 1, "min": 0, "max": 500},
+                "value_map": {0: "none"},
+            },
+        },
+    )
+    assert text.startswith(f"Created data type {type_id}: ")
+
+
+@pytest.mark.parametrize("base_type", ["Event", "Metric"])
+@pytest.mark.parametrize(
+    "tool,deprecated", [("archive_data_type", True), ("restore_data_type", False)]
+)
+async def test_archive_and_restore_v1_data_type(
+    call, fake_fulcra, base_type, tool, deprecated
+):
+    type_id = f"{base_type}/{V1_UUID}"
+    fake_fulcra.update_data_type.return_value = _v1_spec(type_id, {})
+    text = await call(tool, {"data_type": type_id})
+    fake_fulcra.update_data_type.assert_called_once_with(
+        base_type, V1_UUID, {"deprecated": deprecated}
+    )
+    fake_fulcra.delete_annotation.assert_not_called()
+    fake_fulcra.restore_annotation.assert_not_called()
+    verb = "Archived" if deprecated else "Restored"
+    assert text.startswith(f"{verb} data type {type_id}")
+
+
+async def test_archive_annotation_data_type(call, fake_fulcra):
+    text = await call(
+        "archive_data_type", {"data_type": f"MomentAnnotation/{ANN_UUID}"}
+    )
+    fake_fulcra.delete_annotation.assert_called_once_with(ANN_UUID)
+    fake_fulcra.update_data_type.assert_not_called()
+    assert text.startswith("Archived data type")
+
+
 async def test_restore_data_type(call, fake_fulcra):
     fake_fulcra.restore_annotation.return_value = {"id": ANN_UUID}
     text = await call(
@@ -90,7 +195,9 @@ async def test_get_data_catalog(call, fake_fulcra):
         }
     ]
     text = await call("get_data_catalog")
-    fake_fulcra.v1_catalog.assert_called_once_with(data_type=None, category=None)
+    fake_fulcra.v1_catalog.assert_called_once_with(
+        data_type=None, category=None, fulcra_userid=None
+    )
     assert "heart_rate" in text
 
 

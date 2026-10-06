@@ -100,7 +100,7 @@ Local connection using `uvx`:
 
 ## MCP tools and tips
 
-There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info`, `get_data_catalog`, and `annotations_catalog`, to get a sense of what the user has chosen to record. Then use the other tools (e.g. `get_time_series`, `get_records`, `get_sleep`, etc.) to get the data for specific time range(s).
+There are MCP tools available to both get general information about the user and specific data. Start with the former, with calls like `get_user_info` and `get_data_catalog`, to get a sense of what the user has chosen to record. Then use the other tools (e.g. `get_time_series`, `get_records`, `get_sleep`, etc.) to get the data for specific time range(s).
 
 `get_data_catalog` returns every available data type grouped by the tools that can read it — only use a data type with the tools named in its group. `get_records` retrieves raw records for any data type in the catalog (including user-defined ones); `get_time_series` computes per-interval values and only supports the types listed under it.
 
@@ -127,7 +127,7 @@ definitions should be earning them.
 Real-time and historical location data, plus calendar events and meeting schedules synced from the user's device calendars (Apple Calendar, including any subscribed Google or other calendars). The location tools return a fused interpretation of where the user was at a given time, combining whatever underlying data sources are available rather than exposing raw per-source samples.
 
 ### User-Defined Data Types & Annotations
-Events, measurements, and notes that users and agents record themselves, in data types they define - anything from project milestones and habits to device usage. Users (and agents, via the CLI's `data-type` and `tag` commands, or the `create_data_type` and `record_data` MCP tools) can define new data types to track; `get_records` reads them back.
+Events, measurements, and notes that users and agents record themselves, in data types they define - anything from project milestones and habits to device usage. Users (and agents, via the CLI's `data-type` and `tag` commands, or the `create_data_type` and `record_data` MCP tools) can define new data types to track; `get_records` reads them back. New types are best based on `Event` or `Metric`, which can carry custom fields (a JSON Schema); `get_data_catalog` with a type's ID lists them, including nested fields, allowed values and which fields are required, and `record_data` fills them via `fields`; a record that breaks one of the type's rules is refused with the reason. The older annotation types (moment, duration, boolean, numeric, scale) still work. `archive_data_type` and `restore_data_type` archive and restore either kind.
 
 ### Files
 Users can upload arbitrary files to their account for storage alongside their data. The CLI's `file` sub-commands support list, stat, upload, download, delete, and version restore.
@@ -136,7 +136,7 @@ Users can upload arbitrary files to their account for storage alongside their da
 
 A user can share files, calendars, and data types with other Fulcra users, or with every member of a *group*, through *datashares*. Sharing is always **read-only**: a recipient can list and read what was shared but can never write into another account. There is no lookup of users by email or name, so people exchange Fulcra user IDs themselves (`get_user_info` and `list_shares` report the caller's own ID; the CLI has `fulcra user-info`).
 
-MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `leave_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. `get_data_updates(include_shared=true)` checks every user who shares with the caller in one call. CLI equivalents: `fulcra share ...`, `fulcra group ...`, `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
+MCP tools: `create_share`, `list_shares`, `delete_share`, `get_groups`, `join_group`, `leave_group`, `create_group`, `delete_group`, plus a `fulcra_userid` parameter on `list_files`, `read_file`, `get_data_updates`, `get_records`, `get_time_series`, `get_workouts`, `get_calendars`, and `get_calendar_events` for reading what another user shares. A shared data type's `get_data_catalog` entry carries its owner's `fulcra_userid`, which is the value to pass when reading it. `get_data_updates(include_shared=true)` checks every user who shares with the caller in one call. CLI equivalents: `fulcra share ...`, `fulcra group ...`, `fulcra file share`, `fulcra file list --user-id`, `fulcra file download --user-id`.
 
 Patterns for agents coordinating on behalf of different users:
 
