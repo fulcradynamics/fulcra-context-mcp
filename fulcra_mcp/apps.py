@@ -5,7 +5,7 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("AICQ UI")
-UI_URI = "ui://aicq/hello/v1.html"
+UI_URI = "ui://aicq/hello/v2.html"
 
 
 @app_mcp.tool(

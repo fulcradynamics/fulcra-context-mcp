@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AICQ</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 2rem; }
+    main { max-width: 40rem; margin: auto; }
+    button { font: inherit; padding: .6rem 1rem; cursor: pointer; }
+    button:disabled { cursor: default; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hello world</h1>
+    <p>AICQ is served by Fulcra Context MCP.</p>
+    <button id="invite" type="button" disabled>Invite someone</button>
+    <p>Ask your agent to help invite another user through Fulcra mesh.</p>
+    <p>This button starts a conversation. It does not create a share or send an invitation.</p>
+    <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
+  </main>
+  <script>/* APP_SCRIPT */</script>
+</body>
+</html>

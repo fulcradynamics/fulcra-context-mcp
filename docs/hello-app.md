@@ -1,18 +1,46 @@
 # AICQ Hello World MCP App
 
 This is the first UI slice, not the mesh roster: `aicq_open({})` returns a greeting
-and advertises `ui://aicq/hello/v1.html`. The existing server serves that resource.
-No separate UI server, data calls, polling, JavaScript build, or OAuth changes.
+and advertises `ui://aicq/hello/v2.html`. The existing server serves that resource.
+No separate UI server, direct data calls, polling, or OAuth changes.
 
 - `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
-- `fulcra_mcp/ui/hello.html`: static UI, included in Python wheels and source distributions.
+- `web/`: UI source and the standard MCP Apps browser SDK.
+- `fulcra_mcp/ui/hello.html`: generated self-contained UI, committed and included in Python wheels and source distributions. No CDN or Node runtime is needed to run the server.
 - `fulcra_mcp/main.py`: mounts the UI alongside the existing tools in both transports.
 
 We use FastMCP's existing MCP Apps support and the documented OpenAI metadata,
-not the separate `openai-mcp-extensions` Python SDK, which currently requires a
-newer MCP major version. No dependency upgrade is needed for this slice.
-The HTML is deliberately static; add the MCP Apps browser SDK when introducing
-host interaction or tool-result rendering. It currently needs no account data.
+not the separate `openai-mcp-extensions` Python SDK. No Python dependency upgrade.
+
+## Invite button
+
+**Invite someone** sends one user-role `ui/message` through the host, asking the
+agent to use `fulcra-mesh` and ask who to invite before creating/sharing anything.
+It does not call data tools, create shares, or send an invitation to another user.
+Install the companion Fulcra plugin so the agent has the mesh skill; the UI does
+not install or deterministically execute skills. The host owns the follow-up turn.
+
+The button enables after the MCP Apps handshake confirms text-message support,
+disables while sending, and reports rejection/transport failure without claiming
+an invitation was sent. Hosts without support show instructions to ask in chat.
+
+When editing UI source (Node 22+):
+
+```sh
+cd web
+npm ci
+npm test
+npm run build
+npx playwright install chromium
+npm run test:browser
+```
+
+Commit both source and regenerated `fulcra_mcp/ui/hello.html`; CI checks they match.
+The browser test uses the real SDK and an iframe host harness, not real ChatGPT.
+After pulling, restart the tunnel, refresh the ChatGPT connection, and reopen AICQ.
+Click the button and verify the conversation receives the mesh request. This is
+separate from the known server-session initialization error; no workaround for
+that error is introduced here.
 
 ## Run this checkout locally
 
@@ -28,7 +56,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v1.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v2.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
