@@ -1,4 +1,6 @@
 import { setupTellAgent } from './tell-agent.js';
+import { readConversation } from './conversation.js';
+export { parseRecords } from './records.js';
 
 export function setupMessages(app, doc) {
   const panel = doc.querySelector('#mesh-detail');
@@ -24,21 +26,19 @@ export function setupMessages(app, doc) {
     }
     endDate.setUTCDate(endDate.getUTCDate() + 1);
     const rangeLabel = `${start.value} through ${end.value} UTC`;
-    const args = { data_type: selected.id, start_time: startDate.toISOString(), end_time: endDate.toISOString() };
-    if (selected.fulcra_userid) args.fulcra_userid = selected.fulcra_userid;
-    status.textContent = `Loading messages — calling get_records… ${rangeLabel}`;
+    const range = { start_time: startDate.toISOString(), end_time: endDate.toISOString() };
+    status.textContent = `Loading messages — calling get_records after refreshing get_data_catalog/list_shares… ${rangeLabel}`;
     load.disabled = true;
     try {
-      const result = await app.callServerTool({ name: 'get_records', arguments: args }, { timeout: 30000 });
+      const result = await readConversation(app, selected, range, () => generation === requestGeneration);
       if (generation !== requestGeneration) return;
-      const { records, truncated } = parseRecords(result, args.data_type);
-      for (const record of records) {
+      for (const { record, source, direction } of result.messages) {
         const item = doc.createElement('li');
         const time = doc.createElement('p');
         const rawTime = record.recorded_at ?? record.start_time;
         const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
-        time.textContent = timestamp && Number.isFinite(+timestamp)
-          ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
+        time.textContent = `${direction} — ` + (timestamp && Number.isFinite(+timestamp)
+          ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable');
         const body = doc.createElement('pre');
         body.textContent = messageText(record);
         const label = doc.createElement('label');
@@ -54,13 +54,13 @@ export function setupMessages(app, doc) {
         const feedback = doc.createElement('p');
         feedback.setAttribute('role', 'status');
         feedback.setAttribute('aria-live', 'polite');
-        setupTellAgent(app, selected, record, input, button, feedback);
+        setupTellAgent(app, source, record, input, button, feedback);
         item.append(time, body, label, button, help, feedback);
         messages.append(item);
       }
-      status.textContent = truncated
-        ? `${records.length} records shown. Partial result — narrow the date range to see the rest.`
-        : `${records.length} messages returned for this range${records.length === 0 ? '. No messages in this range.' : '.'}`;
+      status.textContent = result.warnings.length
+        ? `${result.messages.length} messages shown. ${result.warnings.join(' ')}`
+        : `${result.messages.length} messages returned for this range${result.messages.length === 0 ? '. No messages in this range.' : '.'}`;
       status.textContent += ` Range: ${rangeLabel}.`;
     } catch {
       if (generation !== requestGeneration) return;
@@ -93,17 +93,6 @@ export function setupMessages(app, doc) {
     back.focus();
     void read();
   };
-}
-
-export function parseRecords(result, dataType) {
-  if (result.isError) throw new Error('Tool failed');
-  const text = result.structuredContent?.result ?? result.content?.find(p => p.type === 'text')?.text;
-  if (typeof text !== 'string' || !text.startsWith(`Records for ${dataType} from `)) throw new Error('Unexpected response');
-  const separator = text.indexOf(': [');
-  if (separator < 0) throw new Error('Missing records');
-  const records = JSON.parse(text.slice(separator + 2));
-  if (!Array.isArray(records) || !records.every(r => r && typeof r === 'object' && !Array.isArray(r))) throw new Error('Invalid records');
-  return { records, truncated: text.slice(0, separator).includes('(showing the first ') };
 }
 
 export function messageText(record) {

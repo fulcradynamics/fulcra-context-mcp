@@ -1,6 +1,6 @@
 # AICQ Hello World MCP App
 
-`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v5.html`.
+`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v6.html`.
 The existing server serves that resource. After connecting, the UI makes one
 read-only `get_data_catalog(name="Mesh Outbox")` call through `app.callServerTool`.
 No separate UI server, polling, or OAuth changes.
@@ -17,26 +17,56 @@ after selecting an outbox.
 
 ## Message details
 
-Click an outbox to call `get_records` for that exact data type and, for shared
-outboxes, its catalog-provided `fulcra_userid`. No message read occurs on list load.
-The initial window is today plus the preceding 29 UTC calendar dates; editable
-From/Through dates are inclusive, converted to timezone-aware start/end-exclusive
-bounds. Older messages can be read by changing the range and choosing Load messages.
+Click an outbox, or choose Load messages, to refresh both existing discovery tools:
+`get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`.
+This discovers a newly shared return outbox without a handshake or acknowledgement.
+No record read occurs on list load. Pairing uses exact catalog owner/type IDs, never
+names, envelope routing, or acknowledgement state:
 
-The detail panel shows loading/tool name, returned record count, explicit empty
-and error states, and a partial-result warning when the server truncates its reply.
-Narrow the range for a truncated result; this view does not claim all history.
-Mesh envelopes display their body and available routing/kind/slug/message-ID fields.
-Unrecognized notes remain visible as raw text with a warning. Timestamps, when
-available, are displayed in the browser's local timezone. All content is text-only:
-no message HTML, automatic model context, replies, or acknowledgements.
+- Own selected outbox: its exact outgoing share identifies one unique recipient;
+  that peer's incoming direct share and catalog entry identify one return outbox.
+- Shared selected outbox: its catalog owner identifies the peer; narrow outgoing
+  shares to that peer identify one own outbox. The selected incoming share must
+  also be narrow/direct, and the own counterpart must have one direct recipient.
+- Only explicit `share_all_data=false`, single-type direct shares are eligible;
+  outgoing shares must have one `with_user_ids` recipient, incoming grants must
+  have `grant_type="user"` and `sharing_fulcra_userid`. Group shares, file shares,
+  multiple types/recipients, and all-data shares are not pairing evidence.
+- Catalog channels must support `get_records`. Duplicate owner/type entries and
+  duplicate grants do not create extra channels. Same type IDs in different owners
+  remain distinct. Missing/ambiguous pairing or failed discovery leaves the selected
+  side readable with an explicit incomplete/conversation-unavailable warning.
 
-Back to meshes preserves the list. Late responses from a previous selection cannot
-replace the current detail view. Load messages also retries a failed read. This is
-the selected outbox, not a reconstructed two-way conversation.
+Only the selected outbox and its uniquely paired counterpart are read with
+`get_records`; each retains its own catalog `fulcra_userid` (absent means own).
+Both use the same user-selected date window. The initial window is today plus the
+preceding 29 UTC calendar dates; editable From/Through dates are inclusive, converted
+to timezone-aware start/end-exclusive bounds. Change dates and Load messages to
+read older messages. There is no polling or pagination.
 
-Tool errors, invalid responses, and transport failures/timeouts show an error,
-never a zero count. Reopen to retry. Invitation messaging remains independent.
+The detail panel labels messages Incoming/Outgoing, sorts them chronologically,
+and displays timestamps in the browser's local timezone. Missing/invalid timestamps
+are labeled unavailable and placed last. Each Tell My Agent control uses that
+message's original source outbox/owner/type, not the selected channel's identity.
+Mesh envelopes display their body and available routing/kind/slug/message-ID fields;
+unrecognized notes remain visible as raw text. All content is text-only: no message
+HTML, automatic model context, replies, or acknowledgements.
+
+Read errors and truncation are identified per source; successful messages from the
+other side remain visible. Zero records is only reported as an empty conversation
+when discovery/pairing and both reads succeed without truncation. Narrow the range
+for truncated results; this view does not claim all history or data outside the
+user's share permissions (including time-limited grants).
+
+Back to meshes preserves the list. Late discovery/read responses from a previous
+selection cannot replace the current view or enable its pending Load button;
+stale discovery does not start record reads. Load messages retries discovery and
+both selected/paired reads. Multiple conversations with the same peer remain
+ambiguous rather than being merged by name. Custom-named outboxes outside the Mesh
+Outbox convention are not discovered. Group conversations are not reconstructed.
+
+Tool errors, invalid responses, and transport failures/timeouts produce warnings,
+never an empty-success claim. Invitation messaging remains independent.
 The visible call indicator is in AICQ itself; the host controls whether app-originated
 tool calls also appear in ChatGPT's conversation UI.
 
@@ -107,7 +137,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v5.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v6.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

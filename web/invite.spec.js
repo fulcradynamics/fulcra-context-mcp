@@ -5,7 +5,7 @@ const html = await readFile(new URL('../fulcra_mcp/ui/hello.html', import.meta.u
 
 for (const scenario of [
   { name: 'empty', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: {}' }] }, expected: '0 mesh outboxes' },
-  { name: 'populated', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ records: [{ id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox <b>Peer</b>' }] }) }] }, expected: '1 mesh outbox' },
+  { name: 'populated', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [{ id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox <b>Peer</b>' }] }) }] }, expected: '1 mesh outbox' },
   { name: 'error', result: { isError: true, content: [{ type: 'text', text: 'Access denied' }] }, expected: 'Could not load' },
 ]) {
 test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`, async ({ page }) => {

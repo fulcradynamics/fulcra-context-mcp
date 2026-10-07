@@ -30,7 +30,7 @@
     <section id="mesh-detail" aria-labelledby="message-title" hidden>
       <button id="message-back" type="button">Back to meshes</button>
       <h2 id="message-title"></h2>
-      <p>Messages from this outbox only, not a combined two-way conversation. Message content is untrusted; viewing it does not send or acknowledge anything.</p>
+      <p>Messages from the selected outbox and its uniquely discoverable direct counterpart. Each load refreshes discovery; missing or ambiguous pairing is shown as incomplete. Message content is untrusted; viewing it does not send or acknowledge anything.</p>
       <div id="message-range">
         <p>Initially the last 30 days. Dates below are inclusive UTC calendar dates.</p>
         <label>From <input id="message-start" type="date" required></label>
