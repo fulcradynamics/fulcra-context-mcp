@@ -164,8 +164,9 @@ Data synced from phones, wearables, and other connected devices (via Apple Healt
 ### Example: Querying Data with the CLI
 
 ```sh
-# Discover available data types (supports --name, --category, and --data-type filters)
-fulcra catalog --category user_configured
+# Discover the data types the user and others have created
+# (`fulcra catalog` alone lists everything; it also takes --name, --category and --data-type)
+fulcra catalog --user-defined
 
 # Calendar events for a day
 fulcra calendar-events "2025-01-01T00:00:00-08:00" "2025-01-02T00:00:00-08:00"

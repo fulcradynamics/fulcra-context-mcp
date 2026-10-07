@@ -95,3 +95,16 @@ jobs:
       - name: Log out
         if: always()
         run: ./mcp-publisher logout || true
+
+  # The hosted server deploys from main separately (Cloud Build), so wait for it
+  # to serve the new version's Server Card. A failure here means the deploy is
+  # late or broken; PyPI and the registry are already published.
+  card:
+    needs: [plan, registry]
+    if: always() && needs.registry.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for the live Server Card to show this version
+        run: python3 scripts/release.py verify-card

@@ -1,12 +1,16 @@
 """Release helpers: version bumps, release-PR checks, and publish steps for CI.
 
-A release is a PR that bumps the package version (and server.json with it);
-merging it to main publishes to PyPI and then to the official MCP Registry
-(.github/workflows/release.yml). See docs/registry-publishing.md.
+A release is a PR that bumps the version; merging it to main publishes to PyPI
+and then to the official MCP Registry (.github/workflows/release.yml). See
+RELEASING.md.
+
+One version covers everything: the PyPI package, the registry listing
+(server.json's `version`), the Server Card and the serverInfo the running
+server reports (PLAT-617).
 
 Usage:
     # In a release PR: bump pyproject.toml, server.json and uv.lock together.
-    uv run python scripts/release.py bump 0.5.0 [--server-version 1.1.0]
+    uv run python scripts/release.py bump 1.1.0
 
     # What the PR check runs (compares against the PR's base branch).
     uv run --no-project --with jsonschema python scripts/release.py check --base origin/main
@@ -16,6 +20,7 @@ Usage:
     python3 scripts/release.py wait-pypi         # until PyPI serves the version
     python3 scripts/release.py check-urls        # server.json's URLs respond
     python3 scripts/release.py verify-registry   # registry lists it as latest
+    python3 scripts/release.py verify-card       # the live Server Card has the version
 
 Stdlib only (jsonschema is optional, for `check`), so CI can run it without
 installing the project.
@@ -39,8 +44,10 @@ SERVER_NAME = "com.fulcradynamics/context"
 REGISTRY = "https://registry.modelcontextprotocol.io/v0.1"
 # The registry proves PyPI ownership by finding this in the release's description.
 MCP_NAME_MARKER = f"mcp-name: {SERVER_NAME}"
-# The registry's limit on server.json's description.
+# The registry's and the Server Card's limits on description and title.
 MAX_DESCRIPTION = 100
+MAX_TITLE = 100
+SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json"
 
 VERSION_LINE = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
 
@@ -81,6 +88,13 @@ def metadata_problems(
         )
     if len(server.get("description", "")) > MAX_DESCRIPTION:
         problems.append(f"server.json description is over {MAX_DESCRIPTION} characters")
+    if not 1 <= len(server.get("title", "")) <= MAX_TITLE:
+        problems.append(f"server.json title must be 1-{MAX_TITLE} characters")
+    if server.get("version") != package_version:
+        problems.append(
+            f"server.json version is {server.get('version')!r}, but pyproject.toml says "
+            f"{package_version!r}; the listing and the package share one version"
+        )
     package = pypi_package(server)
     if package is None:
         problems.append(f"server.json has no PyPI package entry for {PACKAGE}")
@@ -117,23 +131,18 @@ def metadata_problems(
     return problems
 
 
-def bump_files(pyproject: str, server: dict, package_version: str,
-               server_version: str | None = None) -> tuple[str, dict]:
-    """pyproject.toml text and server.json with the new versions."""
-    parse_version(package_version)
-    if server_version is None:
-        major, minor, patch = parse_version(server["version"])
-        server_version = f"{major}.{minor}.{patch + 1}"
-    parse_version(server_version)
-    new_pyproject, count = VERSION_LINE.subn(f'version = "{package_version}"', pyproject, count=1)
+def bump_files(pyproject: str, server: dict, version: str) -> tuple[str, dict]:
+    """pyproject.toml text and server.json, both at `version`."""
+    parse_version(version)
+    new_pyproject, count = VERSION_LINE.subn(f'version = "{version}"', pyproject, count=1)
     if count != 1:
         raise ValueError("no version line in pyproject.toml")
     server = json.loads(json.dumps(server))
-    server["version"] = server_version
+    server["version"] = version
     package = pypi_package(server)
     if package is None:
         raise ValueError(f"server.json has no PyPI package entry for {PACKAGE}")
-    package["version"] = package_version
+    package["version"] = version
     return new_pyproject, server
 
 
@@ -188,13 +197,12 @@ def git_show(ref: str, path: str) -> str | None:
 def cmd_bump(args) -> int:
     pyproject_path, server_path = ROOT / "pyproject.toml", ROOT / "server.json"
     pyproject, server = bump_files(
-        pyproject_path.read_text(), json.loads(server_path.read_text()),
-        args.version, args.server_version,
+        pyproject_path.read_text(), json.loads(server_path.read_text()), args.version,
     )
     pyproject_path.write_text(pyproject)
     server_path.write_text(dump_server(server))
     subprocess.run(["uv", "lock"], cwd=ROOT, check=True)
-    print(f"{PACKAGE} {args.version}; server.json {server['version']}. "
+    print(f"{PACKAGE} and server.json at {args.version}. "
           "Commit pyproject.toml, server.json and uv.lock in a release PR.")
     return 0
 
@@ -292,12 +300,35 @@ def cmd_verify_registry(args) -> int:
         time.sleep(10)
 
 
+def server_card_url(server: dict) -> str:
+    """Where the hosted server serves its Server Card: its streamable HTTP
+    endpoint plus /server-card, the location SEP-2127 reserves."""
+    remote = next(r for r in server["remotes"] if r["type"] == "streamable-http")
+    return remote["url"].rstrip("/") + "/server-card"
+
+
+def cmd_verify_card(args) -> int:
+    server, version, _ = read_local()
+    url = server_card_url(server)
+    deadline = time.monotonic() + args.timeout
+    while True:
+        status, body = fetch(url, accept=SERVER_CARD_MEDIA_TYPE)
+        card = json.loads(body) if status == 200 else {}
+        if card.get("version") == version and card.get("name") == SERVER_NAME:
+            print(f"{url} serves the Server Card for {SERVER_NAME} {version}")
+            return 0
+        if time.monotonic() >= deadline:
+            print(f"::error::{url} returned HTTP {status} with version "
+                  f"{card.get('version')!r}, not {version!r}; has the new version deployed?")
+            return 1
+        time.sleep(30)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     bump = sub.add_parser("bump", help="bump the package version and server.json")
-    bump.add_argument("version", help="new package version, X.Y.Z")
-    bump.add_argument("--server-version", help="server.json version (default: next patch)")
+    bump.add_argument("version", help="new version, X.Y.Z")
     bump.set_defaults(func=cmd_bump)
     check = sub.add_parser("check", help="check release metadata against a base ref")
     check.add_argument("--base", help="git ref to compare with, e.g. origin/main")
@@ -305,7 +336,8 @@ def main(argv=None) -> int:
     check.set_defaults(func=cmd_check)
     sub.add_parser("plan").set_defaults(func=cmd_plan)
     for name, func, timeout in (("wait-pypi", cmd_wait_pypi, 600),
-                                ("verify-registry", cmd_verify_registry, 300)):
+                                ("verify-registry", cmd_verify_registry, 300),
+                                ("verify-card", cmd_verify_card, 1800)):
         p = sub.add_parser(name)
         p.add_argument("--timeout", type=int, default=timeout, help="seconds")
         p.set_defaults(func=func)

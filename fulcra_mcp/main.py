@@ -1,3 +1,4 @@
+import hashlib
 import json
 import socket
 from pathlib import Path
@@ -13,6 +14,7 @@ from pydantic import AnyHttpUrl
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
+from . import server_info
 from .logging_config import configure_logging
 from .provider import oauth_provider
 from .settings import settings
@@ -27,7 +29,11 @@ socket.setdefaulttimeout(settings.http_timeout_seconds)
 
 
 mcp = FastMCP(
-    name="Fulcra Context Agent",
+    # The same identity as server.json and the Server Card (see server_info).
+    name=server_info.DISPLAY_NAME,
+    version=server_info.version(),
+    website_url=server_info.website_url(),
+    icons=server_info.icons(),
     instructions="""
     This server provides personal data retrieval tools.
     Always specify the time zone when using times as parameters.
@@ -87,6 +93,38 @@ async def glama_manifest() -> Response:
 @app.get("/icon.png", include_in_schema=False)
 async def icon() -> Response:
     return FileResponse(STATIC_DIR / "icon.png", media_type="image/png")
+
+
+# The MCP Server Card (SEP-2127): static metadata a client can read before
+# connecting, at the location the spec reserves (<streamable-http-url>/server-card).
+# Built from server.json. An explicit route, so it's matched before the /mcp mount.
+SERVER_CARD_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET",
+    "Access-Control-Allow-Headers": "Content-Type, If-None-Match",
+    "Access-Control-Expose-Headers": "ETag",
+    "Cache-Control": "public, max-age=3600",
+}
+
+
+def _server_card_response() -> tuple[bytes, str]:
+    body = json.dumps(server_info.server_card(), indent=2).encode()
+    return body, '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
+
+
+@app.get("/mcp/server-card", include_in_schema=False)
+async def server_card(request: Request) -> Response:
+    body, etag = _server_card_response()
+    headers = {**SERVER_CARD_HEADERS, "ETag": etag}
+    sent = {t.strip().removeprefix("W/") for t in request.headers.get("if-none-match", "").split(",")}
+    if etag in sent or "*" in sent:
+        return Response(status_code=304, headers=headers)
+    return Response(body, media_type=server_info.SERVER_CARD_MEDIA_TYPE, headers=headers)
+
+
+@app.options("/mcp/server-card", include_in_schema=False)
+async def server_card_preflight() -> Response:
+    return Response(status_code=204, headers=SERVER_CARD_HEADERS)
 
 
 # RFC 9728 path-form discovery for the advertised /mcp endpoint. The fastmcp app
