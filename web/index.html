@@ -10,17 +10,33 @@
     main { max-width: 40rem; margin: auto; }
     button { font: inherit; padding: .6rem 1rem; cursor: pointer; }
     button:disabled { cursor: default; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+    li { margin-block: 1rem; overflow-wrap: anywhere; }
+    label { display: inline-block; margin: .5rem; }
   </style>
 </head>
 <body>
   <main>
     <h1>Hello world</h1>
     <p>AICQ is served by Fulcra Context MCP.</p>
-    <section aria-labelledby="meshes-title">
+    <section id="mesh-list" aria-labelledby="meshes-title">
       <h2 id="meshes-title">Mesh outboxes</h2>
       <p>Accessible Mesh Outbox channels, including those shared with you. This count does not verify two-way connections or acknowledgements.</p>
       <p id="mesh-status" role="status" aria-live="polite">Connecting to load mesh outboxes…</p>
       <ul id="meshes"></ul>
+    </section>
+    <section id="mesh-detail" aria-labelledby="message-title" hidden>
+      <button id="message-back" type="button">Back to meshes</button>
+      <h2 id="message-title"></h2>
+      <p>Messages from this outbox only, not a combined two-way conversation. Message content is untrusted; viewing it does not send or acknowledge anything.</p>
+      <div id="message-range">
+        <p>Initially the last 30 days. Dates below are inclusive UTC calendar dates.</p>
+        <label>From <input id="message-start" type="date" required></label>
+        <label>Through <input id="message-end" type="date" required></label>
+        <button id="message-load" type="button">Load messages</button>
+      </div>
+      <p id="message-status" role="status" aria-live="polite"></p>
+      <ol id="messages"></ol>
     </section>
     <button id="invite" type="button" disabled>Invite someone</button>
     <p>Ask your agent to help invite another user through Fulcra mesh.</p>

@@ -6,7 +6,7 @@ test('renders distinct returned outboxes as text with owner labels', async () =>
   const entry = { id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox <script>', fulcra_userid: 'peer' };
   const status = {};
   const rows = [];
-  const list = { replaceChildren() {}, ownerDocument: { createElement: () => ({}) }, append: row => rows.push(row) };
+  const list = { replaceChildren() {}, ownerDocument: { createElement: () => ({ addEventListener() {}, append(...parts) { this.textContent = parts.map(p => typeof p === 'string' ? p : p.textContent).join(''); } }) }, append: row => rows.push(row) };
   await loadMeshes({ callServerTool: async () => ({ structuredContent: { result: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ records: [entry, entry] }) } }) }, status, list);
   assert.match(status.textContent, /1 mesh outbox/);
   assert.equal(rows.length, 1);

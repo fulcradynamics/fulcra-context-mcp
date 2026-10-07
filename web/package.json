@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test *.test.js",
-    "test:browser": "playwright test invite.spec.js"
+    "test:browser": "playwright test *.spec.js"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5"

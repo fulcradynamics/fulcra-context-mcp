@@ -1,6 +1,6 @@
 const prefix = 'Available data types, grouped by compatible tool: ';
 
-export async function loadMeshes(app, status, list) {
+export async function loadMeshes(app, status, list, onSelect) {
   status.textContent = 'Loading mesh outboxes — calling get_data_catalog…';
   list.replaceChildren();
   try {
@@ -22,7 +22,11 @@ export async function loadMeshes(app, status, list) {
       .sort((a, b) => a.name.localeCompare(b.name));
     for (const mesh of meshes) {
       const row = list.ownerDocument.createElement('li');
-      row.textContent = `${mesh.name} — ${mesh.fulcra_userid ? `Owner: ${mesh.fulcra_userid}` : 'Your outbox'} — ${mesh.id}`;
+      const button = list.ownerDocument.createElement('button');
+      button.type = 'button';
+      button.textContent = mesh.name;
+      button.addEventListener('click', () => onSelect(mesh));
+      row.append(button, ` — ${mesh.fulcra_userid ? `Owner: ${mesh.fulcra_userid}` : 'Your outbox'} — ${mesh.id}`);
       list.append(row);
     }
     status.textContent = `get_data_catalog completed — ${meshes.length} mesh outbox${meshes.length === 1 ? '' : 'es'} returned.`;

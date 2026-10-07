@@ -1,6 +1,6 @@
 # AICQ Hello World MCP App
 
-`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v3.html`.
+`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v4.html`.
 The existing server serves that resource. After connecting, the UI makes one
 read-only `get_data_catalog(name="Mesh Outbox")` call through `app.callServerTool`.
 No separate UI server, polling, or OAuth changes.
@@ -12,7 +12,28 @@ It lists distinct accessible MomentAnnotation channels named Mesh Outbox, keyed
 by owner and data-type ID, and shows their actual count, including zero. Own and
 shared channels are included. This is an outbox count, not a count of acknowledged
 two-way relationships; the skill has no separate mesh registry. Custom names not
-following the skill convention are not discovered. No message contents are read.
+following the skill convention are not discovered. Message contents are only read
+after selecting an outbox.
+
+## Message details
+
+Click an outbox to call `get_records` for that exact data type and, for shared
+outboxes, its catalog-provided `fulcra_userid`. No message read occurs on list load.
+The initial window is today plus the preceding 29 UTC calendar dates; editable
+From/Through dates are inclusive, converted to timezone-aware start/end-exclusive
+bounds. Older messages can be read by changing the range and choosing Load messages.
+
+The detail panel shows loading/tool name, returned record count, explicit empty
+and error states, and a partial-result warning when the server truncates its reply.
+Narrow the range for a truncated result; this view does not claim all history.
+Mesh envelopes display their body and available routing/kind/slug/message-ID fields.
+Unrecognized notes remain visible as raw text with a warning. Timestamps, when
+available, are displayed in the browser's local timezone. All content is text-only:
+no message HTML, automatic model context, replies, or acknowledgements.
+
+Back to meshes preserves the list. Late responses from a previous selection cannot
+replace the current detail view. Load messages also retries a failed read. This is
+the selected outbox, not a reconstructed two-way conversation.
 
 Tool errors, invalid responses, and transport failures/timeouts show an error,
 never a zero count. Reopen to retry. Invitation messaging remains independent.
@@ -71,7 +92,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v3.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v4.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
