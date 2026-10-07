@@ -5,20 +5,15 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 ## Cutting a release
 
 ```bash
-uv run python scripts/release.py bump 0.5.0
+uv run python scripts/release.py bump 1.1.1
 ```
 
-This updates three files: open a PR with them.
-- `pyproject.toml`: the package version.
-- `server.json`:
-  - `packages[].version` is set to the same version;
-  - the listing's own `version` gets the next patch release. Pass `--server-version` to choose it.
-- `uv.lock`.
+This sets the version in `pyproject.toml`, in `server.json` (both its `version` and `packages[].version`) and in `uv.lock`. Open a PR with them.
 
-The listing version and the package version are independent numbers: keep the listing's going up from where it is.
+One version covers everything: the PyPI package, the registry listing, the Server Card and the version the running server reports to clients. They've matched since 1.1.0.
 
 On every PR, `.github/workflows/release-check.yml` checks that:
-- `pyproject.toml` and `server.json` agree;
+- `pyproject.toml` and `server.json` have the same version;
 - `server.json` passes the registry schema and `mcp-publisher validate`;
 - any change to `server.json` raises its `version`. Published registry versions can't be republished, so an unbumped change would never reach the listing.
 
@@ -34,6 +29,9 @@ On every push to `main`, `.github/workflows/release.yml` publishes whatever isn'
    1. Wait until PyPI serves the package version. The registry checks for the `mcp-name` marker from `README.md` in that exact version's description.
    2. Check that the URLs `server.json` lists respond.
    3. Publish with `mcp-publisher`, then confirm the registry lists the new version as latest.
+3. **Server Card**: wait until the hosted server, which deploys from `main` separately, serves the new version at `https://mcp.fulcradynamics.com/mcp/server-card`. If this times out, the deploy is late or broken; PyPI and the registry are already published.
+
+The server's name, title, description and links come from `server.json`. It's served as the Server Card (SEP-2127) and reported to clients when they connect (`fulcra_mcp/server_info.py`), so change them there.
 
 Both publish jobs run in the `release` GitHub environment. If a step fails, fix the cause and re-run the workflow from the Actions tab ("Run workflow"); it picks up whatever is still unpublished.
 
