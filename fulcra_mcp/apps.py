@@ -1,22 +1,26 @@
-"""Minimal MCP App; OpenAI-specific navigation stays in registration metadata."""
+"""Fulcra Mesh MCP App; host navigation stays in registration metadata."""
 
 from importlib.resources import files
 
 from fastmcp import FastMCP
 
-app_mcp = FastMCP("AICQ UI")
-UI_URI = "ui://aicq/hello/v7.html"
+app_mcp = FastMCP("Fulcra Mesh UI")
+UI_URI = "ui://fulcra/mesh/v8.html"
 
 
 @app_mcp.tool(
-    title="AICQ",
+    title="Fulcra Mesh",
     app={"resourceUri": UI_URI, "visibility": ["app"]},
     meta={"openai/ui": {"entrypoints": [{"type": "global"}]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def aicq_open() -> dict[str, str]:
-    """Open the AICQ Hello World app. No account data is accessed."""
-    return {"message": "Hello world"}
+    """Open Fulcra Mesh to browse peer threads and ask your agent to help.
+
+    This entrypoint does not access account data; the app loads shared channels
+    after connecting.
+    """
+    return {"message": "Fulcra Mesh is ready."}
 
 
 @app_mcp.resource(
@@ -29,6 +33,6 @@ def aicq_open() -> dict[str, str]:
         }
     },
 )
-def hello_html() -> str:
+def mesh_html() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
-    return files("fulcra_mcp").joinpath("ui/hello.html").read_text(encoding="utf-8")
+    return files("fulcra_mcp").joinpath("ui/mesh.html").read_text(encoding="utf-8")

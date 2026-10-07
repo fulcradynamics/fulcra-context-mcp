@@ -1,10 +1,84 @@
-# AICQ Hello World MCP App
+# Fulcra Mesh MCP App
 
-`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v7.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v8.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
 No separate UI server, polling, search, pagination, or OAuth changes.
+
+## Branding and layout (PLAT-637)
+
+Design references:
+- https://github.com/kubla/fulcra-design-reference — Context Web `DESIGN.md`,
+  `SOURCES.md`, and repository README.
+- https://www.ui-skills.com/skills/leonxlnx/minimalist-skill — editorial minimalism.
+
+Deliberate adaptation: retain Fulcra's black/charcoal surfaces, Rubik, mint actions
+and readable violet disclosure selection rather than the generic warm monochrome
+palette and alternative fonts. Use whitespace, thin dividers, flat surfaces and
+compact controls, not boxed panels, pills, decorative gradients, shadows, icons,
+animations, hero/bento layouts or stock imagery. The identity image is the existing
+`fulcra_mcp/static/icon.png`, embedded unchanged, alongside a plain text wordmark;
+no new logo was invented. Metadata uses a lighter gray for readability on dark
+surfaces. Message bodies, source UUIDs and expanded context wrap at narrow widths.
+
+Editable styles live in `web/styles.css`. `web/build.mjs` embeds them, the existing
+brand image, the bundled Rubik Latin variable WOFF2 and its complete OFL license
+into the single `fulcra_mcp/ui/mesh.html`. There are no runtime external font,
+image, stylesheet or script requests. Other writing systems fall back to system
+fonts. See `web/assets/README.md` for asset provenance. Rebuilding is offline once
+npm dependencies are installed. The public `aicq_open` identifier and its app-only
+visibility/global entrypoint metadata are unchanged; entrypoint work is deferred.
+
+### Host footer and safe areas
+
+The document body has real scrollable bottom padding of
+`160px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px)`.
+This is not a fixed footer or an absolutely positioned spacer. There is no fixed
+body height, overflow lock or nested scrolling message list; SDK autoResize stays
+at its default enabled setting, so host-driven sizing includes this padding.
+
+The installed `@modelcontextprotocol/ext-apps` 1.7.5 declarations (`app.d.ts` and
+`spec.types.d.ts`) supply optional `safeAreaInsets` in pixels. `main.js` applies
+`getHostContext()` after connection and registers `hostcontextchanged` before
+connection. All four edges are respected; unrelated partial context changes do
+not reset the insets. The SDK describes mobile safe areas, not floating composer
+height. The fixed 160px allowance remains even when a host supplies no insets.
+CSS environment and host bottom insets are added conservatively; a host reporting
+the same device inset twice may leave extra whitespace. Hosts with an overlay
+taller than 160px still need live acceptance testing and potentially a larger
+allowance. Actual ChatGPT rendering/autoResize remains a host acceptance check,
+not something the local synthetic harness proves.
+
+### Repeatable local visual review
+
+The real SDK browser tests in `web/messages.spec.js` use only synthetic catalog,
+share and message fixtures in an iframe with `sandbox="allow-scripts"`. They do
+not connect to an account or server. The host harness places a 160px fixed bar
+over a 900px-high viewport and checks both 1120px and 320px widths. Tests verify
+initial and changed SDK insets, continued resize notifications, loaded Rubik,
+zero network requests, UUID/message/context wrapping, no horizontal overflow,
+keyboard focus/Enter, and scroll reachability above the bar for the composer,
+final feedback, context disclosure and Invite. Existing send/read-only regression
+tests run alongside these checks.
+
+From this checkout, reproduce the previews with:
+
+```sh
+cd /home/fulcra/.hermes/cache/scratch/mesh-conversation/web
+npm run build
+BRAND_PREVIEW_DIR=/home/fulcra/.hermes/cache/scratch npx playwright test messages.spec.js -g 'Fulcra branding'
+```
+
+The clock is fixed to 2026-01-10 for these synthetic previews. Output:
+- `/home/fulcra/.hermes/cache/scratch/brand-preview-wide.png`
+- `/home/fulcra/.hermes/cache/scratch/brand-preview-narrow.png`
+- `/home/fulcra/.hermes/cache/scratch/brand-preview-composer-wide.png`
+- `/home/fulcra/.hermes/cache/scratch/brand-preview-composer-narrow.png`
+
+The first pair shows the top of the thread; the second shows the composer and
+accepted-request feedback scrolled above the simulated host bar. These are real
+Chromium screenshots of fixtures, not live account data or ChatGPT screenshots.
 
 ## Peer threads
 
@@ -66,7 +140,7 @@ rows. Each detail load rediscovers that peer's channels. Navigation/reload inval
 old discovery, reads and composers. Late responses cannot replace the current view;
 stale discovery starts no reads. Failed discovery or a disappeared peer leaves no
 sendable cached context. Load messages retries. Invite remains independent.
-The call indicator is in AICQ; the host decides whether app-originated calls also
+The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
 ## Tell my agent (PLAT-636)
@@ -109,7 +183,7 @@ composer warns to check chat before retrying after navigation.
 - `web/conversation.js`, `records.js`, `messages.js`: refreshed multi-channel reads,
   record parsing, chronology and thread presentation.
 - `web/tell-agent.js`: bounded context and explicit host-message request safeguards.
-- `fulcra_mcp/ui/hello.html`: generated self-contained UI, included in Python wheels
+- `fulcra_mcp/ui/mesh.html`: generated self-contained UI, included in Python wheels
   and source distributions. No CDN or Node runtime is needed to run the server.
 - `fulcra_mcp/main.py`: mounts the UI alongside existing tools in both transports.
 
@@ -139,9 +213,9 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Commit both source and regenerated `fulcra_mcp/ui/hello.html`; CI checks they match.
+Commit both source and regenerated `fulcra_mcp/ui/mesh.html`; CI checks they match.
 The browser test uses the real SDK and an iframe host harness, not real ChatGPT.
-After pulling, restart the tunnel, refresh the ChatGPT connection, and reopen AICQ.
+After pulling, restart the tunnel, refresh the ChatGPT connection, and reopen Fulcra Mesh.
 Click the button and verify the conversation receives the mesh request. This is
 separate from the known server-session initialization error; no workaround for
 that error is introduced here.
@@ -160,7 +234,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v7.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v8.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
@@ -187,7 +261,7 @@ Replace the checkout path with yours, on this branch. The tunnel launches the
 server, so a separate stdio process is not needed. Keep the tunnel running.
 
 **Account boundary:** stdio data tools use the local operator's Fulcra credentials.
-The entrypoint greeting does not access them, but opening the UI now reads the
+The entrypoint readiness message does not access them, but opening the UI reads the
 account's catalog and shares to discover peer threads. Other tools are also exposed.
 Use a dedicated OS account with no Fulcra credentials, or a synthetic test account,
 and restrict tunnel/workspace access. Do not expose stdio-mode tools through an
@@ -196,7 +270,7 @@ unauthenticated public HTTP wrapper. Multi-user production must retain hosted OA
 In ChatGPT Plugins, add a custom MCP server, choose **Tunnel**, and select this
 tunnel. For this stdio setup there is no MCP OAuth flow; the tunnel itself controls
 access. Create it as a plugin. Confirm discovery includes `aicq_open`, then open
-**AICQ** from the sidebar and expect **Hello world**. Refresh the connection after
+**Fulcra Mesh** from the sidebar. Refresh the connection after
 restarting a changed server; begin a fresh session if the host caches metadata.
 
 To include skills and branding, build your plugin package with a registered-app

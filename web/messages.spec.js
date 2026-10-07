@@ -1,26 +1,29 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-const html = await readFile(new URL('../fulcra_mcp/ui/hello.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 const own = { id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox Same' };
 const peer = { id: 'MomentAnnotation/00000000-0000-0000-0000-000000000002', name: 'Mesh Outbox Same', fulcra_userid: 'peer-user' };
 const second = { ...own, id: 'MomentAnnotation/00000000-0000-0000-0000-000000000003' };
 const other = { ...peer, fulcra_userid: 'other-user' };
-async function open(page, { paired = true, multiple = false, outgoingOnly = false, supported = true } = {}) {
+async function open(page, { paired = true, multiple = false, outgoingOnly = false, supported = true, peerId = 'peer-user', safeAreaInsets } = {}) {
   await page.setContent('<iframe sandbox="allow-scripts"></iframe>');
-  await page.evaluate(({ html, own, peer, second, other, paired, multiple, outgoingOnly, supported }) => {
-    const grant = id => ({ data_types: [id], with_user_ids: ['peer-user'], share_all_data: false });
+  await page.evaluate(({ html, own, peer, second, other, paired, multiple, outgoingOnly, supported, peerId, safeAreaInsets }) => {
+    peer.fulcra_userid = peerId;
+    const grant = id => ({ data_types: [id], with_user_ids: [peerId], share_all_data: false });
     window.entries = [own, ...(outgoingOnly ? [] : [peer, peer]), other, ...(multiple ? [second] : [])];
     window.discovery = [];
     window.shares = { own_fulcra_userid: 'me', outgoing: paired ? [grant(own.id), grant(own.id), ...(multiple ? [grant(second.id)] : [])] : [], incoming: [] };
     window.reads = [];
     window.agentRequests = [];
+    window.resizeNotifications = [];
     const frame = document.querySelector('iframe');
     window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
     window.addEventListener('message', event => {
       if (event.source !== frame.contentWindow) return;
       const message = event.data;
+      if (message.method === 'ui/notifications/size-changed') window.resizeNotifications.push(message.params);
       if (message.method === 'ui/message') window.agentRequests.push(message);
-      if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: supported ? { message: { text: {} } } : {}, hostContext: { displayMode: 'fullscreen' } });
+      if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: supported ? { message: { text: {} } } : {}, hostContext: { displayMode: 'fullscreen', safeAreaInsets } });
       if (message.method === 'tools/call') {
         if (['get_data_catalog', 'list_shares'].includes(message.params.name)) {
           window.discovery.push(message);
@@ -34,7 +37,7 @@ async function open(page, { paired = true, multiple = false, outgoingOnly = fals
       }
     });
     frame.srcdoc = html;
-  }, { html, own, peer, second, other, paired, multiple, outgoingOnly, supported });
+  }, { html, own, peer, second, other, paired, multiple, outgoingOnly, supported, peerId, safeAreaInsets });
   return page.frameLocator('iframe');
 }
 async function respond(page, index, rows, truncated = false) {
@@ -43,6 +46,87 @@ async function respond(page, index, rows, truncated = false) {
     window.reply(request.id, { content: [{ type: 'text', text: `Records for ${request.params.arguments.data_type} from start to end${truncated ? ' (showing the first 1 of 2; narrow the time range for the rest)' : ''}: ${JSON.stringify(rows)}` }] });
   }, { index, rows, truncated });
 }
+// Synthetic fixtures only: the real bundled SDK talks to this local host harness.
+for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer clearance at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.clock.setFixedTime(new Date('2026-01-10T12:00:00Z'));
+  const networkRequests = [];
+  page.on('request', request => networkRequests.push(request.url()));
+  const peerId = '00000000-0000-0000-0000-000000000042';
+  const ui = await open(page, { peerId, safeAreaInsets: { top: 0, right: 0, bottom: 12, left: 0 } });
+  await page.addStyleTag({ content: 'body { margin: 0; background: black; } iframe { display: block; width: 100%; height: 100vh; border: 0; } #host-composer { position: fixed; inset: auto 0 0; height: 160px; background: #25252b; color: white; display: grid; place-items: center; font: 14px sans-serif; }' });
+  await page.evaluate(() => {
+    const overlay = document.createElement('div');
+    overlay.id = 'host-composer';
+    overlay.textContent = 'Simulated host message bar · synthetic preview';
+    document.body.append(overlay);
+  });
+  await expect(ui.getByRole('heading', { name: 'Fulcra Mesh', exact: true })).toBeVisible();
+  await expect(ui.locator('body')).not.toContainText(/hello world|proof of concept|served by|demo/i);
+  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '172px');
+  expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+  await ui.getByRole('button', { name: peerId, exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
+  await respond(page, 0, [{ recorded_at: '2026-01-02T12:00:00Z', note: JSON.stringify({ v: 1, body: 'The walking route is ready. Can you review the meeting point?', mid: '00000000-0000-0000-0000-000000000001' }) }]);
+  await respond(page, 1, [{ recorded_at: '2026-01-01T12:00:00Z', note: JSON.stringify({ v: 1, body: 'Let’s meet by the river. Synthetic reference: ' + '0123456789abcdef'.repeat(12), mid: '00000000-0000-0000-0000-000000000002' }) }]);
+  await expect(tell(ui)).toBeVisible();
+  const frame = page.frames()[1];
+  const assertNoOverflow = async () => expect(await frame.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await assertNoOverflow();
+  expect(await ui.locator('body').evaluate(el => getComputedStyle(el).fontFamily)).toContain('Rubik');
+  expect(await frame.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(font => font.family === 'Rubik' && font.status === 'loaded'); })).toBe(true);
+  expect(await ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(160);
+  // SDK host context notifications update insets; unrelated updates preserve them.
+  await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 } } }, '*'));
+  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } }, '*'));
+  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  const aboveOverlay = async locator => {
+    await locator.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    const box = await locator.boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(740);
+  };
+  await input(ui).fill('Draft a reply for my review.');
+  await aboveOverlay(input(ui));
+  await input(ui).focus();
+  await page.keyboard.press('Tab');
+  await expect(tell(ui)).toBeFocused();
+  expect(await tell(ui).evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid');
+  await aboveOverlay(tell(ui));
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
+  await page.evaluate(() => window.reply(window.agentRequests[0].id, {}));
+  await expect(ui.locator('#agent-status')).toContainText('Request sent');
+  await aboveOverlay(ui.locator('#agent-status'));
+  const disclosure = ui.locator('#thread-composer summary');
+  await aboveOverlay(disclosure);
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  await expect(ui.locator('#thread-context')).toBeVisible();
+  await assertNoOverflow();
+  await page.keyboard.press('Enter');
+  await aboveOverlay(ui.locator('#invite'));
+  if (process.env.BRAND_PREVIEW_DIR) {
+    await ui.locator('#thread-composer').evaluate(el => el.scrollIntoView({ block: 'start' }));
+    const feedbackBox = await ui.locator('#agent-status').boundingBox();
+    expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(740);
+    await page.screenshot({ path: `${process.env.BRAND_PREVIEW_DIR}/brand-preview-composer-${width === 320 ? 'narrow' : 'wide'}.png` });
+  }
+  await ui.locator('#invite').focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
+  await page.evaluate(() => window.reply(window.agentRequests[1].id, {}));
+  await aboveOverlay(ui.locator('#status'));
+  await assertNoOverflow();
+  expect(networkRequests).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.resizeNotifications.length)).toBeGreaterThan(0);
+  if (process.env.BRAND_PREVIEW_DIR) {
+    await frame.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({ path: `${process.env.BRAND_PREVIEW_DIR}/brand-preview-${width === 320 ? 'narrow' : 'wide'}.png` });
+  }
+});
+
 const tell = ui => ui.getByRole('button', { name: 'Tell my agent', exact: true });
 const input = ui => ui.getByRole('textbox', { name: 'Instructions for my agent' });
 const choose = ui => ui.getByRole('button', { name: 'peer-user', exact: true }).click();

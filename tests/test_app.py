@@ -5,23 +5,27 @@ from fastmcp import Client
 from fulcra_mcp.main import mcp
 
 
-async def test_hello_app():
+async def test_mesh_app():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         assert "aicq_open" in tools
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
-        assert tool.meta["ui"]["resourceUri"] == "ui://aicq/hello/v7.html"
+        assert tool.title == "Fulcra Mesh"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v8.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.openWorldHint is False
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
-        assert result.data == {"message": "Hello world"}
-        resources = await client.read_resource("ui://aicq/hello/v7.html")
+        assert result.data == {"message": "Fulcra Mesh is ready."}
+        resources = await client.read_resource("ui://fulcra/mesh/v8.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
-        assert "<h1>Hello world</h1>" in resources[0].text
+        assert "<h1>Fulcra Mesh</h1>" in resources[0].text
+        assert "hello world" not in resources[0].text.lower()
+        assert "data:font/woff2;base64," in resources[0].text
+        assert "SIL OPEN FONT LICENSE" in resources[0].text
         assert "Invite someone</button>" in resources[0].text
         assert "fulcra-mesh" in resources[0].text
         assert 'id="mesh-status"' in resources[0].text

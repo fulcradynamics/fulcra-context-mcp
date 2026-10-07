@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-const html = await readFile(new URL('../fulcra_mcp/ui/hello.html', import.meta.url), 'utf8');
+const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 
 for (const scenario of [
   { name: 'empty', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: {}' }] }, expected: '0 threads' },
@@ -9,7 +9,7 @@ for (const scenario of [
   { name: 'error', result: { isError: true, content: [{ type: 'text', text: 'Access denied' }] }, expected: 'Could not load' },
 ]) {
 test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`, async ({ page }) => {
-  await page.setContent('<iframe title="AICQ" sandbox="allow-scripts"></iframe>');
+  await page.setContent('<iframe title="Fulcra Mesh" sandbox="allow-scripts"></iframe>');
   await page.evaluate((html) => {
     window.requests = [];
     window.rejectMessage = false;
