@@ -16,6 +16,12 @@
   <main>
     <h1>Hello world</h1>
     <p>AICQ is served by Fulcra Context MCP.</p>
+    <section aria-labelledby="meshes-title">
+      <h2 id="meshes-title">Mesh outboxes</h2>
+      <p>Accessible Mesh Outbox channels, including those shared with you. This count does not verify two-way connections or acknowledgements.</p>
+      <p id="mesh-status" role="status" aria-live="polite">Connecting to load mesh outboxes…</p>
+      <ul id="meshes"></ul>
+    </section>
     <button id="invite" type="button" disabled>Invite someone</button>
     <p>Ask your agent to help invite another user through Fulcra mesh.</p>
     <p>This button starts a conversation. It does not create a share or send an invitation.</p>

@@ -3,7 +3,12 @@ import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../fulcra_mcp/ui/hello.html', import.meta.url), 'utf8');
 
-test('real SDK handshake and button send a user message, not a tool call', async ({ page }) => {
+for (const scenario of [
+  { name: 'empty', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: {}' }] }, expected: '0 mesh outboxes' },
+  { name: 'populated', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ records: [{ id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox <b>Peer</b>' }] }) }] }, expected: '1 mesh outbox' },
+  { name: 'error', result: { isError: true, content: [{ type: 'text', text: 'Access denied' }] }, expected: 'Could not load' },
+]) {
+test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`, async ({ page }) => {
   await page.setContent('<iframe title="AICQ" sandbox="allow-scripts"></iframe>');
   await page.evaluate((html) => {
     window.requests = [];
@@ -27,16 +32,28 @@ test('real SDK handshake and button send a user message, not a tool call', async
   const ui = page.frameLocator('iframe');
   const button = ui.getByRole('button', { name: 'Invite someone' });
   await expect(button).toBeEnabled();
+  await expect(ui.locator('#mesh-status')).toContainText('Loading mesh outboxes');
+  await expect.poll(() => page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').length)).toBe(1);
+  await page.evaluate((result) => {
+    const request = window.requests.find(r => r.method === 'tools/call');
+    document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: request.id, result }, '*');
+  }, scenario.result);
+  await expect(ui.locator('#mesh-status')).toContainText(scenario.expected);
+  if (scenario.name === 'populated') {
+    await expect(ui.locator('#meshes li')).toHaveText(/Mesh Outbox <b>Peer<\/b>/);
+    await expect(ui.locator('#meshes b')).toHaveCount(0);
+  }
   expect(await page.evaluate(() => window.requests.filter(r => r.method === 'ui/message'))).toHaveLength(0);
   await button.click();
-  await expect(ui.getByRole('status')).toContainText('Request sent');
+  await expect(ui.locator('#status')).toContainText('Request sent');
   const messages = await page.evaluate(() => window.requests.filter(r => r.method === 'ui/message'));
   expect(messages).toHaveLength(1);
   expect(messages[0].params.role).toBe('user');
   expect(messages[0].params.content[0].text).toContain('fulcra-mesh');
-  expect(await page.evaluate(() => window.requests.some(r => r.method === 'tools/call'))).toBe(false);
+  expect(await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call'))).toHaveLength(1);
   await page.evaluate(() => { window.rejectMessage = true; });
   await button.click();
-  await expect(ui.getByRole('status')).toContainText('Could not send');
+  await expect(ui.locator('#status')).toContainText('Could not send');
   await expect(button).toBeEnabled();
 });
+}

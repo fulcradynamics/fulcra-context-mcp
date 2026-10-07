@@ -24,11 +24,13 @@ export async function setupInvite(app, button, status) {
     await app.connect();
     if (!app.getHostCapabilities()?.message?.text) {
       status.textContent = 'This host cannot send chat messages. Ask the agent to use the fulcra-mesh skill in the conversation.';
-      return;
+      return true;
     }
     status.textContent = '';
     button.disabled = false;
+    return true;
   } catch {
     status.textContent = 'Could not connect to the host. Reopen the app to try again.';
+    return false;
   }
 }

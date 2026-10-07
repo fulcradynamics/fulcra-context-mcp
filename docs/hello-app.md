@@ -1,8 +1,23 @@
 # AICQ Hello World MCP App
 
-This is the first UI slice, not the mesh roster: `aicq_open({})` returns a greeting
-and advertises `ui://aicq/hello/v2.html`. The existing server serves that resource.
-No separate UI server, direct data calls, polling, or OAuth changes.
+`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v3.html`.
+The existing server serves that resource. After connecting, the UI makes one
+read-only `get_data_catalog(name="Mesh Outbox")` call through `app.callServerTool`.
+No separate UI server, polling, or OAuth changes.
+
+## Mesh list
+
+Opening AICQ shows the tool name and a loading message until its response arrives.
+It lists distinct accessible MomentAnnotation channels named Mesh Outbox, keyed
+by owner and data-type ID, and shows their actual count, including zero. Own and
+shared channels are included. This is an outbox count, not a count of acknowledged
+two-way relationships; the skill has no separate mesh registry. Custom names not
+following the skill convention are not discovered. No message contents are read.
+
+Tool errors, invalid responses, and transport failures/timeouts show an error,
+never a zero count. Reopen to retry. Invitation messaging remains independent.
+The visible call indicator is in AICQ itself; the host controls whether app-originated
+tool calls also appear in ChatGPT's conversation UI.
 
 - `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
 - `web/`: UI source and the standard MCP Apps browser SDK.
@@ -56,7 +71,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v2.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v3.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
@@ -83,7 +98,8 @@ Replace the checkout path with yours, on this branch. The tunnel launches the
 server, so a separate stdio process is not needed. Keep the tunnel running.
 
 **Account boundary:** stdio data tools use the local operator's Fulcra credentials.
-The Hello World tool does not access them, but other tools are still exposed.
+The entrypoint greeting does not access them, but opening the UI now reads the
+account's catalog to discover mesh outboxes. Other tools are also exposed.
 Use a dedicated OS account with no Fulcra credentials, or a synthetic test account,
 and restrict tunnel/workspace access. Do not expose stdio-mode tools through an
 unauthenticated public HTTP wrapper. Multi-user production must retain hosted OAuth.
