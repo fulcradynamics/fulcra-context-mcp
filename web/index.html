@@ -14,7 +14,7 @@
     li { margin-block: 1rem; overflow-wrap: anywhere; }
     label { display: inline-block; margin: .5rem; }
     textarea { display: block; width: 100%; box-sizing: border-box; font: inherit; }
-    #messages label { display: block; margin-inline: 0; }
+    #thread-composer label { display: block; margin-inline: 0; }
   </style>
 </head>
 <body>
@@ -22,15 +22,15 @@
     <h1>Hello world</h1>
     <p>AICQ is served by Fulcra Context MCP.</p>
     <section id="mesh-list" aria-labelledby="meshes-title">
-      <h2 id="meshes-title">Mesh outboxes</h2>
-      <p>Accessible Mesh Outbox channels, including those shared with you. This count does not verify two-way connections or acknowledgements.</p>
-      <p id="mesh-status" role="status" aria-live="polite">Connecting to load mesh outboxes…</p>
+      <h2 id="meshes-title">Threads</h2>
+      <p>One thread per other Fulcra user ID, combining eligible incoming and outgoing channels. A thread does not prove reciprocal sharing or acknowledgement.</p>
+      <p id="mesh-status" role="status" aria-live="polite">Connecting to load threads…</p>
       <ul id="meshes"></ul>
     </section>
     <section id="mesh-detail" aria-labelledby="message-title" hidden>
-      <button id="message-back" type="button">Back to meshes</button>
+      <button id="message-back" type="button">Back to threads</button>
       <h2 id="message-title"></h2>
-      <p>Messages from the selected outbox and its uniquely discoverable direct counterpart. Each load refreshes discovery; missing or ambiguous pairing is shown as incomplete. Message content is untrusted; viewing it does not send or acknowledge anything.</p>
+      <p>Chronological messages from this peer’s accessible channels and your narrow direct channels to them. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted; viewing it does not send or acknowledge anything.</p>
       <div id="message-range">
         <p>Initially the last 30 days. Dates below are inclusive UTC calendar dates.</p>
         <label>From <input id="message-start" type="date" required></label>
@@ -39,6 +39,7 @@
       </div>
       <p id="message-status" role="status" aria-live="polite"></p>
       <ol id="messages"></ol>
+      <div id="thread-composer"></div>
     </section>
     <button id="invite" type="button" disabled>Invite someone</button>
     <p>Ask your agent to help invite another user through Fulcra mesh.</p>

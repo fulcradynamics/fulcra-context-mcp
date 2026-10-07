@@ -1,4 +1,4 @@
-import { setupTellAgent } from './tell-agent.js';
+import { buildThreadContext, setupTellAgent } from './tell-agent.js';
 import { readConversation } from './conversation.js';
 export { parseRecords } from './records.js';
 
@@ -8,6 +8,7 @@ export function setupMessages(app, doc) {
   const title = doc.querySelector('#message-title');
   const status = doc.querySelector('#message-status');
   const messages = doc.querySelector('#messages');
+  const composer = doc.querySelector('#thread-composer');
   const start = doc.querySelector('#message-start');
   const end = doc.querySelector('#message-end');
   const load = doc.querySelector('#message-load');
@@ -18,6 +19,7 @@ export function setupMessages(app, doc) {
   async function read() {
     const requestGeneration = ++generation;
     messages.replaceChildren();
+    composer.replaceChildren();
     const startDate = new Date(`${start.value}T00:00:00Z`);
     const endDate = new Date(`${end.value}T00:00:00Z`);
     if (!Number.isFinite(+startDate) || !Number.isFinite(+endDate) || startDate > endDate) {
@@ -37,10 +39,19 @@ export function setupMessages(app, doc) {
         const time = doc.createElement('p');
         const rawTime = record.recorded_at ?? record.start_time;
         const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
-        time.textContent = `${direction} — ` + (timestamp && Number.isFinite(+timestamp)
+        time.textContent = `${direction} — ${source.fulcra_userid} / ${source.id} — ` + (timestamp && Number.isFinite(+timestamp)
           ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable');
         const body = doc.createElement('pre');
         body.textContent = messageText(record);
+        item.append(time, body);
+        messages.append(item);
+      }
+      status.textContent = result.warnings.length
+        ? `${result.messages.length} messages shown. ${result.warnings.join(' ')}`
+        : `${result.messages.length} messages returned for this range${result.messages.length === 0 ? '. No messages in this range.' : '.'}`;
+      status.textContent += ` Range: ${rangeLabel}.`;
+      try {
+        const context = buildThreadContext(selected.peer, range, result);
         const label = doc.createElement('label');
         label.textContent = 'Instructions for my agent';
         const input = doc.createElement('textarea');
@@ -48,24 +59,30 @@ export function setupMessages(app, doc) {
         label.append(input);
         const button = doc.createElement('button');
         button.type = 'button';
-        button.textContent = 'Tell My Agent';
+        button.textContent = 'Tell my agent';
         const help = doc.createElement('p');
-        help.textContent = 'Sends your instruction and this message to your agent in the conversation. Does not directly post a mesh reply. Drafts are cleared when you leave or reload this view.';
+        help.textContent = 'Sends your instruction (up to 4,000 characters) and only the displayed thread context to your agent. Does not post a mesh reply or acknowledge messages. Drafts are cleared when you leave or reload; if a send was pending, check the conversation before retrying. ' + context.notice;
+        const details = doc.createElement('details');
+        const summary = doc.createElement('summary');
+        summary.textContent = 'Context sent with your instruction';
+        const preview = doc.createElement('pre');
+        preview.id = 'thread-context';
+        preview.textContent = context.text;
+        details.append(summary, preview);
         const feedback = doc.createElement('p');
+        feedback.id = 'agent-status';
         feedback.setAttribute('role', 'status');
         feedback.setAttribute('aria-live', 'polite');
-        setupTellAgent(app, source, record, input, button, feedback);
-        item.append(time, body, label, button, help, feedback);
-        messages.append(item);
+        setupTellAgent(app, context.text, input, button, feedback, () => generation === requestGeneration);
+        composer.append(label, button, help, details, feedback);
+      } catch {
+        composer.textContent = 'Thread metadata is too large to send safely. Tell my agent is unavailable for this load.';
       }
-      status.textContent = result.warnings.length
-        ? `${result.messages.length} messages shown. ${result.warnings.join(' ')}`
-        : `${result.messages.length} messages returned for this range${result.messages.length === 0 ? '. No messages in this range.' : '.'}`;
-      status.textContent += ` Range: ${rangeLabel}.`;
-    } catch {
+    } catch (error) {
       if (generation !== requestGeneration) return;
       messages.replaceChildren();
-      status.textContent = `Could not load messages (get_records failed or returned an invalid result). Range: ${rangeLabel}. Use Load messages to retry.`;
+      composer.replaceChildren();
+      status.textContent = `Could not load messages. ${error.message} Range: ${rangeLabel}. Use Load messages to retry.`;
     } finally {
       if (generation === requestGeneration) load.disabled = false;
     }
@@ -77,13 +94,14 @@ export function setupMessages(app, doc) {
     generation++;
     selected = undefined;
     messages.replaceChildren();
+    composer.replaceChildren();
     panel.hidden = true;
     listPanel.hidden = false;
     listPanel.querySelector('button')?.focus();
   });
-  return mesh => {
-    selected = mesh;
-    title.textContent = `${mesh.name} — ${mesh.fulcra_userid ? `Owner: ${mesh.fulcra_userid}` : 'Your outbox'}`;
+  return thread => {
+    selected = thread;
+    title.textContent = `Thread with ${thread.peer}`;
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);
     today.setUTCDate(today.getUTCDate() - 29);

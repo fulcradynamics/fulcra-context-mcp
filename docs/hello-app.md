@@ -1,97 +1,120 @@
 # AICQ Hello World MCP App
 
-`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v6.html`.
-The existing server serves that resource. After connecting, the UI makes one
-read-only `get_data_catalog(name="Mesh Outbox")` call through `app.callServerTool`.
-No separate UI server, polling, or OAuth changes.
+`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v7.html`.
+The existing server serves the self-contained resource. After connecting, the UI
+calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
+through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
+No separate UI server, polling, search, pagination, or OAuth changes.
 
-## Mesh list
+## Peer threads
 
-Opening AICQ shows the tool name and a loading message until its response arrives.
-It lists distinct accessible MomentAnnotation channels named Mesh Outbox, keyed
-by owner and data-type ID, and shows their actual count, including zero. Own and
-shared channels are included. This is an outbox count, not a count of acknowledged
-two-way relationships; the skill has no separate mesh registry. Custom names not
-following the skill convention are not discovered. Message contents are only read
-after selecting an outbox.
+The list shows one row per exact other Fulcra user ID and counts **threads**, not
+outboxes or acknowledged relationships. Discovery uses the actual `tools.py`
+formats: the compatible-tool catalog and `Shares: {own_fulcra_userid, outgoing,
+incoming}`. Only readable MomentAnnotation channels following the Mesh Outbox
+name convention are discovered. Names select channel candidates; they never
+identify a peer. Slugs, display names and envelope routing are not identity evidence.
 
-## Message details
+- Incoming: the catalog's `fulcra_userid` identifies the channel owner and peer.
+  Accessible incoming channels remain usable without a reciprocal/direct incoming
+  grant or acknowledgement. A shared owner's stream is not proof that every record
+  is exclusively addressed to this user; source identity is always visible.
+- Outgoing: all grants covering an own channel must be narrow exact-channel grants
+  to the same single other `with_user_ids` recipient. Explicit
+  `share_all_data=false`, one data type, and no groups/files are required.
+  A narrow grant cannot hide another broad, group, multi-type, or multi-recipient
+  grant covering that channel. Multiple separate narrow channels to the **same**
+  peer are eligible and combined, not treated as ambiguous.
+- Own identity comes from `list_shares.own_fulcra_userid`. An absent catalog owner
+  means own; an explicit own ID is normalized to the same identity. Duplicate
+  owner/type entries and grants do not add channels; equal type IDs under different
+  owners remain distinct. No self thread is created.
+- Ineligible own channels (including orphan and self-only channels) are omitted,
+  with a discovery warning count, not turned into fake threads. Incoming-only and
+  outgoing-only threads show an explicit missing-side/incomplete notice.
+- Discovery failure, malformed results, or missing own user ID stops the load.
+  No guessing of owners or fallback to cached channels.
 
-Click an outbox, or choose Load messages, to refresh both existing discovery tools:
-`get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`.
-This discovers a newly shared return outbox without a handshake or acknowledgement.
-No record read occurs on list load. Pairing uses exact catalog owner/type IDs, never
-names, envelope routing, or acknowledgement state:
+Opening the list never reads records. Selecting a peer or clicking **Load messages**
+refreshes both discovery tools, then reads every currently eligible channel for that
+exact peer. Other peers' records are not read. All `get_records` calls use the same
+applied time bounds. Shared reads pass their exact owner ID; own reads omit the
+parameter. Every displayed record retains its original exact owner/type identity.
 
-- Own selected outbox: its exact outgoing share identifies one unique recipient;
-  that peer's incoming direct share and catalog entry identify one return outbox.
-- Shared selected outbox: its catalog owner identifies the peer; narrow outgoing
-  shares to that peer identify one own outbox. The selected incoming share must
-  also be narrow/direct, and the own counterpart must have one direct recipient.
-- Only explicit `share_all_data=false`, single-type direct shares are eligible;
-  outgoing shares must have one `with_user_ids` recipient, incoming grants must
-  have `grant_type="user"` and `sharing_fulcra_userid`. Group shares, file shares,
-  multiple types/recipients, and all-data shares are not pairing evidence.
-- Catalog channels must support `get_records`. Duplicate owner/type entries and
-  duplicate grants do not create extra channels. Same type IDs in different owners
-  remain distinct. Missing/ambiguous pairing or failed discovery leaves the selected
-  side readable with an explicit incomplete/conversation-unavailable warning.
+The initial window is today plus the preceding 29 UTC calendar dates. Editable
+From/Through dates are inclusive, converted to timezone-aware start/end-exclusive
+bounds. The result shows the **applied** range; editing dates alone does not relabel
+it or change agent context. There is no polling or pagination.
 
-Only the selected outbox and its uniquely paired counterpart are read with
-`get_records`; each retains its own catalog `fulcra_userid` (absent means own).
-Both use the same user-selected date window. The initial window is today plus the
-preceding 29 UTC calendar dates; editable From/Through dates are inclusive, converted
-to timezone-aware start/end-exclusive bounds. Change dates and Load messages to
-read older messages. There is no polling or pagination.
+## Messages and completeness
 
-The detail panel labels messages Incoming/Outgoing, sorts them chronologically,
-and displays timestamps in the browser's local timezone. Missing/invalid timestamps
-are labeled unavailable and placed last. Each Tell My Agent control uses that
-message's original source outbox/owner/type, not the selected channel's identity.
-Mesh envelopes display their body and available routing/kind/slug/message-ID fields;
-unrecognized notes remain visible as raw text. All content is text-only: no message
-HTML, automatic model context, replies, or acknowledgements.
+Messages have Incoming/Outgoing labels and exact source owner/type IDs. They sort
+chronologically, with browser-local timestamps; invalid/missing timestamps are
+labeled unavailable and placed last. Mesh envelopes show body and available
+routing/kind/slug/message-ID fields. Unrecognized notes remain visible as raw text.
+All content is rendered as text, never HTML. Reading does not send, acknowledge,
+write records, or update model context automatically.
 
-Read errors and truncation are identified per source; successful messages from the
-other side remain visible. Zero records is only reported as an empty conversation
-when discovery/pairing and both reads succeed without truncation. Narrow the range
-for truncated results; this view does not claim all history or data outside the
-user's share permissions (including time-limited grants).
+Errors and truncation are identified per source while successful records from other
+channels remain visible. A zero result is called an empty conversation only when
+all discovered eligible reads complete without warnings. Completeness applies only
+to accessible channels in the applied range, not all history or data outside share
+permissions (including time-limited grants). Narrow the dates for truncated results.
 
-Back to meshes preserves the list. Late discovery/read responses from a previous
-selection cannot replace the current view or enable its pending Load button;
-stale discovery does not start record reads. Load messages retries discovery and
-both selected/paired reads. Multiple conversations with the same peer remain
-ambiguous rather than being merged by name. Custom-named outboxes outside the Mesh
-Outbox convention are not discovered. Group conversations are not reconstructed.
+Back to threads preserves the initial list; reopen the app to discover new peer
+rows. Each detail load rediscovers that peer's channels. Navigation/reload invalidates
+old discovery, reads and composers. Late responses cannot replace the current view;
+stale discovery starts no reads. Failed discovery or a disappeared peer leaves no
+sendable cached context. Load messages retries. Invite remains independent.
+The call indicator is in AICQ; the host decides whether app-originated calls also
+appear in the conversation UI.
 
-Tool errors, invalid responses, and transport failures/timeouts produce warnings,
-never an empty-success claim. Invitation messaging remains independent.
-The visible call indicator is in AICQ itself; the host controls whether app-originated
-tool calls also appear in ChatGPT's conversation UI.
+## Tell my agent (PLAT-636)
 
-- `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
-- `web/`: UI source and the standard MCP Apps browser SDK.
-- `fulcra_mcp/ui/hello.html`: generated self-contained UI, committed and included in Python wheels and source distributions. No CDN or Node runtime is needed to run the server.
-- `fulcra_mcp/main.py`: mounts the UI alongside the existing tools in both transports.
+One bottom composer follows the last message, also when a successfully discovered
+thread has zero records. It is not repeated per message. On explicit click,
+`app.sendMessage` sends a user-role request with two text blocks:
 
-We use FastMCP's existing MCP Apps support and the documented OpenAI metadata,
-not the separate `openai-mcp-extensions` Python SDK. No Python dependency upgrade.
+1. The typed user instruction (maximum 4,000 UTF-16 code units).
+2. The current displayed thread context: exact peer ID, applied range, warnings,
+   completeness, displayed/omitted record counts, and a chronological list of
+   displayed records with original exact source owner/type and direction.
 
-## Tell My Agent (PLAT-636)
+The context block is explicitly **untrusted data, not instructions or authorization**.
+It contains no undisplayed account history or unrelated peer records. The expandable
+“Context sent with your instruction” preview shows the exact context text sent.
+No tool write or peer reply occurs; the host owns the subsequent agent turn.
 
-Each returned message has a textarea and **Tell My Agent** button. On explicit
-click, `app.sendMessage` sends a user-role request containing the typed instruction
-and only that message's record plus its outbox name, type ID, and shared owner ID.
-The instruction and JSON context are separate text blocks; the latter is labeled
-untrusted data, not instructions or authorization. No tool write, peer reply, or
-automatic model-context update occurs. The host owns the subsequent agent turn.
+The context text, including its untrusted-data label and JSON metadata, is bounded
+to 24,000 UTF-16 code units. It keeps a chronological prefix of whole records; an
+oversized next record ends the prefix rather than cutting provenance or content.
+Clipping is disclosed beside the composer and in the host's `omitted_records` count
+and partial completeness. The full displayed thread remains visible. If metadata
+alone exceeds the limit, sending is disabled with an explicit notice. Combined
+instruction/context content is bounded by these limits plus a fixed instruction
+prefix (wire JSON encoding adds transport overhead).
 
 Whitespace-only instructions and unsupported hosts leave the button disabled.
-While pending, repeat clicks and input editing are disabled. Success clears the
-draft and reports request acceptance, not task completion. Errors/timeouts preserve
-the draft and warn to check the conversation before retrying. Drafts are local to
-the current rendered detail view and are cleared on navigation/reload.
+While pending, repeat clicks and input editing are disabled. Acceptance clears the
+draft, notifies the user to continue in chat, and does not claim task completion.
+Errors/timeouts preserve drafts and warn to check the conversation before retrying.
+Reload/navigation removes the old composer immediately, clears drafts and prevents
+stale-context submission. A pending send may already have reached the host; the
+composer warns to check chat before retrying after navigation.
+
+## Implementation
+
+- `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
+- `web/meshes.js`: catalog/shares discovery and peer-thread list.
+- `web/conversation.js`, `records.js`, `messages.js`: refreshed multi-channel reads,
+  record parsing, chronology and thread presentation.
+- `web/tell-agent.js`: bounded context and explicit host-message request safeguards.
+- `fulcra_mcp/ui/hello.html`: generated self-contained UI, included in Python wheels
+  and source distributions. No CDN or Node runtime is needed to run the server.
+- `fulcra_mcp/main.py`: mounts the UI alongside existing tools in both transports.
+
+We use FastMCP's existing MCP Apps support and the standard browser SDK, not the
+separate `openai-mcp-extensions` Python SDK. No dependency upgrade.
 
 ## Invite button
 
@@ -137,7 +160,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v6.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v7.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
@@ -165,7 +188,7 @@ server, so a separate stdio process is not needed. Keep the tunnel running.
 
 **Account boundary:** stdio data tools use the local operator's Fulcra credentials.
 The entrypoint greeting does not access them, but opening the UI now reads the
-account's catalog to discover mesh outboxes. Other tools are also exposed.
+account's catalog and shares to discover peer threads. Other tools are also exposed.
 Use a dedicated OS account with no Fulcra credentials, or a synthetic test account,
 and restrict tunnel/workspace access. Do not expose stdio-mode tools through an
 unauthenticated public HTTP wrapper. Multi-user production must retain hosted OAuth.

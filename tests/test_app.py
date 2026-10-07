@@ -11,7 +11,7 @@ async def test_hello_app():
         assert "aicq_open" in tools
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
-        assert tool.meta["ui"]["resourceUri"] == "ui://aicq/hello/v6.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://aicq/hello/v7.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -19,7 +19,7 @@ async def test_hello_app():
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
         assert result.data == {"message": "Hello world"}
-        resources = await client.read_resource("ui://aicq/hello/v6.html")
+        resources = await client.read_resource("ui://aicq/hello/v7.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Hello world</h1>" in resources[0].text
         assert "Invite someone</button>" in resources[0].text
@@ -27,13 +27,17 @@ async def test_hello_app():
         assert 'id="mesh-status"' in resources[0].text
         assert 'id="mesh-detail"' in resources[0].text
         assert 'get_records' in resources[0].text
-        assert 'Tell My Agent' in resources[0].text
+        assert 'Tell my agent' in resources[0].text
+        assert resources[0].text.count('id="thread-composer"') == 1
+        assert 'peer_fulcra_userid' in resources[0].text
+        assert 'omitted_records' in resources[0].text
+        assert 'Context clipped' in resources[0].text
         assert "get_data_catalog" in resources[0].text
         assert "list_shares" in resources[0].text
         assert "Incoming" in resources[0].text
         assert "Outgoing" in resources[0].text
         assert "Conversation incomplete" in resources[0].text
-        assert "Messages from this outbox only" not in resources[0].text
+        assert "Showing selected outbox only" not in resources[0].text
         assert resources[0].meta["openai/ui"]["preferredDisplayMode"] == "fullscreen"
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen"]
         assert "get_data_catalog" in tools  # Existing tools remain mounted.
