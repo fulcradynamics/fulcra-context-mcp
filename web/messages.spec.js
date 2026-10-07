@@ -7,11 +7,13 @@ async function open(page) {
   await page.setContent('<iframe sandbox="allow-scripts"></iframe>');
   await page.evaluate(({ html, entries }) => {
     window.reads = [];
+    window.agentRequests = [];
     const frame = document.querySelector('iframe');
     window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
     window.addEventListener('message', event => {
       if (event.source !== frame.contentWindow) return;
       const message = event.data;
+      if (message.method === 'ui/message') window.agentRequests.push(message);
       if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: { message: { text: {} } }, hostContext: { displayMode: 'fullscreen' } });
       if (message.method === 'tools/call') {
         if (message.params.name === 'get_data_catalog') window.reply(message.id, { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ records: entries }) }] });
@@ -64,6 +66,40 @@ test('click reads selected peer messages, shows loading, text-safe content and b
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('Choose a valid date range');
   expect(await page.evaluate(() => window.reads.length)).toBe(4);
+});
+
+test('Tell My Agent sends only the chosen message and instruction via the real SDK', async ({ page }) => {
+  const ui = await open(page);
+  await ui.getByRole('button', { name: 'Mesh Outbox Peer', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
+  const record = { note: JSON.stringify({ v: 1, mid: 'chosen-mid', body: 'Please respond' }) };
+  await respond(page, 0, [record, { note: 'unrelated other message' }]);
+  const first = ui.locator('#messages > li').first();
+  const input = first.getByRole('textbox', { name: 'Instructions for my agent' });
+  const button = first.getByRole('button', { name: 'Tell My Agent', exact: true });
+  await expect(button).toBeDisabled();
+  await input.fill('Draft a response for me to review.');
+  expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
+  await button.click();
+  await expect(button).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
+  const sent = await page.evaluate(() => window.agentRequests[0].params);
+  expect(sent.role).toBe('user');
+  expect(sent.content[0].text).toContain('Draft a response for me to review.');
+  expect(sent.content[1].text).toContain(peer.id);
+  expect(sent.content[1].text).toContain('peer-user');
+  expect(sent.content[1].text).toContain('chosen-mid');
+  expect(sent.content[1].text).not.toContain('unrelated other message');
+  expect(await page.evaluate(() => window.reads.length)).toBe(1);
+  await page.evaluate(() => window.reply(window.agentRequests[0].id, { isError: true }));
+  await expect(first.getByRole('status')).toContainText('Could not send');
+  await expect(input).toHaveValue('Draft a response for me to review.');
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
+  await page.evaluate(() => window.reply(window.agentRequests[1].id, {}));
+  await expect(first.getByRole('status')).toContainText('Request sent');
+  await expect(input).toHaveValue('');
+  await expect(button).toBeDisabled();
 });
 
 test('returning to list and choosing another outbox ignores late responses', async ({ page }) => {

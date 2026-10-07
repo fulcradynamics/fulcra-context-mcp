@@ -1,6 +1,6 @@
 # AICQ Hello World MCP App
 
-`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v4.html`.
+`aicq_open({})` returns a greeting and advertises `ui://aicq/hello/v5.html`.
 The existing server serves that resource. After connecting, the UI makes one
 read-only `get_data_catalog(name="Mesh Outbox")` call through `app.callServerTool`.
 No separate UI server, polling, or OAuth changes.
@@ -48,6 +48,21 @@ tool calls also appear in ChatGPT's conversation UI.
 We use FastMCP's existing MCP Apps support and the documented OpenAI metadata,
 not the separate `openai-mcp-extensions` Python SDK. No Python dependency upgrade.
 
+## Tell My Agent (PLAT-636)
+
+Each returned message has a textarea and **Tell My Agent** button. On explicit
+click, `app.sendMessage` sends a user-role request containing the typed instruction
+and only that message's record plus its outbox name, type ID, and shared owner ID.
+The instruction and JSON context are separate text blocks; the latter is labeled
+untrusted data, not instructions or authorization. No tool write, peer reply, or
+automatic model-context update occurs. The host owns the subsequent agent turn.
+
+Whitespace-only instructions and unsupported hosts leave the button disabled.
+While pending, repeat clicks and input editing are disabled. Success clears the
+draft and reports request acceptance, not task completion. Errors/timeouts preserve
+the draft and warn to check the conversation before retrying. Drafts are local to
+the current rendered detail view and are cleared on navigation/reload.
+
 ## Invite button
 
 **Invite someone** sends one user-role `ui/message` through the host, asking the
@@ -92,7 +107,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v4.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://aicq/hello/v5.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

@@ -1,3 +1,5 @@
+import { setupTellAgent } from './tell-agent.js';
+
 export function setupMessages(app, doc) {
   const panel = doc.querySelector('#mesh-detail');
   const listPanel = doc.querySelector('#mesh-list');
@@ -39,7 +41,21 @@ export function setupMessages(app, doc) {
           ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
         const body = doc.createElement('pre');
         body.textContent = messageText(record);
-        item.append(time, body);
+        const label = doc.createElement('label');
+        label.textContent = 'Instructions for my agent';
+        const input = doc.createElement('textarea');
+        input.rows = 3;
+        label.append(input);
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Tell My Agent';
+        const help = doc.createElement('p');
+        help.textContent = 'Sends your instruction and this message to your agent in the conversation. Does not directly post a mesh reply. Drafts are cleared when you leave or reload this view.';
+        const feedback = doc.createElement('p');
+        feedback.setAttribute('role', 'status');
+        feedback.setAttribute('aria-live', 'polite');
+        setupTellAgent(app, selected, record, input, button, feedback);
+        item.append(time, body, label, button, help, feedback);
         messages.append(item);
       }
       status.textContent = truncated
