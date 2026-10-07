@@ -142,7 +142,7 @@ async def get_workouts(
 @tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
 @_friendly_http_errors
 async def annotations_catalog() -> str:
-    """Deprecated: use get_data_catalog(category="user_configured") instead.
+    """Deprecated: use get_data_catalog(category="user_defined") instead.
 
     That lists every user-defined type, including Event/Metric ones, with the
     IDs get_records takes; this lists only older annotation types, by bare UUID.
@@ -366,7 +366,7 @@ def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | 
         f"{data_type!r} is not a user-defined data type ID. Built-in types "
         f"(e.g. Event, HeartRate) can't be {action}; only user-defined types "
         "can, by their '<BaseType>/<uuid>' ID (see get_data_catalog, category "
-        "'user_configured')."
+        "'user_defined')."
     )
 
 
@@ -716,7 +716,7 @@ async def get_data_catalog(
             Schema if it has nested fields or rules; plus required_fields.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
-            "user_configured", "base_type".
+            "user_defined", "base_type".
         name: Optional. Filter results by partial, case-insensitive name match.
         fulcra_userid: Optional. Only the types this Fulcra user shares with
             you (your own ID: only your own types).
