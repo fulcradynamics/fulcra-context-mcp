@@ -16,6 +16,7 @@ export function setupReplySuggestions(app, lifecycle, context, container, isCurr
   const list = doc.createElement('div'); list.id = 'reply-suggestions';
   container.append(button, status, list);
   const supported = Boolean(app.getHostCapabilities()?.sampling);
+  button.hidden = !supported;
   if (!supported) status.textContent = 'This host does not support reply suggestions (sampling).';
   let shownToken, shownVersion;
   const update = () => {

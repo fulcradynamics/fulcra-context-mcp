@@ -181,8 +181,15 @@ test('sampling is explicit, bounded, and suggestions only populate the draft', a
 for (const mode of ['noSampling', 'failSampling']) test(`sampling ${mode} is truthful`, async ({ page }) => {
   const ui = await open(page, { peer: 'peer', [mode]: true });
   const suggest = ui.getByRole('button', { name: 'Suggest replies', exact: true });
-  if (mode === 'noSampling') await expect(suggest).toBeDisabled();
-  else await suggest.click();
+  if (mode === 'noSampling') {
+    await expect(suggest).toBeHidden();
+    await expect(ui.locator('#suggestion-status')).toHaveText('This host does not support reply suggestions (sampling).');
+    await expect(ui.locator('#suggestion-status')).toBeVisible();
+    expect(await page.evaluate(() => window.samples.length)).toBe(0);
+  } else {
+    await expect(suggest).toBeVisible();
+    await suggest.click();
+  }
   await expect(ui.locator('#suggestion-status')).toContainText(mode === 'noSampling' ? 'does not support' : 'Could not');
   await expect(ui.locator('#reply-suggestions button')).toHaveCount(0);
 });

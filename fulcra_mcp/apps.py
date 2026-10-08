@@ -5,8 +5,8 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v16.html"
-THREAD_UI_URI = "ui://fulcra/mesh/thread/v16.html"
+UI_URI = "ui://fulcra/mesh/v17.html"
+THREAD_UI_URI = "ui://fulcra/mesh/thread/v17.html"
 
 
 @app_mcp.tool(

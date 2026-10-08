@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v16.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v17.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -200,7 +200,7 @@ Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
-## Global presentation: Continue conversation in chat (resource v16)
+## Global presentation: Continue conversation in chat (resource v17)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -249,7 +249,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v16)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v17)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -262,7 +262,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v16.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v17.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -304,7 +304,9 @@ content types are rejected. Suggestions render as plain text. Selecting one
 explicitly replaces the draft only; it never sends. Late results after context,
 navigation or draft changes are discarded, and outstanding sampling is guarded
 across navigation. Errors/unsupported hosts display truthful notices, not fabricated
-replies. Opening, reading and polling never request sampling.
+replies. Without sampling, the Suggest replies button is hidden while the notice
+“This host does not support reply suggestions (sampling).” remains visible.
+Opening, reading and polling never request sampling.
 
 `web/thread-entrypoint.spec.js` uses the real pinned SDK in a synthetic sandbox host
 to exercise launch timing, exact matching, presentation separation, message wire
@@ -415,7 +417,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v16.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v17.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
