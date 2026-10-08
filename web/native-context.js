@@ -1,5 +1,3 @@
-import { INSTRUCTION_LIMIT } from './tell-agent.js';
-
 const options = { timeout: 15000 };
 
 // One queue for the app, not one per peer: an old attach must settle before its
@@ -22,7 +20,7 @@ export function createContextLifecycle(app, status) {
         // SDK content is an array; empty content replaces the previous context.
         await app.updateModelContext({ content: [] }, options);
         dirty = false;
-        report('Thread context cleared. Use this thread in ChatGPT again to attach the current display.');
+        report('Thread context cleared. Click Continue conversation in chat again to attach the current display.');
       } catch {
         report('Could not confirm context was cleared. Previous thread context may remain in ChatGPT; do not rely on it. Retry by attaching the current thread or close the app.');
       } finally { clearing = undefined; }
@@ -30,6 +28,8 @@ export function createContextLifecycle(app, status) {
     return clearing;
   }
   return {
+    pending: false,
+    onChange: () => {},
     token: () => epoch,
     current: token => !disposed && epoch === token,
     attach(text, token) {
@@ -45,15 +45,16 @@ export function createContextLifecycle(app, status) {
   };
 }
 
-// Only an explicit click attaches context and then relays a separate request.
-export function setupNativeContext(app, lifecycle, context, button, status, isCurrent, input, sendState, feedback) {
+// Only an explicit click attaches context. The user writes in native chat;
+// this path never sends a message or requests a model turn.
+export function setupNativeContext(app, lifecycle, context, button, status, isCurrent) {
+  const supported = Boolean(app.getHostCapabilities()?.updateModelContext?.text);
   const update = () => {
-    const capabilities = app.getHostCapabilities();
-    button.disabled = sendState.pending || !isCurrent() || !context() || input.value.length > INSTRUCTION_LIMIT
-      || !capabilities?.updateModelContext?.text || !capabilities?.message?.text;
+    button.disabled = lifecycle.pending || !isCurrent() || !context() || !supported;
   };
-  input.addEventListener('input', update);
-  const guidance = 'Request sent. Continue in the conversation; no mesh reply was posted by this button. You may need to expand the conversation manually.';
+  lifecycle.onChange = update;
+  if (!supported) status.textContent = 'This host cannot attach thread context. Continue in the native chat without an attachment.';
+  const guidance = 'Context attached. Type and send your request in the native chat. No message or mesh reply was sent. You may need to expand the conversation manually.';
   update();
   button.addEventListener('click', async () => {
     update();
@@ -61,44 +62,25 @@ export function setupNativeContext(app, lifecycle, context, button, status, isCu
     const token = lifecycle.token();
     const current = () => isCurrent() && lifecycle.current(token);
     const text = context();
-    const draft = input.value;
-    sendState.pending = true; sendState.onChange();
-    let attached = false;
-    feedback.textContent = '';
+    lifecycle.pending = true;
+    update();
     status.textContent = 'Attaching displayed thread context…';
     try {
       if (!await lifecycle.attach(text, token) || !current()) return;
-      attached = true;
-      status.textContent = 'Context attached.';
-      feedback.textContent = 'Sending request…';
-      const request = draft.trim() ? `App-relayed request from the instruction field. Please go ahead and carry out the request below, including sending or posting when requested. If it asks only for a draft, do not send it.\n\n${draft}`
-        : 'I have attached a Fulcra Mesh thread for context. Please help me with this thread; I will provide my request in this conversation.';
-      const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text: request }] }, options);
-      if (result.isError) throw new Error('Host rejected request');
-      // A changed poll does not undo acceptance, but never clear a newer draft.
-      if (!isCurrent()) return;
-      if (input.value === draft) input.value = '';
-      // Acceptance belongs to the message, not the attached snapshot's epoch.
-      feedback.textContent = guidance;
-      if (!current()) return;
+      status.textContent = guidance;
       if (app.getHostContext()?.availableDisplayModes?.includes('pip')) {
         try {
           const result = await app.requestDisplayMode({ mode: 'pip' }, options);
-          if (current()) feedback.textContent = guidance + (result.mode === 'pip' ? ' Host reports picture-in-picture mode.' : ` Host kept ${result.mode} mode; PiP was not applied.`);
+          if (current()) status.textContent = guidance + (result.mode === 'pip' ? ' Host reports picture-in-picture mode.' : ` Host kept ${result.mode} mode; PiP was not applied.`);
         } catch {
-          if (current()) feedback.textContent = guidance + ' Could not change display mode.';
+          if (current()) status.textContent = guidance + ' Could not change display mode.';
         }
-      } else feedback.textContent = guidance + ' This host does not advertise PiP support.';
+      } else status.textContent = guidance + ' This host does not advertise PiP support.';
     } catch {
-      if (attached && isCurrent()) {
-        // Cleanup must never overwrite the outcome or lose its privacy warning.
-        feedback.textContent = 'Context attached, but request send unconfirmed. Check the conversation before retrying; your draft is preserved. The attachment may have been cleared if the display changed.';
-      } else if (current()) {
-        status.textContent = 'Could not confirm context attachment. No request sent; your draft is preserved. Retry to attach the current displayed context.';
-      }
+      if (current()) status.textContent = 'Could not confirm context attachment. No message sent. Retry to attach the current displayed context.';
     } finally {
-      sendState.pending = false;
-      sendState.onChange();
+      lifecycle.pending = false;
+      lifecycle.onChange();
     }
   });
   return update;

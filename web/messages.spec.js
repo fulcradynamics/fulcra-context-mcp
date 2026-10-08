@@ -15,6 +15,7 @@ async function open(page, { paired = true, multiple = false, outgoingOnly = fals
     window.shares = { own_fulcra_userid: 'me', outgoing: paired ? [grant(own.id), grant(own.id), ...(multiple ? [grant(second.id)] : [])] : [], incoming: [] };
     window.reads = [];
     window.agentRequests = [];
+    window.contexts = [];
     window.resizeNotifications = [];
     const frame = document.querySelector('iframe');
     window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
@@ -23,7 +24,8 @@ async function open(page, { paired = true, multiple = false, outgoingOnly = fals
       const message = event.data;
       if (message.method === 'ui/notifications/size-changed') window.resizeNotifications.push(message.params);
       if (message.method === 'ui/message') window.agentRequests.push(message);
-      if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: supported ? { message: { text: {} } } : {}, hostContext: { displayMode: 'fullscreen', safeAreaInsets } });
+      if (message.method === 'ui/update-model-context') { window.contexts.push(message); window.reply(message.id, {}); }
+      if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: supported ? { message: { text: {} }, updateModelContext: { text: {} } } : {}, hostContext: { displayMode: 'fullscreen', safeAreaInsets } });
       if (message.method === 'tools/call') {
         if (['get_data_catalog', 'list_shares'].includes(message.params.name)) {
           window.discovery.push(message);
@@ -87,18 +89,15 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(740);
   };
-  await input(ui).fill('Draft a reply for my review.');
-  await aboveOverlay(input(ui));
-  await input(ui).focus();
+  await ui.locator('#message-load').focus();
   await page.keyboard.press('Tab');
   await expect(tell(ui)).toBeFocused();
   expect(await tell(ui).evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid');
   await aboveOverlay(tell(ui));
   await page.keyboard.press('Enter');
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  await page.evaluate(() => window.reply(window.agentRequests[0].id, {}));
-  await expect(ui.locator('#agent-status')).toContainText('Request sent');
-  await aboveOverlay(ui.locator('#agent-status'));
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  await expect(ui.locator('#context-status')).toContainText('Context attached');
+  await aboveOverlay(ui.locator('#context-status'));
   const disclosure = ui.locator('#thread-composer summary');
   await aboveOverlay(disclosure);
   await disclosure.focus();
@@ -108,15 +107,15 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   await page.keyboard.press('Enter');
   await aboveOverlay(ui.locator('#invite'));
   if (process.env.BRAND_PREVIEW_DIR) {
-    await ui.locator('#thread-composer').evaluate(el => el.scrollIntoView({ block: 'start' }));
-    const feedbackBox = await ui.locator('#agent-status').boundingBox();
+    await aboveOverlay(ui.locator('#context-status'));
+    const feedbackBox = await ui.locator('#context-status').boundingBox();
     expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(740);
     await page.screenshot({ path: `${process.env.BRAND_PREVIEW_DIR}/brand-preview-composer-${width === 320 ? 'narrow' : 'wide'}.png` });
   }
   await ui.locator('#invite').focus();
   await page.keyboard.press('Enter');
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
-  await page.evaluate(() => window.reply(window.agentRequests[1].id, {}));
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
+  await page.evaluate(() => window.reply(window.agentRequests[0].id, {}));
   await aboveOverlay(ui.locator('#status'));
   await assertNoOverflow();
   expect(networkRequests).toEqual([]);
@@ -127,8 +126,7 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   }
 });
 
-const tell = ui => ui.getByRole('button', { name: 'Tell my agent', exact: true });
-const input = ui => ui.getByRole('textbox', { name: 'Instructions for my agent' });
+const tell = ui => ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
 const choose = ui => ui.getByRole('button', { name: 'peer-user', exact: true }).click();
 
 test('one row per exact peer, all same-peer channels latest first, one top composer with exact current context', async ({ page }) => {
@@ -155,36 +153,27 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   await expect(tell(ui)).toHaveCount(1);
   await expect(ui.locator('#messages textarea')).toHaveCount(0);
   await expect(ui.locator('#message-range + #thread-composer')).toBeVisible();
-  await expect(tell(ui)).toBeDisabled();
-  await input(ui).fill('Draft a response for my review.');
+  await expect(tell(ui)).toBeEnabled();
+  await expect(ui.locator('textarea')).toHaveCount(0);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   // Unsubmitted edits must not change the applied context.
   await ui.locator('#message-start').fill('2020-01-01');
   await ui.locator('#message-end').fill('2020-01-02');
   await tell(ui).click();
-  await expect(tell(ui)).toBeDisabled();
-  await expect(input(ui)).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  const sent = await page.evaluate(() => window.agentRequests[0].params);
-  expect(sent.role).toBe('user');
-  expect(sent.content[0].text).toContain('Draft a response for my review.');
-  expect(sent.content[1].text).toBe(await ui.locator('#thread-context').textContent());
-  expect(sent.content[1].text).toContain('untrusted');
-  expect(sent.content[1].text).not.toContain('other-user');
-  const context = JSON.parse(sent.content[1].text.split('\n').slice(1).join('\n'));
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  const sent = await page.evaluate(() => window.contexts[0].params);
+  expect(sent.content).toHaveLength(1);
+  expect(sent.content[0].text).toBe(await ui.locator('#thread-context').textContent());
+  expect(sent.content[0].text).toContain('untrusted');
+  expect(sent.content[0].text).not.toContain('other-user');
+  const context = JSON.parse(sent.content[0].text.split('\n').slice(1).join('\n'));
   expect(context.peer_fulcra_userid).toBe('peer-user');
   expect(context.range).toEqual({ start_time: args[0].start_time, end_time: args[0].end_time });
   expect(context.messages.map(m => m.source)).toEqual([
     { id: second.id, fulcra_userid: 'me' }, { id: own.id, fulcra_userid: 'me' }, { id: peer.id, fulcra_userid: 'peer-user' },
   ]);
-  await page.evaluate(() => window.reply(window.agentRequests[0].id, { isError: true }));
-  await expect(ui.locator('#agent-status')).toContainText('Check the conversation before retrying');
-  await expect(input(ui)).toHaveValue('Draft a response for my review.');
-  await tell(ui).click();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
-  await page.evaluate(() => window.reply(window.agentRequests[1].id, {}));
-  await expect(ui.locator('#agent-status')).toContainText('Request sent');
-  await expect(input(ui)).toHaveValue('');
+  await expect(ui.locator('#context-status')).toContainText('Context attached');
+  expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   expect(await page.evaluate(() => window.reads.every(r => r.params.name === 'get_records'))).toBe(true);
 });
 
@@ -195,21 +184,20 @@ for (const outgoingOnly of [false, true]) test(`${outgoingOnly ? 'outgoing' : 'i
   await respond(page, 0, []);
   await expect(ui.locator('#message-status')).toContainText(`missing ${outgoingOnly ? 'incoming' : 'outgoing'}`);
   await expect(tell(ui)).toHaveCount(1);
-  await input(ui).fill('Start planning with this peer.');
   await tell(ui).click();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  const context = JSON.parse(await page.evaluate(() => window.agentRequests[0].params.content[1].text.split('\n').slice(1).join('\n')));
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  const context = JSON.parse(await page.evaluate(() => window.contexts[0].params.content[0].text.split('\n').slice(1).join('\n')));
   expect(context.messages).toEqual([]);
   expect(context.peer_fulcra_userid).toBe('peer-user');
   expect(context.completeness).toBe('partial');
 });
 
-test('each load refreshes discovery; reload preserves composer and draft, applies same dates to new channels', async ({ page }) => {
+test('each load refreshes discovery; reload preserves disclosure, applies same dates to new channels', async ({ page }) => {
   const ui = await open(page, { paired: false });
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, [{ note: 'old record' }]);
-  await input(ui).fill('old draft');
+  await ui.locator('#thread-composer summary').click();
   await ui.locator('#message-start').fill('2026-01-01');
   await ui.locator('#message-end').fill('2026-01-02');
   await page.evaluate(id => { window.shares.outgoing.push({ data_types: [id], with_user_ids: ['peer-user'], share_all_data: false }); window.holdDiscovery = true; }, own.id);
@@ -217,7 +205,7 @@ test('each load refreshes discovery; reload preserves composer and draft, applie
   await expect(tell(ui)).toHaveCount(1);
   await expect(tell(ui)).toBeDisabled();
   await expect(ui.locator('#messages > li')).toHaveCount(1);
-  await expect(input(ui)).toHaveValue('old draft');
+  await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
   await expect.poll(() => page.evaluate(() => window.discovery.length)).toBe(6);
   await page.evaluate(() => {
     window.holdDiscovery = false;
@@ -231,7 +219,7 @@ test('each load refreshes discovery; reload preserves composer and draft, applie
   await respond(page, 1, []); await respond(page, 2, []);
   await expect(ui.locator('#message-status')).toContainText('No messages in this range');
   await expect(ui.locator('#message-status')).toContainText('2026-01-01 through 2026-01-02 UTC');
-  await expect(input(ui)).toHaveValue('old draft');
+  await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
   await expect(tell(ui)).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   await ui.locator('#message-start').fill('2026-02-01');
@@ -250,9 +238,9 @@ test('partial failure and truncation remain visible and are sent as incomplete c
   await page.evaluate(() => window.reply(window.reads[0].id, { isError: true }));
   await expect(ui.locator('#message-status')).toContainText('Could not load messages — Outgoing');
   await expect(ui.locator('#message-status')).toContainText('Partial result — Incoming');
-  await input(ui).fill('Explain the partial thread.'); await tell(ui).click();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  const context = JSON.parse(await page.evaluate(() => window.agentRequests[0].params.content[1].text.split('\n').slice(1).join('\n')));
+  await tell(ui).click();
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  const context = JSON.parse(await page.evaluate(() => window.contexts[0].params.content[0].text.split('\n').slice(1).join('\n')));
   expect(context.messages).toHaveLength(1);
   expect(context.warnings).toHaveLength(2);
   expect(context.completeness).toBe('partial');
@@ -281,9 +269,9 @@ test('navigation ignores late multi-source success and failure, with no peer con
   await expect(ui.locator('#messages')).toContainText('fresh other peer');
   await expect(ui.locator('#messages')).not.toContainText('stale');
   await expect(ui.locator('#message-status')).not.toContainText('Could not load');
-  await input(ui).fill('Summarize current peer'); await tell(ui).click();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  const context = await page.evaluate(() => window.agentRequests[0].params.content[1].text);
+  await tell(ui).click();
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  const context = await page.evaluate(() => window.contexts[0].params.content[0].text);
   expect(context).toContain('other-user');
   expect(context).not.toContain('peer-user');
   expect(context).not.toContain('stale own');
@@ -303,12 +291,10 @@ test('late discovery starts no stale reads; failed discovery retains sendable lo
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, []); await respond(page, 1, []);
-  await input(ui).fill('old draft');
   await page.evaluate(() => { window.failDiscovery = true; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('discovery failed');
   await expect(tell(ui)).toBeEnabled();
-  await expect(input(ui)).toHaveValue('old draft');
   expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await page.evaluate(() => { window.failDiscovery = false; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
@@ -325,21 +311,20 @@ test('oversized displayed record is omitted whole, clipping disclosed in preview
   await respond(page, 0, [{ note: 'small' }, { note: 'x'.repeat(30000) }]);
   await expect(ui.locator('#messages > li')).toHaveCount(2);
   await expect(ui.locator('#thread-composer')).toContainText('Context clipped — 1 displayed records omitted');
-  await input(ui).fill('Summarize'); await tell(ui).click();
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  const payload = await page.evaluate(() => window.agentRequests[0].params.content[1].text);
+  await tell(ui).click();
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  const payload = await page.evaluate(() => window.contexts[0].params.content[0].text);
   expect(payload.length).toBeLessThanOrEqual(24000);
   expect(payload).toBe(await ui.locator('#thread-context').textContent());
   expect(JSON.parse(payload.split('\n').slice(1).join('\n')).omitted_records).toBe(1);
 });
 
-test('unsupported host still reads an empty thread, but cannot Tell my agent', async ({ page }) => {
+test('unsupported host still reads an empty thread, but cannot attach context', async ({ page }) => {
   const ui = await open(page, { paired: false, supported: false });
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, []);
-  await input(ui).fill('Please help');
   await expect(tell(ui)).toBeDisabled();
-  await expect(ui.locator('#agent-status')).toContainText('cannot send chat messages');
+  await expect(ui.locator('#context-status')).toContainText('cannot attach thread context');
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
 });
