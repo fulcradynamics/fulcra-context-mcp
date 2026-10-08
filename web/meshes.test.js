@@ -1,6 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadMeshes, parseMeshes } from './meshes.js';
+import { discoverThreads, loadMeshes, parseMeshes } from './meshes.js';
+
+test('failed discovery drains both requests before releasing the scheduler', async () => {
+  let finish, settled = false;
+  const pending = discoverThreads({ callServerTool({ name }, options) {
+    assert.equal(options.timeout, 30000);
+    return name === 'get_data_catalog' ? Promise.reject(new Error('offline'))
+      : new Promise(resolve => { finish = resolve; });
+  } }).catch(() => { settled = true; });
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.equal(settled, false);
+  finish({ isError: true }); await pending;
+  assert.equal(settled, true);
+});
+
+test('sharing account names are labeled without inventing agent names or grouping by name', async () => {
+  const result = await discoverThreads({ async callServerTool({ name }) {
+    return text(name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')] })
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [], incoming: [
+        { sharing_fulcra_userid: 'peer', sharing_fulcra_user_name: 'Alex' },
+        { sharing_fulcra_userid: 'other', sharing_fulcra_user_name: 'Alex' },
+      ] }));
+  } });
+  assert.deepEqual(result.threads.map(t => [t.peer, t.accountName]), [['other', 'Alex'], ['peer', 'Alex'], ['unknown', undefined]]);
+});
 
 const entry = (id, owner) => ({ id: `MomentAnnotation/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
 const grant = (id, peer = 'peer') => ({ data_types: [`MomentAnnotation/${id}`], with_user_ids: [peer], share_all_data: false });

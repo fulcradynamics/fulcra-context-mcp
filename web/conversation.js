@@ -7,10 +7,10 @@ const timestamp = record => {
   return Number.isFinite(time) ? time : Infinity;
 };
 
-export async function readConversation(app, selected, range, isCurrent = () => true) {
+export async function readConversation(app, selected, range, isCurrent = () => true, { discovery: supplied, previous, now } = {}) {
   let discovery;
   try {
-    discovery = await discoverThreads(app);
+    discovery = supplied ?? await discoverThreads(app);
   } catch {
     if (!isCurrent()) return;
     throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
@@ -25,10 +25,13 @@ export async function readConversation(app, selected, range, isCurrent = () => t
       if (direction === 'Incoming') args.fulcra_userid = source.fulcra_userid;
       const result = await app.callServerTool({ name: 'get_records', arguments: args }, { timeout: 30000 });
       const { records, truncated } = parseRecords(result, source.id);
-      return { messages: records.map(record => ({ record, source, direction })), warning: truncated
+      return { messages: records.map(record => ({ record, source, direction, ...(now ? { last_success_at: now } : {}) })), warning: truncated
         ? `Partial result — ${label} truncated. Narrow the date range to see the rest.` : undefined };
     } catch {
-      return { messages: [], warning: `Could not load messages — ${label} (get_records failed or returned an invalid result). Conversation incomplete; retry Load messages.` };
+      const retained = (previous?.messages ?? []).filter(m => m.source.id === source.id && m.source.fulcra_userid === source.fulcra_userid)
+        .map(m => ({ ...m, stale: true }));
+      return { messages: retained, warning: `Could not load messages — ${label} (get_records failed or returned an invalid result). Conversation incomplete; retry Load messages.`
+        + (retained.length ? ' Stale last-good records retained; access and content not verified current.' : '') };
     }
   }));
   if (!isCurrent()) return;

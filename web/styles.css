@@ -43,7 +43,7 @@ p { margin: 12px 0; }
 .meta, [role='status'], #meshes p, #messages > li > p, #thread-composer > p { color: var(--muted); font-size: 12px; }
 [role='status'] { font-variant-numeric: tabular-nums; }
 [role='status']:empty { display: none; }
-button, input, textarea { font: inherit; max-width: 100%; min-width: 0; }
+button, input, textarea, select { font: inherit; max-width: 100%; min-width: 0; }
 button {
   min-height: 40px;
   padding: 8px 14px;
@@ -57,10 +57,11 @@ button {
 }
 button:hover:not(:disabled) { background: var(--raised); }
 button:disabled { color: var(--muted); border-color: var(--divider); cursor: default; }
-:where(button, input, textarea, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
+:where(button, input, textarea, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
 ::selection { background: #7b61ff; color: #fff; }
 label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
-input, textarea { color: #fff; background: var(--surface); border: 1px solid var(--divider); border-radius: 6px; padding: 10px 12px; }
+input, textarea, select { color: #fff; background: var(--surface); border: 1px solid var(--divider); border-radius: 6px; padding: 10px 12px; }
+select { width: fit-content; margin-bottom: 12px; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 .range-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
@@ -82,6 +83,15 @@ summary { color: var(--mint); cursor: pointer; width: fit-content; max-width: 10
 details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); font-family: ui-monospace, monospace; font-size: 12px; }
 .invite-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--divider); }
+
+/* Keep request observability out of flow so it cannot move a reader. */
+#refresh-status { position: fixed; top: 4px; right: 12px; z-index: 2; max-width: calc(100% - 24px); padding: 4px 8px; background: var(--surface); }
+.refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--mint); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh-spinner { animation: none; } }
+#new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); }
+/* Reading position is restored explicitly by keyed message identity. */
+html { overflow-anchor: none; }
 
 @media (max-width: 520px) {
   body { padding-left: calc(16px + var(--host-safe-left, 0px)); padding-right: calc(16px + var(--host-safe-right, 0px)); }

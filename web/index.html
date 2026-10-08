@@ -12,6 +12,8 @@
       <img src="/* BRAND_ICON */" alt="" width="32" height="32">
       <h1>Fulcra Mesh</h1>
     </header>
+    <button id="refresh-threads" type="button">Refresh threads</button>
+    <p id="refresh-status" role="status" aria-live="polite" hidden><span class="refresh-spinner" aria-hidden="true"></span> Refreshing threads and selected messages…</p>
     <section id="mesh-list" aria-labelledby="meshes-title">
       <h2 id="meshes-title">Threads</h2>
       <p>Conversations with your Fulcra connections, grouped by user ID.</p>
@@ -22,22 +24,24 @@
     <section id="mesh-detail" aria-labelledby="message-title" hidden>
       <button id="message-back" type="button">Back to threads</button>
       <h2 id="message-title"></h2>
-      <p class="meta">Accessible messages, in chronological order. Reading does not send or acknowledge anything.</p>
+      <p class="meta">Accessible messages. Reading does not send or acknowledge anything.</p>
       <details class="reading-details">
         <summary>About this thread</summary>
         <p>Includes this peer’s accessible channels and your narrow direct channels to them. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
       </details>
       <div id="message-range">
-        <p class="meta">Initially the last 30 days. Dates are inclusive, in UTC.</p>
+        <p class="meta">Initially today and yesterday, in UTC. Dates are inclusive. Load messages applies edited dates.</p>
         <div class="range-controls">
           <label>From <input id="message-start" type="date" required></label>
           <label>Through <input id="message-end" type="date" required></label>
           <button id="message-load" type="button">Load messages</button>
         </div>
       </div>
-      <p id="message-status" role="status" aria-live="polite"></p>
-      <ol id="messages"></ol>
       <div id="thread-composer"></div>
+      <label>Message order <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select></label>
+      <p id="message-status" role="status" aria-live="polite"></p>
+      <button id="new-activity" type="button" hidden>New activity</button>
+      <ol id="messages"></ol>
     </section>
     <footer class="invite-section">
       <button id="invite" type="button" disabled>Invite someone</button>

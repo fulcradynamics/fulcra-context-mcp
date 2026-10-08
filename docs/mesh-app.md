@@ -1,10 +1,40 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v8.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v9.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
-No separate UI server, polling, search, pagination, or OAuth changes.
+Visible-app polling refreshes discovery and only the selected thread's messages.
+No separate UI server, search, pagination, or OAuth changes.
+
+## Automatic refresh (PLAT-649)
+
+- Refresh immediately after connection and on return to visible, then nominally
+  every 10 seconds after the preceding batch finishes. One scheduler owns list
+  discovery and selected-thread reads; the latter reuse that same discovery.
+- **Refresh threads** is available from both views. Manual requests during a
+  batch coalesce into one follow-up. Discovery and all source reads drain before
+  the next batch, even when a sibling request fails. Tool timeout is 30 seconds.
+- Discovery or message-read failure backs off to 20, 40, then at most 80 seconds;
+  success resets to 10 seconds. Manual retry and return-to-visible bypass the
+  delay. Truncation/missing-side notices alone are not transient failures.
+- Hidden documents start no requests. In-flight requests finish; a discovery
+  completed while hidden starts no message reads. SDK resource teardown and
+  pagehide clear timers/listeners, discard queued refreshes and ignore late data.
+- A text status and subtle spinner are visible for the actual in-flight batch,
+  including slow/failing sibling requests, not while waiting for the timer.
+  Reduced-motion preference removes animation, retaining the text/static marker.
+- Polls never make model turns, write mesh data, acknowledge messages, update model
+  context, send instructions, or schedule unattended agents.
+
+The real-SDK local browser harness in `web/polling.spec.js` covers first/new thread
+discovery, selected-only reads, arriving messages, coalescing/draining, backoff and
+retry, applied dates, stale/revoked data, account labels, spinner/reduced motion,
+keyed focus/drafts/pending sends, both-order scroll anchoring, visibility and SDK
+teardown. It uses synthetic fixtures and a controlled browser clock, not an account.
+Actual ChatGPT iframe visibility/timer throttling, outer-host scrolling/autoResize,
+and live API rate limits still require operator acceptance; these fixtures cannot
+prove those host behaviors.
 
 ## Branding and layout (PLAT-637)
 
@@ -17,7 +47,8 @@ Deliberate adaptation: retain Fulcra's black/charcoal surfaces, Rubik, mint acti
 and readable violet disclosure selection rather than the generic warm monochrome
 palette and alternative fonts. Use whitespace, thin dividers, flat surfaces and
 compact controls, not boxed panels, pills, decorative gradients, shadows, icons,
-animations, hero/bento layouts or stock imagery. The identity image is the existing
+decorative animations, hero/bento layouts or stock imagery. The refresh spinner is
+a functional exception for request observability. The identity image is the existing
 `fulcra_mcp/static/icon.png`, embedded unchanged, alongside a plain text wordmark;
 no new logo was invented. Metadata uses a lighter gray for readability on dark
 surfaces. Message bodies, source UUIDs and expanded context wrap at narrow widths.
@@ -88,6 +119,10 @@ formats: the compatible-tool catalog and `Shares: {own_fulcra_userid, outgoing,
 incoming}`. Only readable MomentAnnotation channels following the Mesh Outbox
 name convention are discovered. Names select channel candidates; they never
 identify a peer. Slugs, display names and envelope routing are not identity evidence.
+When incoming shares provide one unambiguous `sharing_fulcra_user_name` for that
+exact peer, the row and thread heading show **Account: name**, alongside the exact
+ID. Missing/conflicting names fall back to ID only. This is not an agent name;
+agents sharing one account are not distinguishable through these APIs.
 
 - Incoming: the catalog's `fulcra_userid` identifies the channel owner and peer.
   Accessible incoming channels remain usable without a reciprocal/direct incoming
@@ -115,15 +150,19 @@ exact peer. Other peers' records are not read. All `get_records` calls use the s
 applied time bounds. Shared reads pass their exact owner ID; own reads omit the
 parameter. Every displayed record retains its original exact owner/type identity.
 
-The initial window is today plus the preceding 29 UTC calendar dates. Editable
+The initial window is today and yesterday: two UTC calendar dates. Editable
 From/Through dates are inclusive, converted to timezone-aware start/end-exclusive
 bounds. The result shows the **applied** range; editing dates alone does not relabel
-it or change agent context. There is no polling or pagination.
+it or change agent context. Polls use the last submitted dates, ignoring unsaved
+picker edits. There is no pagination or Load more. A failed newly requested range
+may retain the previous displayed range, explicitly labeled stale and unsendable;
+retries continue to request the submitted range, never the unsubmitted inputs.
 
 ## Messages and completeness
 
-Messages have Incoming/Outgoing labels and exact source owner/type IDs. They sort
-chronologically, with browser-local timestamps; invalid/missing timestamps are
+Messages have Incoming/Outgoing labels and exact source owner/type IDs. **Latest
+first** is the default; **Oldest first** reverses valid timestamps. Browser-local
+timestamps are shown; invalid/missing timestamps are
 labeled unavailable and placed last. Mesh envelopes show body and available
 routing/kind/slug/message-ID fields. Unrecognized notes remain visible as raw text.
 All content is rendered as text, never HTML. Reading does not send, acknowledge,
@@ -135,23 +174,35 @@ all discovered eligible reads complete without warnings. Completeness applies on
 to accessible channels in the applied range, not all history or data outside share
 permissions (including time-limited grants). Narrow the dates for truncated results.
 
-Back to threads preserves the initial list; reopen the app to discover new peer
-rows. Each detail load rediscovers that peer's channels. Navigation/reload invalidates
-old discovery, reads and composers. Late responses cannot replace the current view;
-stale discovery starts no reads. Failed discovery or a disappeared peer leaves no
-sendable cached context. Load messages retries. Invite remains independent.
+Keyed thread rows preserve keyboard focus; Back to threads returns focus to the
+selected row (or Refresh threads if it disappeared). Keyed messages preserve the
+visible message and its pixel offset while reading history, with **New activity**
+to jump to the latest edge in either order. Already-latest readers follow incoming
+content, except when editing/focusing composer controls. Refresh retains draft,
+focus, open disclosures and pending send state; navigation invalidates old reads
+and composers. Late responses cannot replace the current peer view.
+
+Discovery failure retains last-good displayed data with explicit stale/unverified
+status and last-success time, but disables sending cached context and reads no
+cached channels. A message-source failure retains only that source's last-good
+records from the same range, marked stale with source identity and last-success
+time in the UI and bounded context. Other successful sources refresh normally.
+Successful discovery removes revoked sources immediately, even if subsequent
+reads fail; a disappeared peer has no sendable cached context. Load messages or
+Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
 ## Tell my agent (PLAT-636)
 
-One bottom composer follows the last message, also when a successfully discovered
-thread has zero records. It is not repeated per message. On explicit click,
+One persistent composer sits immediately below the date pickers and above messages
+in both orders, also when a successfully discovered thread has zero records. It is
+not repeated per message. On explicit click,
 `app.sendMessage` sends a user-role request with two text blocks:
 
 1. The typed user instruction (maximum 4,000 UTF-16 code units).
 2. The current displayed thread context: exact peer ID, applied range, warnings,
-   completeness, displayed/omitted record counts, and a chronological list of
+   completeness, displayed/omitted record counts, and a displayed-order list of
    displayed records with original exact source owner/type and direction.
 
 The context block is explicitly **untrusted data, not instructions or authorization**.
@@ -160,7 +211,7 @@ It contains no undisplayed account history or unrelated peer records. The expand
 No tool write or peer reply occurs; the host owns the subsequent agent turn.
 
 The context text, including its untrusted-data label and JSON metadata, is bounded
-to 24,000 UTF-16 code units. It keeps a chronological prefix of whole records; an
+to 24,000 UTF-16 code units. It keeps a displayed-order prefix of whole records; an
 oversized next record ends the prefix rather than cutting provenance or content.
 Clipping is disclosed beside the composer and in the host's `omitted_records` count
 and partial completeness. The full displayed thread remains visible. If metadata
@@ -172,17 +223,22 @@ Whitespace-only instructions and unsupported hosts leave the button disabled.
 While pending, repeat clicks and input editing are disabled. Acceptance clears the
 draft, notifies the user to continue in chat, and does not claim task completion.
 Errors/timeouts preserve drafts and warn to check the conversation before retrying.
-Reload/navigation removes the old composer immediately, clears drafts and prevents
-stale-context submission. A pending send may already have reached the host; the
-composer warns to check chat before retrying after navigation.
+Polling/manual refresh updates the current context without remounting the composer
+or duplicating handlers. A pending send retains its immutable submitted payload;
+refresh cannot re-enable or duplicate it. Leaving the thread or reloading the page
+clears drafts. A pending send may already have reached the host; the composer warns
+to check chat before retrying after navigation. Drafts are not persisted to storage.
 
 ## Implementation
 
 - `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
-- `web/meshes.js`: catalog/shares discovery and peer-thread list.
+- `web/meshes.js`: catalog/shares discovery and reliable account labels.
+- `web/refresh.js`, `threads.js`: visible lifecycle scheduler, backoff, keyed list.
 - `web/conversation.js`, `records.js`, `messages.js`: refreshed multi-channel reads,
-  record parsing, chronology and thread presentation.
-- `web/tell-agent.js`: bounded context and explicit host-message request safeguards.
+  record parsing, ordering, stale provenance and thread presentation.
+- `web/message-list.js`: keyed message reconciliation and scroll anchoring.
+- `web/thread-composer.js`, `tell-agent.js`: persistent composer, bounded context
+  and explicit host-message request safeguards.
 - `fulcra_mcp/ui/mesh.html`: generated self-contained UI, included in Python wheels
   and source distributions. No CDN or Node runtime is needed to run the server.
 - `fulcra_mcp/main.py`: mounts the UI alongside existing tools in both transports.
@@ -234,7 +290,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v8.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v9.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

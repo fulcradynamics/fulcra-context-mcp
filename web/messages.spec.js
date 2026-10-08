@@ -131,7 +131,7 @@ const tell = ui => ui.getByRole('button', { name: 'Tell my agent', exact: true }
 const input = ui => ui.getByRole('textbox', { name: 'Instructions for my agent' });
 const choose = ui => ui.getByRole('button', { name: 'peer-user', exact: true }).click();
 
-test('one row per exact peer, all same-peer channels chronological, one bottom composer with exact current context', async ({ page }) => {
+test('one row per exact peer, all same-peer channels latest first, one top composer with exact current context', async ({ page }) => {
   const ui = await open(page, { multiple: true });
   await expect(ui.locator('#meshes > li')).toHaveCount(2);
   await expect(ui.locator('#mesh-status')).toContainText('2 threads');
@@ -147,14 +147,14 @@ test('one row per exact peer, all same-peer channels chronological, one bottom c
   await respond(page, 2, [{ recorded_at: '2026-01-03T12:00:00Z', note: 'second channel' }]);
   const rows = ui.locator('#messages > li');
   await expect(rows).toHaveCount(3);
-  await expect(rows.first()).toContainText('Incoming');
-  await expect(rows.first()).toContainText(`peer-user / ${peer.id}`);
+  await expect(rows.last()).toContainText('Incoming');
+  await expect(rows.last()).toContainText(`peer-user / ${peer.id}`);
   await expect(rows.nth(1)).toContainText(`Outgoing — me / ${own.id}`);
-  await expect(rows.last()).toContainText(second.id);
+  await expect(rows.first()).toContainText(second.id);
   await expect(ui.locator('#messages img')).toHaveCount(0);
   await expect(tell(ui)).toHaveCount(1);
   await expect(ui.locator('#messages textarea')).toHaveCount(0);
-  await expect(ui.locator('#messages + #thread-composer')).toBeVisible();
+  await expect(ui.locator('#message-range + #thread-composer')).toBeVisible();
   await expect(tell(ui)).toBeDisabled();
   await input(ui).fill('Draft a response for my review.');
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
@@ -175,7 +175,7 @@ test('one row per exact peer, all same-peer channels chronological, one bottom c
   expect(context.peer_fulcra_userid).toBe('peer-user');
   expect(context.range).toEqual({ start_time: args[0].start_time, end_time: args[0].end_time });
   expect(context.messages.map(m => m.source)).toEqual([
-    { id: peer.id, fulcra_userid: 'peer-user' }, { id: own.id, fulcra_userid: 'me' }, { id: second.id, fulcra_userid: 'me' },
+    { id: second.id, fulcra_userid: 'me' }, { id: own.id, fulcra_userid: 'me' }, { id: peer.id, fulcra_userid: 'peer-user' },
   ]);
   await page.evaluate(() => window.reply(window.agentRequests[0].id, { isError: true }));
   await expect(ui.locator('#agent-status')).toContainText('Check the conversation before retrying');
@@ -204,7 +204,7 @@ for (const outgoingOnly of [false, true]) test(`${outgoingOnly ? 'outgoing' : 'i
   expect(context.completeness).toBe('partial');
 });
 
-test('each load refreshes discovery; reload removes old composer, uses same dates for new channels and clears drafts', async ({ page }) => {
+test('each load refreshes discovery; reload preserves composer and draft, applies same dates to new channels', async ({ page }) => {
   const ui = await open(page, { paired: false });
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
@@ -214,8 +214,10 @@ test('each load refreshes discovery; reload removes old composer, uses same date
   await ui.locator('#message-end').fill('2026-01-02');
   await page.evaluate(id => { window.shares.outgoing.push({ data_types: [id], with_user_ids: ['peer-user'], share_all_data: false }); window.holdDiscovery = true; }, own.id);
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(tell(ui)).toHaveCount(0);
-  await expect(ui.locator('#messages > li')).toHaveCount(0);
+  await expect(tell(ui)).toHaveCount(1);
+  await expect(tell(ui)).toBeDisabled();
+  await expect(ui.locator('#messages > li')).toHaveCount(1);
+  await expect(input(ui)).toHaveValue('old draft');
   await expect.poll(() => page.evaluate(() => window.discovery.length)).toBe(6);
   await page.evaluate(() => {
     window.holdDiscovery = false;
@@ -229,13 +231,15 @@ test('each load refreshes discovery; reload removes old composer, uses same date
   await respond(page, 1, []); await respond(page, 2, []);
   await expect(ui.locator('#message-status')).toContainText('No messages in this range');
   await expect(ui.locator('#message-status')).toContainText('2026-01-01 through 2026-01-02 UTC');
-  await expect(input(ui)).toHaveValue('');
+  await expect(input(ui)).toHaveValue('old draft');
   await expect(tell(ui)).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   await ui.locator('#message-start').fill('2026-02-01');
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('Choose a valid date range');
-  await expect(tell(ui)).toHaveCount(0);
+  await expect(tell(ui)).toHaveCount(1);
+  await expect(ui.locator('#thread-context')).toContainText('2026-01-01T00:00:00.000Z');
+  expect(await page.evaluate(() => window.reads.length)).toBe(3);
 });
 
 test('partial failure and truncation remain visible and are sent as incomplete context', async ({ page }) => {
@@ -256,7 +260,9 @@ test('partial failure and truncation remain visible and are sent as incomplete c
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
   await respond(page, 2, []);
   await page.evaluate(() => window.reply(window.reads[3].id, { isError: true }));
-  await expect(ui.locator('#message-status')).toContainText('0 messages shown');
+  await expect(ui.locator('#message-status')).toContainText('1 messages shown');
+  await expect(ui.locator('#message-status')).toContainText('Stale');
+  await expect(ui.locator('#messages')).toContainText('incoming preserved');
   await expect(ui.locator('#message-status')).not.toContainText('No messages in this range');
   await expect(tell(ui)).toHaveCount(1);
 });
@@ -267,10 +273,11 @@ test('navigation ignores late multi-source success and failure, with no peer con
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'other-user', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(3);
-  await respond(page, 2, [{ note: 'fresh other peer' }]);
+  expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, [{ note: 'stale own' }]);
   await page.evaluate(() => window.reply(window.reads[1].id, { isError: true }));
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(3);
+  await respond(page, 2, [{ note: 'fresh other peer' }]);
   await expect(ui.locator('#messages')).toContainText('fresh other peer');
   await expect(ui.locator('#messages')).not.toContainText('stale');
   await expect(ui.locator('#message-status')).not.toContainText('Could not load');
@@ -300,7 +307,8 @@ test('late discovery starts no stale reads; current failed discovery cannot subm
   await page.evaluate(() => { window.failDiscovery = true; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('discovery failed');
-  await expect(tell(ui)).toHaveCount(0);
+  await expect(tell(ui)).toBeDisabled();
+  await expect(input(ui)).toHaveValue('old draft');
   expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await page.evaluate(() => { window.failDiscovery = false; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();

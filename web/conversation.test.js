@@ -1,6 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readConversation } from './conversation.js';
+import { discoverThreads } from './meshes.js';
+
+test('refresh reuses discovery, retains failed-source last-good records as stale and removes revoked sources', async () => {
+  const h = harness({ rows: { [`me:${own.id}`]: [{ id: 'one', note: 'good' }], [`peer:${peer.id}`]: [{ id: 'two', note: 'peer good' }] } });
+  let discovery = await discoverThreads(h.app);
+  const previous = await readConversation(h.app, { peer: 'peer' }, range, () => true, { discovery, now: '2026-01-10T12:00:00Z' });
+  const failing = { callServerTool: async call => {
+    assert.equal(call.name, 'get_records', 'refresh must reuse supplied discovery');
+    if (call.arguments.fulcra_userid) throw new Error('offline');
+    return text(`Records for ${own.id} from start to end: []`);
+  } };
+  const result = await readConversation(failing, { peer: 'peer' }, range, () => true, { discovery, previous });
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0].record.note, 'peer good');
+  assert.equal(result.messages[0].stale, true);
+  assert.equal(result.messages[0].last_success_at, '2026-01-10T12:00:00Z');
+  assert.match(result.warnings.join(' '), /Stale.*not verified current/);
+  discovery = { ...discovery, threads: discovery.threads.map(t => ({ ...t, sources: t.sources.filter(s => s.direction === 'Outgoing') })) };
+  const revoked = await readConversation(failing, { peer: 'peer' }, range, () => true, { discovery, previous: result });
+  assert.deepEqual(revoked.messages, []);
+});
 
 const own = { id: 'MomentAnnotation/own', name: 'Mesh Outbox Same name' };
 const peer = { id: 'MomentAnnotation/peer', name: 'Mesh Outbox Same name', fulcra_userid: 'peer' };

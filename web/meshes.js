@@ -40,11 +40,13 @@ function directRecipient(share) {
 }
 
 export async function discoverThreads(app) {
-  const call = (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
-  const [catalog, shares] = await Promise.all([
+  const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
+  const results = await Promise.allSettled([
     call('get_data_catalog', { name: 'Mesh Outbox' }).then(parseMeshes),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
+  if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
+  const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
   const threads = new Map();
   const seen = new Set();
@@ -71,6 +73,11 @@ export async function discoverThreads(app) {
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {
+    // tools.py _slim_share exposes an account-owner name, not an agent name.
+    const names = new Set(shares.incoming.filter(s => s.sharing_fulcra_userid === thread.peer
+      && typeof s.sharing_fulcra_user_name === 'string' && s.sharing_fulcra_user_name.trim())
+      .map(s => s.sharing_fulcra_user_name));
+    if (names.size === 1) thread.accountName = [...names][0];
     thread.warnings.push(...warnings);
     for (const direction of ['Incoming', 'Outgoing']) {
       if (!thread.sources.some(s => s.direction === direction)) thread.warnings.push(`Conversation incomplete — missing ${direction.toLowerCase()} channel for this peer.`);

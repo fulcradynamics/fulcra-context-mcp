@@ -9,7 +9,7 @@ export function buildThreadContext(peer, range, result) {
     displayed_records: result.messages.length, omitted_records: 0, messages: [],
   };
   const serialize = () => contextLabel + '\n' + JSON.stringify(context);
-  // Reserve omission metadata before adding whole records. Keep a chronological
+  // Reserve omission metadata before adding whole records. Keep a displayed-order
   // prefix; never cut a record's owner/type or forward undisplayed history.
   context.omitted_records = result.messages.length;
   context.completeness = 'partial';
@@ -29,15 +29,16 @@ export function buildThreadContext(peer, range, result) {
   }
   if (serialize().length > CONTEXT_LIMIT) throw new Error('Thread metadata is too large to send safely.');
   const notice = `${context.messages.length} of ${result.messages.length} displayed records will be sent with peer ID, applied range and warnings.`
-    + (context.omitted_records ? ` Context clipped — ${context.omitted_records} displayed records omitted at the 24,000-character context limit (whole records, earliest first).` : '');
+    + (context.omitted_records ? ` Context clipped — ${context.omitted_records} displayed records omitted at the 24,000-character context limit (whole records, displayed order).` : '');
   return { text: serialize(), notice };
 }
 
 export function setupTellAgent(app, context, input, button, status, isCurrent = () => true) {
   const supported = Boolean(app.getHostCapabilities()?.message?.text);
   let pending = false;
+  const getContext = () => typeof context === 'function' ? context() : context;
   input.maxLength = INSTRUCTION_LIMIT;
-  const update = () => { button.disabled = !supported || pending || !isCurrent() || !input.value.trim() || input.value.length > INSTRUCTION_LIMIT; };
+  const update = () => { button.disabled = !supported || pending || !isCurrent() || !getContext() || !input.value.trim() || input.value.length > INSTRUCTION_LIMIT; };
   input.addEventListener('input', update);
   if (!supported) status.textContent = 'This host cannot send chat messages. Ask your agent in the conversation instead.';
   update();
@@ -45,6 +46,7 @@ export function setupTellAgent(app, context, input, button, status, isCurrent = 
     update();
     if (button.disabled) return;
     const instruction = input.value.trim();
+    const submittedContext = getContext();
     pending = true;
     input.disabled = true;
     update();
@@ -52,7 +54,7 @@ export function setupTellAgent(app, context, input, button, status, isCurrent = 
     try {
       const result = await app.sendMessage({ role: 'user', content: [
         { type: 'text', text: `Please help me with this Fulcra mesh thread using the fulcra-mesh skill as appropriate. My instruction:\n\n${instruction}` },
-        { type: 'text', text: context },
+        { type: 'text', text: submittedContext },
       ] }, { timeout: 15000 });
       if (!isCurrent()) return;
       if (result.isError) throw new Error('Host rejected request');
@@ -66,4 +68,5 @@ export function setupTellAgent(app, context, input, button, status, isCurrent = 
       update();
     }
   });
+  return update;
 }

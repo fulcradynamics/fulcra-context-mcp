@@ -2,6 +2,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as agent from './tell-agent.js';
 
+test('refreshing displayed context keeps pending payload immutable and cannot enable a duplicate send', async () => {
+  let context = 'old preview', settle;
+  const sent = [];
+  const app = { getHostCapabilities: () => ({ message: { text: {} } }), sendMessage(payload) { sent.push(payload); return new Promise(r => { settle = r; }); } };
+  const input = element('draft'), button = element(), status = element();
+  const update = agent.setupTellAgent(app, () => context, input, button, status);
+  const pending = button.handlers.click();
+  assert.equal(sent[0].content[1].text, 'old preview');
+  context = 'new preview'; update();
+  assert.equal(button.disabled, true);
+  assert.equal(input.value, 'draft');
+  await button.handlers.click(); assert.equal(sent.length, 1);
+  settle({ isError: true }); await pending;
+  const retry = button.handlers.click(); assert.equal(sent[1].content[1].text, 'new preview');
+  settle({}); await retry;
+  context = undefined; input.value = 'another'; update(); assert.equal(button.disabled, true);
+});
+
 function element(value = '') {
   return { value, disabled: false, textContent: '', handlers: {}, addEventListener(name, fn) { this.handlers[name] = fn; } };
 }
