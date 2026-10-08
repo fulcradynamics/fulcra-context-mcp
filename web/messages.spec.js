@@ -289,7 +289,7 @@ test('navigation ignores late multi-source success and failure, with no peer con
   expect(context).not.toContain('stale own');
 });
 
-test('late discovery starts no stale reads; current failed discovery cannot submit old context, retry works', async ({ page }) => {
+test('late discovery starts no stale reads; failed discovery retains sendable loaded context, retry works', async ({ page }) => {
   const ui = await open(page);
   await expect(ui.locator('#meshes > li')).toHaveCount(2);
   await page.evaluate(() => { window.holdDiscovery = true; });
@@ -307,7 +307,7 @@ test('late discovery starts no stale reads; current failed discovery cannot subm
   await page.evaluate(() => { window.failDiscovery = true; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('discovery failed');
-  await expect(tell(ui)).toBeDisabled();
+  await expect(tell(ui)).toBeEnabled();
   await expect(input(ui)).toHaveValue('old draft');
   expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await page.evaluate(() => { window.failDiscovery = false; });

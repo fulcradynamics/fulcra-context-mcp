@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v9.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v10.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -155,7 +155,7 @@ From/Through dates are inclusive, converted to timezone-aware start/end-exclusiv
 bounds. The result shows the **applied** range; editing dates alone does not relabel
 it or change agent context. Polls use the last submitted dates, ignoring unsaved
 picker edits. There is no pagination or Load more. A failed newly requested range
-may retain the previous displayed range, explicitly labeled stale and unsendable;
+may retain the previous displayed range, explicitly labeled stale but still sendable;
 retries continue to request the submitted range, never the unsubmitted inputs.
 
 ## Messages and completeness
@@ -183,8 +183,10 @@ focus, open disclosures and pending send state; navigation invalidates old reads
 and composers. Late responses cannot replace the current peer view.
 
 Discovery failure retains last-good displayed data with explicit stale/unverified
-status and last-success time, but disables sending cached context and reads no
-cached channels. A message-source failure retains only that source's last-good
+status and last-success time. Previously loaded context remains sendable, including
+a successfully loaded empty thread; the preview and sent payload include stale and
+incomplete warnings. Discovery failure reads no cached channels. A message-source
+failure retains only that source's last-good
 records from the same range, marked stale with source identity and last-success
 time in the UI and bounded context. Other successful sources refresh normally.
 Successful discovery removes revoked sources immediately, even if subsequent
@@ -290,7 +292,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v9.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v10.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

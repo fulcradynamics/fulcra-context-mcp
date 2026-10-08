@@ -54,9 +54,11 @@ export function setupMessages(app, doc, requestRefresh) {
 
   function failed(error, unavailable = false) {
     if (!selected) return;
+    const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
     const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Use Load messages to retry.`;
-    displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [warning] };
-    render(displayed, false);
+    displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
+    if (unavailable) lastSuccess = undefined;
+    render(displayed, canSend);
   }
 
   async function read(discovery) {

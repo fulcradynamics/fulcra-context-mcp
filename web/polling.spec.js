@@ -72,7 +72,15 @@ test('refresh preserves composer, focus, disclosures, pending send and last-good
   await page.clock.runFor(20000);
   await expect(ui.locator('#message-status')).toContainText('discovery failed');
   await expect(ui.locator('#messages')).toContainText('last good');
-  await expect(tell).toBeDisabled();
+  await expect(tell).toBeEnabled();
+  await tell.click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(2);
+  const staleSend = await page.evaluate(() => window.sends[1].params.content[1].text);
+  expect(staleSend).toContain('last good');
+  expect(staleSend).toContain('"stale":true');
+  expect(staleSend).toContain('discovery failed');
+  await page.evaluate(() => window.reply(window.sends[1].id, { isError: true }));
+  await expect(input).toBeEnabled();
   await page.evaluate(() => { window.fail = []; window.entries = []; });
   await page.clock.runFor(40000);
   await expect(ui.locator('#message-status')).toContainText('no longer available');
@@ -300,6 +308,7 @@ test('revoked source is removed even while a changed range fails; retained range
   });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(2);
+  await ui.locator('textarea').fill('use the displayed range');
   await page.evaluate(entries => { window.entries = entries; window.hold = ['get_records']; window.fail = ['get_records']; }, [channel('peer', 'two')]);
   await ui.locator('#message-start').fill('2025-01-01');
   await ui.locator('#message-end').fill('2025-01-02');
@@ -311,7 +320,39 @@ test('revoked source is removed even while a changed range fails; retained range
   await expect(ui.locator('#message-status')).toContainText('Showing previous applied range');
   await expect(ui.locator('#thread-context')).toContainText('2026-01-09T00:00:00.000Z');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeDisabled();
+  const tell = ui.getByRole('button', { name: 'Tell my agent', exact: true });
+  await expect(tell).toBeEnabled();
+  await tell.click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  const sent = await page.evaluate(() => window.sends[0].params.content[1].text);
+  expect(sent).toContain('retained content');
+  expect(sent).not.toContain('revoked content');
+  expect(sent).toContain('2026-01-09T00:00:00.000Z');
+  expect(sent).toContain('Showing previous applied range');
+});
+
+test('discovery failure permits a previously loaded empty thread but not an unloaded thread', async ({ page }) => {
+  const ui = await open(page, [channel()]);
+  await page.evaluate(() => { window.fail = ['list_shares']; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await ui.locator('textarea').fill('start a conversation');
+  const tell = ui.getByRole('button', { name: 'Tell my agent', exact: true });
+  await expect(tell).toBeDisabled();
+  await page.evaluate(() => { window.fail = []; });
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await expect(ui.locator('#message-status')).toContainText('0 messages shown');
+  await expect(tell).toBeEnabled();
+  await page.evaluate(() => { window.fail = ['list_shares']; });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(tell).toBeEnabled();
+  const preview = await ui.locator('#thread-context').textContent();
+  await page.clock.runFor(20000);
+  await expect(busy(ui)).toBeHidden();
+  await expect(tell).toBeEnabled();
+  await expect(ui.locator('#thread-context')).toHaveText(preview);
+  expect(await page.evaluate(() => window.sends.length)).toBe(0);
 });
 
 const reads = page => page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').length);
