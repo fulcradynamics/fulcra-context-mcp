@@ -2,7 +2,7 @@ const options = { timeout: 15000 };
 
 // One queue for the app, not one per peer: an old attach must settle before its
 // empty replacement, and before a new peer can attach. No poll reattaches data.
-export function createContextLifecycle(app, status) {
+export function createContextLifecycle(app, status, presentation = 'global') {
   let tail = Promise.resolve(), epoch = 0, dirty = false, clearing, disposed = false;
   const report = text => { if (!disposed) status.textContent = text; };
   const enqueue = task => {
@@ -20,7 +20,9 @@ export function createContextLifecycle(app, status) {
         // SDK content is an array; empty content replaces the previous context.
         await app.updateModelContext({ content: [] }, options);
         dirty = false;
-        report('Thread context cleared. Click Continue conversation in chat again to attach the current display.');
+        report(presentation === 'thread'
+          ? 'Thread context cleared. Your next Tell my agent request will attach the current display before sending.'
+          : 'Thread context cleared. Click Continue conversation in chat again to attach the current display.');
       } catch {
         report('Could not confirm context was cleared. Previous thread context may remain in ChatGPT; do not rely on it. Retry by attaching the current thread or close the app.');
       } finally { clearing = undefined; }
@@ -29,6 +31,8 @@ export function createContextLifecycle(app, status) {
   }
   return {
     pending: false,
+    requestSequence: 0,
+    samplingPending: false,
     onChange: () => {},
     token: () => epoch,
     current: token => !disposed && epoch === token,

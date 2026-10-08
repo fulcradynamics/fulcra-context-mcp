@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v15.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v16.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -62,7 +62,9 @@ into the single `fulcra_mcp/ui/mesh.html`. There are no runtime external font,
 image, stylesheet or script requests. Other writing systems fall back to system
 fonts. See `web/assets/README.md` for asset provenance. Rebuilding is offline once
 npm dependencies are installed. The public `aicq_open` identifier and its app-only
-visibility/global entrypoint metadata are unchanged; entrypoint work is deferred.
+visibility/global entrypoint metadata are unchanged. The distinct thread entrypoint
+below uses the same compiled HTML, with only a fixed presentation meta tag changed
+by the server resource handler; there is no second frontend build.
 
 ### Host footer and safe areas
 
@@ -198,9 +200,9 @@ Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
-## Continue conversation in chat (resource v15)
+## Global presentation: Continue conversation in chat (resource v16)
 
-The sole thread action is **Continue conversation in chat**, directly below the
+Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
 Tell my agent fallback, or combined request relay. The user types and sends their
 request in the host's native chat.
@@ -242,16 +244,94 @@ is not proof of nondelivery, and context already consumed cannot be retracted.
 `web/native-context.spec.js` exercises the real SDK in an allow-scripts-only
 sandbox, including capability independence, no ui/message before/after click,
 bounded exact-peer context, failures, serialization, invalidation and teardown.
-Message/provenance, stale-load, polling, focus, disclosure and scroll tests now
-assert context attachment rather than the removed request UI. Obsolete typed-draft,
-instruction-limit, message acceptance/rejection and combined-send race tests were
-removed because no thread message-send path exists; invitation tests remain.
-This verifies local protocol behavior with synthetic data, not live ChatGPT
-acceptance. No live account, workspace or PLAT-650 reply implementation is involved.
+Message/provenance, stale-load, polling, focus, disclosure and scroll tests assert
+context-only attachment for the global presentation. The separate thread-entrypoint
+tests below cover its explicit message-send path. These verify local protocol
+behavior with synthetic data, not live ChatGPT acceptance.
+
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v16)
+
+`mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
+app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
+It accepts `{}` for a manual picker or an optional exact `peer_fulcra_userid` string
+for a referenced peer. It returns `{presentation: "thread", peer_fulcra_userid}`
+without reading or writing an account. Blank IDs are rejected; nonblank IDs are
+preserved exactly, not trimmed, resolved by name, or normalized. Discovery in the
+app determines availability using authorized catalog/sharing relationships. An
+unknown, unavailable or ambiguous peer stays on the picker with an explanation;
+no different peer is substituted. Multiple eligible channels for one exact peer
+are still one thread, not ambiguity.
+
+The tool advertises `ui://fulcra/mesh/thread/v16.html`. Its resource serves the
+same compiled `mesh.html` as the global entrypoint, replacing only the fixed
+`mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
+both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
+registered before `connect()`. The first result is consumed once whether it
+arrives before or after the connection resolves; the opener is never called again.
+The pinned SDK 1.7.5 supplies a `CallToolResult` notification with
+`structuredContent`; optional `hostContext.toolInfo` is tool metadata, not the
+initial result. Thread launch waits for that result. If it never arrives, users
+can use Refresh threads and choose a peer; a late result cannot override an
+explicit picker choice. Global launch retains its existing readiness/discovery UX.
+
+The shared thread composer adds a two-row textarea and **Tell my agent** only in
+thread presentation. An explicit click on a nonblank draft attaches the bounded
+displayed context separately, awaits acknowledgment, then revalidates navigation
+and the context lifecycle before sending exactly one `role: "user"` message whose
+sole text block is the original textarea value, including leading/trailing
+whitespace. No prefix or history is appended to that message. Both `message.text`
+and `updateModelContext.text` capabilities are required; there is no silent fallback.
+The shared 24,000-code-unit context bound, exact peer/source provenance, applied
+dates, clipping and stale/revoked-source handling described above apply here too.
+
+Pending sends are guarded across repeated clicks and peer navigation. Drafts are
+kept per peer in memory until the app closes; failures and uncertain delivery retain
+them. Only host acceptance while that composer is still current and the draft
+version unchanged clears the draft. Send outcome feedback is separate from context
+cleanup feedback. Acceptance means the host accepted the bridge request, not that
+the agent completed an action. A user-role bridge message does not establish native
+user authorship, override consent, post directly to a peer, or acknowledge anything.
+Timeouts cannot prove nondelivery; check the host conversation before retrying.
+
+**Suggest replies** runs only on explicit click and only when the host advertises
+`sampling`. It calls `app.createSamplingMessage` with the same bounded untrusted
+current context, `includeContext: "none"`, no tools, and `maxTokens: 400`. Its
+instruction requests up to three short logical replies. The parser accepts only an
+assistant text completion containing a JSON array of one to three nonblank strings,
+each at most 300 code units, with a total text bound of 2,000 code units. Control
+characters, malformed/prose responses, truncated/tool-use completions and other
+content types are rejected. Suggestions render as plain text. Selecting one
+explicitly replaces the draft only; it never sends. Late results after context,
+navigation or draft changes are discarded, and outstanding sampling is guarded
+across navigation. Errors/unsupported hosts display truthful notices, not fabricated
+replies. Opening, reading and polling never request sampling.
+
+`web/thread-entrypoint.spec.js` uses the real pinned SDK in a synthetic sandbox host
+to exercise launch timing, exact matching, presentation separation, message wire
+content, capability gates, pending/navigation races, uncertainty and sampling.
+`web/reply-suggestions.test.js` checks the strict parser. No account or provider is
+called. Actual ChatGPT thread-tab discovery/rendering, sampling availability and
+host consent behavior remain operator acceptance checks. The host may reject or
+modify sampling; sampling is not a subscription to native-chat replies. Serialized
+context cleanup cannot retract context already consumed or guarantee ordering after
+a transport timeout. No direct Mesh write or automatic acknowledgment is implemented.
+
+Capture synthetic thread-composer screenshots at 1120px and 320px:
+
+```sh
+cd web
+THREAD_PREVIEW_DIR=/home/fulcra/.hermes/cache/scratch npx playwright test thread-entrypoint.spec.js -g 'thread presentation layout'
+```
+
+Outputs are `mesh-thread-1120.png` and `mesh-thread-320.png` in that directory.
+These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screenshots;
+they check the small textarea, suggestion controls and horizontal fit, not real-host
+autoResize or overlay behavior.
 
 ## Implementation
 
-- `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
+- `fulcra_mcp/apps.py`: FastMCP registration, global/thread metadata and fixed resource presentation.
+- `web/entrypoint.js`: pre-connect initial-result delivery and resource presentation.
 - `web/meshes.js`: catalog/shares discovery and reliable account labels.
 - `web/refresh.js`, `threads.js`: visible lifecycle scheduler, backoff, keyed list.
 - `web/conversation.js`, `records.js`, `messages.js`: refreshed multi-channel reads,
@@ -259,6 +339,8 @@ acceptance. No live account, workspace or PLAT-650 reply implementation is invol
 - `web/message-list.js`: keyed message reconciliation and scroll anchoring.
 - `web/thread-composer.js`, `thread-context.js`, `native-context.js`: persistent
   thread action, bounded context and serialized attachment/cleanup lifecycle.
+- `web/thread-actions.js`, `reply-suggestions.js`: thread-only exact-text sends and
+  explicitly requested, capability-gated suggestions.
 - `fulcra_mcp/ui/mesh.html`: generated self-contained UI, included in Python wheels
   and source distributions. No CDN or Node runtime is needed to run the server.
 - `fulcra_mcp/main.py`: mounts the UI alongside existing tools in both transports.
@@ -310,8 +392,12 @@ npm run test:browser
 Commit both source and regenerated `fulcra_mcp/ui/mesh.html`; CI checks they match.
 The browser test uses the real SDK and an iframe host harness, not real ChatGPT.
 After pulling, restart the tunnel, refresh the ChatGPT connection, and reopen Fulcra Mesh.
-Click Continue conversation in chat and verify context attachment without a model
-turn; then type and send a request in native chat. Test Invite separately. This is
+In the global entrypoint, click Continue conversation in chat and verify context
+attachment without a model turn; then type and send a request in native chat.
+Separately open Mesh conversation as a thread tab with `{}` and through a model
+reference to an exact peer ID. Verify its distinct controls, capability notices,
+exact typed message, host consent behavior and suggestions if sampling is supported.
+Test Invite separately. This is
 separate from the known server-session initialization error; no workaround for
 that error is introduced here.
 
@@ -329,7 +415,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v15.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v16.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

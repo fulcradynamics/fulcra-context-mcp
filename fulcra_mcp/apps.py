@@ -5,7 +5,36 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v15.html"
+UI_URI = "ui://fulcra/mesh/v16.html"
+THREAD_UI_URI = "ui://fulcra/mesh/thread/v16.html"
+
+
+@app_mcp.tool(
+    title="Mesh conversation",
+    app={"resourceUri": THREAD_UI_URI, "visibility": ["model", "app"]},
+    meta={"openai/ui": {"entrypoints": [{"type": "thread"}]}},
+    annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+)
+def mesh_conversation_open(peer_fulcra_userid: str | None = None) -> dict:
+    """Open a Mesh conversation, optionally with an exact referenced peer user ID.
+
+    Omit the ID to choose a thread. Accessible peers are discovered by the app;
+    names are not identifiers. Does not write account data or send messages.
+    """
+    if peer_fulcra_userid is not None and not peer_fulcra_userid.strip():
+        raise ValueError("Provide a nonblank exact peer user ID or omit it.")
+    return {"presentation": "thread", "peer_fulcra_userid": peer_fulcra_userid}
+
+
+@app_mcp.resource(
+    THREAD_UI_URI,
+    mime_type="text/html;profile=mcp-app",
+    meta={"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen", "pip"]}},
+)
+def thread_html() -> str:
+    """Same compiled app; presentation is fixed by the server resource."""
+    return mesh_html().replace('<meta name="mesh-presentation" content="global">',
+                               '<meta name="mesh-presentation" content="thread">', 1)
 
 
 @app_mcp.tool(

@@ -5,6 +5,28 @@ from fastmcp import Client
 from fulcra_mcp.main import mcp
 
 
+async def test_thread_entrypoint():
+    async with Client(mcp) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+        assert "mesh_conversation_open" in tools
+        tool = tools["mesh_conversation_open"]
+        assert tool.title == "Mesh conversation"
+        assert tool.meta["ui"]["visibility"] == ["model", "app"]
+        assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert not tool.inputSchema.get("required")
+        for args in [{}, {"peer_fulcra_userid": "exact-peer"}, {"peer_fulcra_userid": " unknown "}]:
+            result = await client.call_tool("mesh_conversation_open", args)
+            assert result.data == {"presentation": "thread", "peer_fulcra_userid": args.get("peer_fulcra_userid")}
+        import pytest
+        for invalid in ["", "   ", 123, ["peer"]]:
+            with pytest.raises(Exception):
+                await client.call_tool("mesh_conversation_open", {"peer_fulcra_userid": invalid})
+        resource = await client.read_resource(tool.meta["ui"]["resourceUri"])
+        assert '<meta name="mesh-presentation" content="thread">' in resource[0].text
+
+
 async def test_mesh_app():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
@@ -12,7 +34,7 @@ async def test_mesh_app():
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Fulcra Mesh"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v15.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v16.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -20,7 +42,7 @@ async def test_mesh_app():
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
         assert result.data == {"message": "Fulcra Mesh is ready."}
-        resources = await client.read_resource("ui://fulcra/mesh/v15.html")
+        resources = await client.read_resource("ui://fulcra/mesh/v16.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Fulcra Mesh</h1>" in resources[0].text
         assert "hello world" not in resources[0].text.lower()
@@ -37,8 +59,12 @@ async def test_mesh_app():
         assert 'prefers-reduced-motion' in resources[0].text
         assert resources[0].text.index('id="message-range"') < resources[0].text.index('id="thread-composer"') < resources[0].text.index('id="messages"')
         assert 'get_records' in resources[0].text
-        assert 'Tell my agent' not in resources[0].text
-        assert 'Instructions for my agent' not in resources[0].text
+        assert '<meta name="mesh-presentation" content="global">' in resources[0].text
+        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v16.html")
+        assert thread_resource[0].text == resources[0].text.replace(
+            '<meta name="mesh-presentation" content="global">',
+            '<meta name="mesh-presentation" content="thread">', 1)
+        assert 'Tell my agent' in resources[0].text  # Shared code, mounted only by thread presentation.
         assert resources[0].text.count('id="thread-composer"') == 1
         assert 'peer_fulcra_userid' in resources[0].text
         assert 'omitted_records' in resources[0].text

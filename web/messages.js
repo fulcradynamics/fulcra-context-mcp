@@ -4,7 +4,7 @@ import { createMessageList } from './message-list.js';
 import { createContextLifecycle } from './native-context.js';
 export { parseRecords } from './records.js';
 
-export function setupMessages(app, doc, requestRefresh) {
+export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
   const panel = doc.querySelector('#mesh-detail');
   const listPanel = doc.querySelector('#mesh-list');
   const title = doc.querySelector('#message-title');
@@ -16,7 +16,8 @@ export function setupMessages(app, doc, requestRefresh) {
   const load = doc.querySelector('#message-load');
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
-  const contextLifecycle = createContextLifecycle(app, doc.querySelector('#context-status'));
+  const contextLifecycle = createContextLifecycle(app, doc.querySelector('#context-status'), presentation);
+  const drafts = new Map();
 
   let selected, displayed, range, rangeLabel, requested, updateComposer, lastSuccess, ready = false;
   let generation = 0;
@@ -138,7 +139,8 @@ export function setupMessages(app, doc, requestRefresh) {
     selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined;
     returnFocus = button;
     messageList.clear();
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle);
+    if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer));
     setTitle(thread);
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);
