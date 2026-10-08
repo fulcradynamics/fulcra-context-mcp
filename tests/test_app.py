@@ -12,7 +12,7 @@ async def test_mesh_app():
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Fulcra Mesh"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v11.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v12.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -20,7 +20,7 @@ async def test_mesh_app():
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
         assert result.data == {"message": "Fulcra Mesh is ready."}
-        resources = await client.read_resource("ui://fulcra/mesh/v11.html")
+        resources = await client.read_resource("ui://fulcra/mesh/v12.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Fulcra Mesh</h1>" in resources[0].text
         assert "hello world" not in resources[0].text.lower()

@@ -1,3 +1,5 @@
+import { INSTRUCTION_LIMIT } from './tell-agent.js';
+
 const options = { timeout: 15000 };
 
 // One queue for the app, not one per peer: an old attach must settle before its
@@ -43,11 +45,15 @@ export function createContextLifecycle(app, status) {
   };
 }
 
-// Context updates do not send a message or start a model turn (SDK 1.7.5).
-export function setupNativeContext(app, lifecycle, context, button, status, isCurrent) {
-  let pending = false;
-  const update = () => { button.disabled = pending || !isCurrent() || !context() || !app.getHostCapabilities()?.updateModelContext?.text; };
-  const guidance = 'Context attached. Now type and send your request in the native ChatGPT composer; you may need to expand the conversation manually. No message or mesh reply was sent.';
+// Only an explicit click attaches context and then relays a separate request.
+export function setupNativeContext(app, lifecycle, context, button, status, isCurrent, input, sendState, feedback) {
+  const update = () => {
+    const capabilities = app.getHostCapabilities();
+    button.disabled = sendState.pending || !isCurrent() || !context() || input.value.length > INSTRUCTION_LIMIT
+      || !capabilities?.updateModelContext?.text || !capabilities?.message?.text;
+  };
+  input.addEventListener('input', update);
+  const guidance = 'Request sent. Continue in the conversation; no mesh reply was posted by this button. You may need to expand the conversation manually.';
   update();
   button.addEventListener('click', async () => {
     update();
@@ -55,24 +61,44 @@ export function setupNativeContext(app, lifecycle, context, button, status, isCu
     const token = lifecycle.token();
     const current = () => isCurrent() && lifecycle.current(token);
     const text = context();
-    pending = true; update();
+    const draft = input.value;
+    sendState.pending = true; sendState.onChange();
+    let attached = false;
+    feedback.textContent = '';
     status.textContent = 'Attaching displayed thread context…';
     try {
       if (!await lifecycle.attach(text, token) || !current()) return;
-      status.textContent = guidance;
+      attached = true;
+      status.textContent = 'Context attached.';
+      feedback.textContent = 'Sending request…';
+      const request = draft.trim() ? `App-relayed request from the instruction field:\n\n${draft}`
+        : 'I have attached a Fulcra Mesh thread for context. Please help me with this thread; I will provide my request in this conversation.';
+      const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text: request }] }, options);
+      if (result.isError) throw new Error('Host rejected request');
+      // A changed poll does not undo acceptance, but never clear a newer draft.
+      if (!isCurrent()) return;
+      if (input.value === draft) input.value = '';
+      // Acceptance belongs to the message, not the attached snapshot's epoch.
+      feedback.textContent = guidance;
+      if (!current()) return;
       if (app.getHostContext()?.availableDisplayModes?.includes('pip')) {
         try {
           const result = await app.requestDisplayMode({ mode: 'pip' }, options);
-          if (current()) status.textContent = guidance + (result.mode === 'pip' ? ' Host reports picture-in-picture mode.' : ` Host kept ${result.mode} mode; PiP was not applied.`);
+          if (current()) feedback.textContent = guidance + (result.mode === 'pip' ? ' Host reports picture-in-picture mode.' : ` Host kept ${result.mode} mode; PiP was not applied.`);
         } catch {
-          if (current()) status.textContent = guidance + ' Could not change display mode.';
+          if (current()) feedback.textContent = guidance + ' Could not change display mode.';
         }
-      } else status.textContent = guidance + ' This host does not advertise PiP support.';
+      } else feedback.textContent = guidance + ' This host does not advertise PiP support.';
     } catch {
-      if (current()) status.textContent = 'Could not confirm context attachment. Retry to attach the current displayed context.';
+      if (attached && isCurrent()) {
+        // Cleanup must never overwrite the outcome or lose its privacy warning.
+        feedback.textContent = 'Context attached, but request send unconfirmed. Check the conversation before retrying; your draft is preserved. The attachment may have been cleared if the display changed.';
+      } else if (current()) {
+        status.textContent = 'Could not confirm context attachment. No request sent; your draft is preserved. Retry to attach the current displayed context.';
+      }
     } finally {
-      pending = false;
-      if (isCurrent()) update();
+      sendState.pending = false;
+      sendState.onChange();
     }
   });
   return update;

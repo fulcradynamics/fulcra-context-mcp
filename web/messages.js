@@ -17,6 +17,7 @@ export function setupMessages(app, doc, requestRefresh) {
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
   const contextLifecycle = createContextLifecycle(app, doc.querySelector('#context-status'));
+  const sendState = { pending: false };
   let selected, displayed, range, rangeLabel, requested, updateComposer, lastSuccess, ready = false;
   let generation = 0;
   let queryVersion = 0;
@@ -137,7 +138,7 @@ export function setupMessages(app, doc, requestRefresh) {
     selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined;
     returnFocus = button;
     messageList.clear();
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle);
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, sendState);
     setTitle(thread);
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);
