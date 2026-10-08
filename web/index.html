@@ -9,12 +9,20 @@
 <body>
   <main>
     <header class="brand">
-      <img src="/* BRAND_ICON */" alt="" width="32" height="32">
-      <h1>Fulcra Mesh</h1>
+      <div class="brand-identity">
+        <img src="/* BRAND_ICON */" alt="" width="32" height="32">
+        <h1>Fulcra Mesh</h1>
+      </div>
+      <button id="invite" type="button" disabled>Invite someone</button>
     </header>
-    <button id="refresh-threads" type="button">Refresh threads</button>
+    <section class="invite-section" aria-label="Invitation help and status">
+      <p>Ask your agent to help connect with someone on Fulcra Mesh.</p>
+      <p class="meta">Starts a conversation with your agent. Does not create a share or send an invitation.</p>
+      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
+    </section>
     <p id="refresh-status" role="status" aria-live="polite" hidden><span class="refresh-spinner" aria-hidden="true"></span> Refreshing threads and selected messages…</p>
     <section id="mesh-list" aria-labelledby="meshes-title">
+      <button id="refresh-threads" type="button">Refresh threads</button>
       <h2 id="meshes-title">Threads</h2>
       <p>Conversations with your Fulcra connections, grouped by user ID.</p>
       <p class="meta">A thread does not prove reciprocal sharing or acknowledgement.</p>
@@ -44,12 +52,6 @@
       <ol id="messages"></ol>
     </section>
     <p id="context-status" role="status" aria-live="polite"></p>
-    <footer class="invite-section">
-      <button id="invite" type="button" disabled>Invite someone</button>
-      <p>Ask your agent to help connect with someone on Fulcra Mesh.</p>
-      <p class="meta">Starts a conversation with your agent. Does not create a share or send an invitation.</p>
-      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
-    </footer>
   </main>
   <script>/* APP_SCRIPT */</script>
 </body>

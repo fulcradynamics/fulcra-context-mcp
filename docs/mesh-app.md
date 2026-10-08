@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v14.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v15.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -12,7 +12,9 @@ No separate UI server, search, pagination, or OAuth changes.
 - Refresh immediately after connection and on return to visible, then nominally
   every 10 seconds after the preceding batch finishes. One scheduler owns list
   discovery and selected-thread reads; the latter reuse that same discovery.
-- **Refresh threads** is available from both views. Manual requests during a
+- **Refresh threads** is available only on the thread list. Detail retains **Back
+  to threads** and **Load messages** (which also applies edited dates). Automatic
+  polling and the in-flight spinner remain active in both views. Manual requests during a
   batch coalesce into one follow-up. Discovery and all source reads drain before
   the next batch, even when a sibling request fails. Tool timeout is 30 seconds.
 - Discovery or message-read failure backs off to 20, 40, then at most 80 seconds;
@@ -196,7 +198,7 @@ Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
-## Continue conversation in chat (resource v14)
+## Continue conversation in chat (resource v15)
 
 The sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -266,6 +268,24 @@ separate `openai-mcp-extensions` Python SDK. No dependency upgrade.
 
 ## Invite button
 
+**Invite someone** is global at the top-right in both the list and thread views.
+At narrow widths it wraps to its own right-aligned header row without horizontal
+overflow. Invitation help and live status remain directly below the header;
+moving the control does not change its capability gating or message behavior.
+
+The real-SDK layout regression in `web/messages.spec.js` checks both 1120px and
+320px, list-only refresh, Back navigation, Load messages, in-flight status, keyboard
+invitation, acceptance/rejection feedback and no automatic context attachment.
+Capture synthetic list/thread screenshots with:
+
+```sh
+cd web
+LAYOUT_PREVIEW_DIR=/home/fulcra/.hermes/cache/scratch npx playwright test messages.spec.js -g 'global top-right'
+```
+
+Outputs are `layout-list-1120.png`, `layout-list-320.png`,
+`layout-thread-1120.png` and `layout-thread-320.png` in that directory.
+
 **Invite someone** sends one user-role `ui/message` through the host, asking the
 agent to use `fulcra-mesh` and ask who to invite before creating/sharing anything.
 It does not call data tools, create shares, or send an invitation to another user.
@@ -309,7 +329,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v14.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v15.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

@@ -244,7 +244,7 @@ test('discovery and partial-message failures back off, reset on success, and man
     await expect(busy(ui)).toBeHidden();
   }
   await page.evaluate(() => { window.fail = []; });
-  await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await expect.poll(() => reads(page)).toBe(++count);
   await expect(busy(ui)).toBeHidden();
   await page.clock.runFor(10000); await expect.poll(() => reads(page)).toBe(++count);
@@ -275,7 +275,7 @@ test('hidden discovery drains without message reads; SDK teardown stops queued r
   await page.evaluate(() => { window.hold = ['get_records']; });
   await visibility(page, 'visible');
   await expect.poll(() => reads(page)).toBe(2);
-  await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: 'teardown', method: 'ui/resource-teardown', params: {} }, '*'));
   await expect.poll(() => page.evaluate(() => window.teardownReply)).toBe(true);
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'late', note: 'never render after teardown' }]; });
@@ -293,8 +293,8 @@ test('all message calls drain on partial failure before coalesced manual rerun; 
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.held.length)).toBe(2);
   await page.evaluate(() => window.reply(window.held.shift().id, { isError: true }));
-  await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
-  await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   const before = await page.evaluate(() => window.calls.length);
   await page.clock.runFor(10000);
   expect(await page.evaluate(() => window.calls.length)).toBe(before);

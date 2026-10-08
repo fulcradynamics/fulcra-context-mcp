@@ -49,6 +49,59 @@ async function respond(page, index, rows, truncated = false) {
   }, { index, rows, truncated });
 }
 // Synthetic fixtures only: the real bundled SDK talks to this local host harness.
+test('Refresh threads is hidden in detail and restored by Back', async ({ page }) => {
+  const ui = await open(page);
+  const refresh = ui.getByRole('button', { name: 'Refresh threads', exact: true });
+  await expect(refresh).toBeVisible();
+  await choose(ui);
+  await expect(refresh).toBeHidden();
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await expect(refresh).toBeVisible();
+});
+for (const width of [1120, 320]) test(`global top-right invitation and list-only refresh at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
+  const ui = await open(page);
+  await page.addStyleTag({ content: 'body { margin: 0; background: black; } iframe { display: block; width: 100%; height: 100vh; border: 0; }' });
+  const invite = ui.getByRole('button', { name: 'Invite someone', exact: true });
+  const refresh = ui.getByRole('button', { name: 'Refresh threads', exact: true });
+  const assertTopRight = async view => {
+    await expect(invite).toBeEnabled();
+    const button = await invite.boundingBox(), content = await view.boundingBox(), main = await ui.locator('main').boundingBox();
+    expect(button.y + button.height).toBeLessThanOrEqual(content.y);
+    expect(Math.abs(button.x + button.width - main.x - main.width)).toBeLessThan(2);
+    expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+  };
+  await expect(refresh).toBeVisible();
+  await assertTopRight(ui.locator('#mesh-list'));
+  if (process.env.LAYOUT_PREVIEW_DIR) await page.screenshot({ path: `${process.env.LAYOUT_PREVIEW_DIR}/layout-list-${width}.png` });
+  await invite.focus(); await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
+  await page.evaluate(() => window.reply(window.agentRequests[0].id, {}));
+  await expect(ui.locator('#status')).toContainText('Request sent');
+  await choose(ui);
+  await expect(refresh).toBeHidden();
+  await expect(ui.getByRole('button', { name: 'Back to threads' })).toBeVisible();
+  await expect(ui.getByRole('button', { name: 'Load messages', exact: true })).toBeVisible();
+  await expect(ui.locator('#refresh-status')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
+  await respond(page, 0, []); await respond(page, 1, []);
+  await expect(ui.locator('#refresh-status')).toBeHidden();
+  await assertTopRight(ui.locator('#mesh-detail'));
+  await expect(ui.locator('#status')).toHaveAttribute('role', 'status');
+  await expect(ui.locator('#status')).toContainText('Request sent');
+  if (process.env.LAYOUT_PREVIEW_DIR) await page.screenshot({ path: `${process.env.LAYOUT_PREVIEW_DIR}/layout-thread-${width}.png` });
+  await invite.click();
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
+  await page.evaluate(() => window.reply(window.agentRequests[1].id, { isError: true }));
+  await expect(ui.locator('#status')).toContainText('Could not send');
+  await expect(invite).toBeEnabled();
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await expect(refresh).toBeVisible();
+  await assertTopRight(ui.locator('#mesh-list'));
+  expect(await page.evaluate(() => window.contexts.length)).toBe(0);
+});
 for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer clearance at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await page.clock.setFixedTime(new Date('2026-01-10T12:00:00Z'));
