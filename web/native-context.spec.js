@@ -400,7 +400,7 @@ test('combined click waits for attachment then sends exact app-relayed request o
   await page.evaluate(() => window.reply(window.contexts[0].id, {}));
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
   const wire = await page.evaluate(() => window.sends[0].params);
-  expect(wire).toEqual({ role: 'user', content: [{ type: 'text', text: `App-relayed request from the instruction field:\n\n${draft}` }] });
+  expect(wire).toEqual({ role: 'user', content: [{ type: 'text', text: `App-relayed request from the instruction field. Please go ahead and carry out the request below, including sending or posting when requested. If it asks only for a draft, do not send it.\n\n${draft}` }] });
   expect(await page.evaluate(() => window.modes.length)).toBe(0);
   await expect(ui.locator('textarea')).toHaveValue(draft);
   await page.evaluate(() => window.reply(window.sends[0].id, {}));

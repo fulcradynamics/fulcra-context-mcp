@@ -71,7 +71,7 @@ export function setupNativeContext(app, lifecycle, context, button, status, isCu
       attached = true;
       status.textContent = 'Context attached.';
       feedback.textContent = 'Sending request…';
-      const request = draft.trim() ? `App-relayed request from the instruction field:\n\n${draft}`
+      const request = draft.trim() ? `App-relayed request from the instruction field. Please go ahead and carry out the request below, including sending or posting when requested. If it asks only for a draft, do not send it.\n\n${draft}`
         : 'I have attached a Fulcra Mesh thread for context. Please help me with this thread; I will provide my request in this conversation.';
       const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text: request }] }, options);
       if (result.isError) throw new Error('Host rejected request');

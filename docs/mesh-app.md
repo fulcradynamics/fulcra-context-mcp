@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v12.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v13.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -234,7 +234,7 @@ refresh cannot re-enable or duplicate it. Leaving the thread or reloading the pa
 clears drafts. A pending send may already have reached the host; the composer warns
 to check chat before retrying after navigation. Drafts are not persisted to storage.
 
-## Combined ChatGPT handoff (resource v12)
+## Combined ChatGPT handoff (resource v13)
 
 **Use this thread in ChatGPT** sits alongside the existing **Tell my agent**
 composer. The help text explains before clicking that this is not context-only:
@@ -244,7 +244,7 @@ composer. The help text explains before clicking that this is not context-only:
 2. Only after confirmed attachment, while the same peer and snapshot are valid,
    call `app.sendMessage` exactly once with `role: 'user'` and one text block.
    Nonblank input is preserved exactly, prefixed with
-   `App-relayed request from the instruction field:`. History is not duplicated
+   `App-relayed request from the instruction field. Please go ahead and carry out the request below, including sending or posting when requested. If it asks only for a draft, do not send it.` History is not duplicated
    in this message because it was attached separately.
 3. Blank/whitespace input sends only this neutral handoff:
    “I have attached a Fulcra Mesh thread for context. Please help me with this
@@ -360,7 +360,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v12.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v13.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT
