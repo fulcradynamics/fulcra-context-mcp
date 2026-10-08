@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v10.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v11.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -24,8 +24,9 @@ No separate UI server, search, pagination, or OAuth changes.
 - A text status and subtle spinner are visible for the actual in-flight batch,
   including slow/failing sibling requests, not while waiting for the timer.
   Reduced-motion preference removes animation, retaining the text/static marker.
-- Polls never make model turns, write mesh data, acknowledge messages, update model
-  context, send instructions, or schedule unattended agents.
+- Polls never make model turns, write mesh data, acknowledge messages, attach model
+  context, send instructions, or schedule unattended agents. They may clear an
+  explicitly attached snapshot when its displayed content becomes invalid.
 
 The real-SDK local browser harness in `web/polling.spec.js` covers first/new thread
 discovery, selected-only reads, arriving messages, coalescing/draining, backoff and
@@ -231,6 +232,48 @@ refresh cannot re-enable or duplicate it. Leaving the thread or reloading the pa
 clears drafts. A pending send may already have reached the host; the composer warns
 to check chat before retrying after navigation. Drafts are not persisted to storage.
 
+## Native ChatGPT composer experiment (resource v11)
+
+**Use this thread in ChatGPT** sits alongside the existing **Tell my agent**
+composer. It attaches the exact bounded preview only on explicit click using
+`app.updateModelContext({content: [{type: 'text', text}]})`. It does not call
+`sendMessage`, start a model turn, write data, generate a reply, or copy the draft.
+The context label applies to both paths: untrusted account/message data, not
+instructions or authorization. The existing two-block Tell my agent send and
+draft/pending-send behavior remain unchanged.
+
+The user must then type and send a request in ChatGPT's native composer. No
+native-composer API, DOM access, focus trick, provenance override, or automatic
+reply is used. The host may not expose that composer without manual expansion.
+The SDK 1.7.5 `app.d.ts` and `spec.types.d.ts` define context updates as replacing
+the previous view context, without follow-up turns. The button requires host
+`updateModelContext.text`, independently of `message.text`.
+
+After a successful attachment, the app requests `pip` only when
+`getHostContext().availableDisplayModes` includes it. Both actual App capabilities
+and the existing host-specific `openai/ui` resource metadata advertise fullscreen
+and pip; preferred mode stays fullscreen. Generic SDK resource metadata has no
+display-mode field. The host's returned mode is authoritative; declining PiP,
+remaining fullscreen, unsupported modes and errors never imply a composer was
+opened or focused. Attachment errors never trigger PiP or claim success.
+
+One app-wide serialized context queue orders attaches and empty-content clears
+across peers. Back, navigation, source revocation, applied-range changes and
+changed displayed records/order/warnings invalidate the attachment. Late attach
+promises drain before cleanup and cannot trigger stale PiP or success callbacks.
+Unchanged polls do not reattach or clear merely because refresh timestamps changed.
+After invalidation, a new explicit click is required. Clear failures remain
+visible even on the thread list. SDK teardown awaits cleanup; abrupt page closure
+or transport loss cannot guarantee host cleanup. A timeout is not proof of
+nondelivery; nothing can retract context already consumed in a model turn.
+
+This is a reversible local experiment, not verified ChatGPT acceptance.
+`web/native-context.spec.js` exercises the real pinned SDK in an
+`allow-scripts`-only sandbox with synthetic host/data fixtures. No live account,
+remote workspace, discovery diagnostics, or PLAT-650 reply implementation is
+part of this change. Revert the eventual experiment commit, including the generated
+bundle and resource URI/metadata, to return to v10.
+
 ## Implementation
 
 - `fulcra_mcp/apps.py`: FastMCP registration and OpenAI global-entrypoint metadata.
@@ -292,7 +335,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v10.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v11.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

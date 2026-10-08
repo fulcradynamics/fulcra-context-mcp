@@ -5,7 +5,7 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v10.html"
+UI_URI = "ui://fulcra/mesh/v11.html"
 
 
 @app_mcp.tool(
@@ -29,7 +29,7 @@ def aicq_open() -> dict[str, str]:
     meta={
         "openai/ui": {
             "preferredDisplayMode": "fullscreen",
-            "availableDisplayModes": ["fullscreen"],
+            "availableDisplayModes": ["fullscreen", "pip"],
         }
     },
 )

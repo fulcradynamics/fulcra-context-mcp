@@ -6,7 +6,7 @@ export function setupThreads(app, doc) {
   const status = doc.querySelector('#mesh-status');
   const list = doc.querySelector('#meshes');
   const indicator = doc.querySelector('#refresh-status');
-  let disposed = false, lastSuccess, nextRow = 0;
+  let disposed = false, disposal, lastSuccess, nextRow = 0;
   const rows = new Map();
   const refreshButton = doc.querySelector('#refresh-threads');
   status.textContent = 'Loading threads…';
@@ -52,16 +52,18 @@ export function setupThreads(app, doc) {
   refreshButton.addEventListener('click', manual);
   const visibility = () => scheduler.visibilityChanged();
   function dispose() {
+    if (disposed) return disposal;
     disposed = true;
     scheduler.dispose();
-    detail.dispose();
+    disposal = detail.dispose();
     refreshButton.removeEventListener('click', manual);
     doc.removeEventListener('visibilitychange', visibility);
     doc.defaultView.removeEventListener('pagehide', dispose);
+    return disposal;
   }
   doc.addEventListener('visibilitychange', visibility);
   doc.defaultView.addEventListener('pagehide', dispose);
-  app.onteardown = async () => { dispose(); return {}; };
+  app.onteardown = async () => { await dispose(); return {}; };
   scheduler.request();
   return dispose;
 }

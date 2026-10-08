@@ -2,7 +2,7 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { setupInvite } from './invite.js';
 import { setupThreads } from './threads.js';
 
-const app = new App({ name: 'Fulcra Mesh', version: '0.1.0' }, { availableDisplayModes: ['fullscreen'] });
+const app = new App({ name: 'Fulcra Mesh', version: '0.1.0' }, { availableDisplayModes: ['fullscreen', 'pip'] });
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
 function applySafeArea(context) {
   if (!context?.safeAreaInsets) return;

@@ -1,6 +1,7 @@
 import { createThreadComposer } from './thread-composer.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
+import { createContextLifecycle } from './native-context.js';
 export { parseRecords } from './records.js';
 
 export function setupMessages(app, doc, requestRefresh) {
@@ -15,6 +16,7 @@ export function setupMessages(app, doc, requestRefresh) {
   const load = doc.querySelector('#message-load');
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
+  const contextLifecycle = createContextLifecycle(app, doc.querySelector('#context-status'));
   let selected, displayed, range, rangeLabel, requested, updateComposer, lastSuccess, ready = false;
   let generation = 0;
   let queryVersion = 0;
@@ -48,7 +50,7 @@ export function setupMessages(app, doc, requestRefresh) {
         ? `${result.messages.length} messages shown. ${result.warnings.join(' ')}`
         : `${result.messages.length} messages returned for this range${result.messages.length === 0 ? '. No messages in this range.' : '.'}`;
       status.textContent += ` Range: ${rangeLabel}. Last success: ${lastSuccess ?? 'not yet'}.`;
-      updateComposer(selected.peer, range, result, ready);
+      updateComposer(selected.peer, range, result, ready, Boolean(lastSuccess || result.messages.length));
     });
   }
 
@@ -69,6 +71,7 @@ export function setupMessages(app, doc, requestRefresh) {
     const current = () => generation === requestGeneration && queryVersion === requestVersion;
     try {
       const thread = discovery.threads.find(t => t.peer === selected.peer);
+      if (selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid))) contextLifecycle.invalidate();
       if (thread) selected = thread;
       // Exclude revoked channels immediately, including when a new range fails.
       if (displayed) {
@@ -117,6 +120,7 @@ export function setupMessages(app, doc, requestRefresh) {
   };
   const onOrder = () => { if (displayed) render(displayed, ready); };
   const onBack = () => {
+    contextLifecycle.invalidate();
     generation++;
     selected = undefined;
     messageList.clear(); composer.replaceChildren();
@@ -127,12 +131,13 @@ export function setupMessages(app, doc, requestRefresh) {
   order.addEventListener('change', onOrder);
   back.addEventListener('click', onBack);
   function select(thread, button) {
+    contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
     selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined;
     returnFocus = button;
     messageList.clear();
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration);
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle);
     setTitle(thread);
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);
@@ -150,6 +155,7 @@ export function setupMessages(app, doc, requestRefresh) {
     load.removeEventListener('click', onLoad);
     order.removeEventListener('change', onOrder);
     back.removeEventListener('click', onBack);
+    return contextLifecycle.dispose();
   } };
 }
 
