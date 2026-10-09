@@ -76,6 +76,39 @@ for (const width of [1120, 320]) test(`simplified message headers and muted sepa
   }
 });
 
+for (const width of [1120, 320]) test(`refresh UX first load, error and success at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 1100 });
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
+  const ui = await open(page);
+  await page.addStyleTag({ content: 'body { margin: 0; background: black; } iframe { display: block; width: 100%; height: 100vh; border: 0; }' });
+  await choose(ui);
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
+  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#refresh-status')).toHaveCount(0);
+  const capture = async state => {
+    expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+    await ui.locator('body').evaluate(() => scrollTo(0, 0));
+    if (process.env.REFRESH_PREVIEW_DIR) await page.screenshot({ path: `${process.env.REFRESH_PREVIEW_DIR}/${state}-${width}.png` });
+  };
+  await capture('firstload');
+  await page.evaluate(() => { for (const request of window.reads) window.reply(request.id, { isError: true }); });
+  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  await capture('error');
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
+  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
+  await respond(page, 2, [{ id: 'out', recorded_at: '2026-01-10T10:00:00Z', note: JSON.stringify({ v: 1, body: 'The route is ready. Shall we meet by the river?' }) }]);
+  await respond(page, 3, [{ id: 'in', recorded_at: '2026-01-10T11:00:00Z', note: JSON.stringify({ v: 1, body: 'Yes, the riverside meeting point works for me.' }) }]);
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  await expect(ui.locator('#message-status')).toBeEmpty();
+  await page.clock.runFor(250);
+  await capture('success');
+  expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
+});
+
 // Synthetic fixtures only: the real bundled SDK talks to this local host harness.
 test('global handoff help lives in About this thread and obsolete date copy is absent', async ({ page }) => {
   const ui = await open(page);
@@ -133,10 +166,10 @@ for (const width of [1120, 320]) test(`global top-right invitation and list-only
   await expect(refresh).toBeHidden();
   await expect(ui.getByRole('button', { name: 'Back to threads' })).toBeVisible();
   await expect(ui.getByRole('button', { name: 'Load messages', exact: true })).toBeVisible();
-  await expect(ui.locator('#refresh-status')).toBeVisible();
+  await expect(ui.locator('#message-loading')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, []); await respond(page, 1, []);
-  await expect(ui.locator('#refresh-status')).toBeHidden();
+  await expect(ui.locator('#message-loading')).toBeHidden();
   await assertTopRight(ui.locator('#mesh-detail'));
   await expect(ui.locator('#status')).toHaveAttribute('role', 'status');
   await expect(ui.locator('#status')).toContainText('Request sent');
@@ -285,7 +318,8 @@ for (const outgoingOnly of [false, true]) test(`${outgoingOnly ? 'outgoing' : 'i
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, []);
-  await expect(ui.locator('#message-status')).toContainText(`missing ${outgoingOnly ? 'incoming' : 'outgoing'}`);
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#thread-context')).toContainText(`missing ${outgoingOnly ? 'incoming' : 'outgoing'}`);
   await expect(tell(ui)).toHaveCount(1);
   await tell(ui).click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
@@ -320,8 +354,8 @@ test('each load refreshes discovery; reload preserves disclosure, applies same d
     expect(args.end_time).toBe('2026-01-03T00:00:00.000Z');
   }
   await respond(page, 1, []); await respond(page, 2, []);
-  await expect(ui.locator('#message-status')).toContainText('No messages in this range');
-  await expect(ui.locator('#message-status')).toContainText('2026-01-01 through 2026-01-02 UTC');
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#thread-context')).toContainText('2026-01-01T00:00:00.000Z');
   await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
   await expect(tell(ui)).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
@@ -339,8 +373,9 @@ test('partial failure and truncation remain visible and are sent as incomplete c
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 1, [{ note: 'incoming preserved' }], true);
   await page.evaluate(() => window.reply(window.reads[0].id, { isError: true }));
-  await expect(ui.locator('#message-status')).toContainText('Could not load messages — Outgoing');
-  await expect(ui.locator('#message-status')).toContainText('Partial result — Incoming');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
+  await expect(ui.locator('#thread-context')).toContainText('Could not load messages — Outgoing');
+  await expect(ui.locator('#thread-context')).toContainText('Partial result — Incoming');
   await tell(ui).click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
   const context = JSON.parse(await page.evaluate(() => window.contexts[0].params.content[0].text.split('\n').slice(1).join('\n')));
@@ -351,10 +386,10 @@ test('partial failure and truncation remain visible and are sent as incomplete c
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
   await respond(page, 2, []);
   await page.evaluate(() => window.reply(window.reads[3].id, { isError: true }));
-  await expect(ui.locator('#message-status')).toContainText('1 messages shown');
-  await expect(ui.locator('#message-status')).toContainText('Stale');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
+  await expect(ui.locator('#thread-context')).toContainText('"stale":true');
   await expect(ui.locator('#messages')).toContainText('incoming preserved');
-  await expect(ui.locator('#message-status')).not.toContainText('No messages in this range');
+  await expect(ui.locator('#message-status')).not.toContainText('No messages in this date range');
   await expect(tell(ui)).toHaveCount(1);
 });
 
@@ -396,7 +431,8 @@ test('late discovery starts no stale reads; failed discovery retains sendable lo
   await respond(page, 0, []); await respond(page, 1, []);
   await page.evaluate(() => { window.failDiscovery = true; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
+  await expect(ui.locator('#thread-context')).toContainText('discovery failed');
   await expect(tell(ui)).toBeEnabled();
   expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await page.evaluate(() => { window.failDiscovery = false; });

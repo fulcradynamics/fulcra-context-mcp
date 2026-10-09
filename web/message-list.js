@@ -27,6 +27,17 @@ export function createMessageList(list, activity, order, renderRow) {
   const onScroll = () => { if (atLatest()) activity.hidden = true; };
   win.addEventListener('scroll', onScroll, { passive: true });
   return {
+    preservePosition(change) {
+      // Status wrapping can change height between countdown, retry and pause.
+      const aboveList = list.firstElementChild?.getBoundingClientRect().top > 40;
+      const anchor = aboveList ? null : [...list.children].find(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.top < win.innerHeight && rect.bottom > 0;
+      });
+      const top = anchor?.getBoundingClientRect().top;
+      change();
+      if (anchor?.isConnected) win.scrollBy(0, anchor.getBoundingClientRect().top - top);
+    },
     update(messages, afterRender) {
       const hadRows = rows.size > 0;
       const followEdge = atLatest();
@@ -37,6 +48,9 @@ export function createMessageList(list, activity, order, renderRow) {
         .filter(({ el, top }) => top < win.innerHeight && el.getBoundingClientRect().bottom > 0);
       const keys = messageKeys(messages), next = new Map();
       const added = keys.some(key => !rows.has(key));
+      const selection = win.getSelection();
+      const savedSelection = selection && list.contains(selection.anchorNode) && list.contains(selection.focusNode)
+        ? { anchor: selection.anchorNode, anchorOffset: selection.anchorOffset, focus: selection.focusNode, focusOffset: selection.focusOffset } : null;
       let cursor = list.firstElementChild;
       messages.forEach((message, index) => {
         const key = keys[index];
@@ -45,9 +59,20 @@ export function createMessageList(list, activity, order, renderRow) {
         next.set(key, row);
         if (row !== cursor) list.insertBefore(row, cursor);
         cursor = row.nextElementSibling;
+        if (!rows.has(key) && !win.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          // Animate content, not the measured row: reader anchors stay stable.
+          for (const child of row.children) child.animate([
+            { opacity: 0, transform: 'translateY(4px)' },
+            { opacity: 1, transform: 'translateY(0)' },
+          ], { duration: 180, easing: 'ease-out' });
+        }
       });
       for (const [key, row] of rows) if (!next.has(key)) row.remove();
       rows = next;
+      if (savedSelection?.anchor.isConnected && savedSelection.focus.isConnected) {
+        const { anchor, anchorOffset, focus, focusOffset } = savedSelection;
+        selection.setBaseAndExtent(anchor, anchorOffset, focus, focusOffset);
+      }
       // Status and open context preview can also change height above the anchor.
       afterRender();
       if (hadRows && followEdge && added && !doc.activeElement?.matches('input, textarea, summary, select')) follow();

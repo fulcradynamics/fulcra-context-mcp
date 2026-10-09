@@ -21,7 +21,7 @@
       <p class="meta">Starts a conversation with your agent. Does not create a share or send an invitation.</p>
       <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
     </section>
-    <p id="refresh-status" role="status" aria-live="polite" hidden><span class="refresh-spinner" aria-hidden="true"></span> Refreshing threads and selected messages…</p>
+
     <section id="mesh-list" aria-labelledby="meshes-title">
       <button id="refresh-threads" type="button">Refresh threads</button>
       <h2 id="meshes-title">Threads</h2>
@@ -33,7 +33,7 @@
     <section id="mesh-detail" aria-labelledby="message-title" hidden>
       <button id="message-back" type="button">Back to threads</button>
       <h2 id="message-title"></h2>
-      <p class="meta">Accessible messages. Reading does not send or acknowledge anything.</p>
+
       <details class="reading-details">
         <summary>About this thread</summary>
         <p>Includes this peer’s accessible channels and your narrow direct channels to them. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
@@ -48,9 +48,12 @@
       </div>
       <div id="thread-composer"></div>
       <label>Message order <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select></label>
-      <p id="message-status" role="status" aria-live="polite"></p>
-      <button id="new-activity" type="button" hidden>New activity</button>
-      <ol id="messages"></ol>
+      <div id="message-area">
+        <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
+        <p id="message-status" role="status" aria-live="polite"></p>
+        <button id="new-activity" type="button" hidden>New activity</button>
+        <ol id="messages"></ol>
+      </div>
     </section>
     <p id="context-status" role="status" aria-live="polite"></p>
   </main>

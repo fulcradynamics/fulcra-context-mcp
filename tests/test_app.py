@@ -12,7 +12,7 @@ async def test_inline_threads_opener():
         tool = tools["mesh_threads_open"]
         assert tool.title == "Mesh threads"
         assert tool.meta["ui"] == {
-            "resourceUri": "ui://fulcra/mesh/threads/v19.html",
+            "resourceUri": "ui://fulcra/mesh/threads/v20.html",
             "visibility": ["model", "app"],
         }
         assert not tool.meta.get("openai/ui", {}).get("entrypoints")
@@ -41,7 +41,7 @@ async def test_thread_entrypoint():
         assert "mesh_conversation_open" in tools
         tool = tools["mesh_conversation_open"]
         assert tool.title == "Mesh conversation"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/thread/v19.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/thread/v20.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
         assert tool.annotations.readOnlyHint is True
@@ -65,7 +65,7 @@ async def test_mesh_app():
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Fulcra Mesh"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v19.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v20.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -73,7 +73,7 @@ async def test_mesh_app():
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
         assert result.data == {"message": "Fulcra Mesh is ready."}
-        resources = await client.read_resource("ui://fulcra/mesh/v19.html")
+        resources = await client.read_resource("ui://fulcra/mesh/v20.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Fulcra Mesh</h1>" in resources[0].text
         assert "hello world" not in resources[0].text.lower()
@@ -88,10 +88,16 @@ async def test_mesh_app():
         assert 'Latest first</option>' in resources[0].text
         assert 'Oldest first</option>' in resources[0].text
         assert 'prefers-reduced-motion' in resources[0].text
+        assert 'id="refresh-status"' not in resources[0].text
+        assert 'Refreshing threads and selected messages' not in resources[0].text
+        assert 'Accessible messages. Reading does not send or acknowledge anything.' not in resources[0].text
+        assert 'id="message-loading"' in resources[0].text
+        assert resources[0].text.index('id="message-area"') < resources[0].text.index('id="message-loading"') < resources[0].text.index('id="messages"')
+        assert 'No messages in this date range.' in resources[0].text
         assert resources[0].text.index('id="message-range"') < resources[0].text.index('id="thread-composer"') < resources[0].text.index('id="messages"')
         assert 'get_records' in resources[0].text
         assert '<meta name="mesh-presentation" content="global">' in resources[0].text
-        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v19.html")
+        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v20.html")
         assert thread_resource[0].text == resources[0].text.replace(
             '<meta name="mesh-presentation" content="global">',
             '<meta name="mesh-presentation" content="thread">', 1)

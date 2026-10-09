@@ -9,9 +9,35 @@ function clock() {
     setTimeout(fn, delay) { tasks.set(++id, { fn, at: now + delay }); return id; },
     clearTimeout(id) { tasks.delete(id); },
     async tick(ms) { now += ms; for (const [id, task] of [...tasks]) if (task.at <= now) { tasks.delete(id); task.fn(); } await flush(); },
+    now: () => now,
     delays: () => [...tasks.values()].map(t => t.at - now),
   };
 }
+test('publishes actual deadline only after draining, clears it for retries, pause and disposal', async () => {
+  const timer = clock(), states = [];
+  let visible = true, settle;
+  const scheduler = createRefreshScheduler({ ...timer, isVisible: () => visible,
+    onState: state => states.push(state), refresh: () => new Promise(resolve => { settle = resolve; }) });
+  scheduler.request();
+  assert.deepEqual(states.at(-1), { running: true, paused: false, nextAt: null });
+  await timer.tick(5000); settle(false); await flush();
+  assert.deepEqual(states.at(-1), { running: false, paused: false, nextAt: 25000 });
+  await timer.tick(19000);
+  assert.equal(states.at(-1).nextAt, 25000);
+  await timer.tick(1000);
+  assert.deepEqual(states.at(-1), { running: true, paused: false, nextAt: null });
+  visible = false; scheduler.visibilityChanged();
+  assert.deepEqual(states.at(-1), { running: true, paused: true, nextAt: null });
+  settle(false); await flush();
+  assert.deepEqual(states.at(-1), { running: false, paused: true, nextAt: null });
+  visible = true; scheduler.visibilityChanged(); settle(false); await flush();
+  assert.equal(states.at(-1).nextAt, 105000);
+  scheduler.request(); scheduler.request(); settle(false); await flush();
+  assert.deepEqual(states.at(-1), { running: true, paused: false, nextAt: null });
+  scheduler.dispose(); settle(false); await flush();
+  assert.deepEqual(states.at(-1), { running: false, paused: true, nextAt: null });
+  assert.deepEqual(timer.delays(), []);
+});
 test('one visible scheduler: immediate start, coalesced manual, no overlap, bounded backoff, resume and disposal', async () => {
   assert.equal(typeof createRefreshScheduler, 'function');
   const timer = clock(), busy = [];

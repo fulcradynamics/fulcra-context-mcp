@@ -87,13 +87,13 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await page.evaluate(() => { window.fail = ['get_records']; });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages')).toContainText('last good');
-  await expect(ui.locator('#message-status')).toContainText('Stale');
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
   await expect(ui.locator('#messages')).not.toContainText('Stale; access not verified. Last success:');
-  await expect(ui.locator('#message-status')).toContainText('Last success:');
+  await expect(ui.locator('#message-status')).not.toContainText('Last success:');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
   await page.evaluate(() => { window.fail = ['get_data_catalog']; });
   await page.clock.runFor(20000);
-  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
   await expect(ui.locator('#messages')).toContainText('last good');
   await expect(tell).toBeEnabled();
   await tell.click();
@@ -108,6 +108,10 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await expect(ui.locator('#message-status')).toContainText('no longer available');
   await expect(tell).toBeDisabled();
   await expect(ui.locator('#thread-context')).not.toContainText('last good');
+  await page.evaluate(() => { window.fail = ['get_data_catalog']; });
+  await page.clock.runFor(80000);
+  await expect(ui.locator('#message-status')).toHaveText('This thread is no longer available.');
+  await expect(tell).toBeDisabled();
 });
 
 test('two UTC calendar dates, top composer and both orders; polling never applies unsubmitted edits', async ({ page }) => {
@@ -133,14 +137,14 @@ test('two UTC calendar dates, top composer and both orders; polling never applie
   await expect.poll(() => reads(page)).toBe(3);
   await ui.locator('#message-start').fill('2024-01-01');
   await release(page);
-  await expect(ui.locator('#message-status')).toContainText('2025-01-01 through 2025-01-02 UTC');
+  await expect(ui.locator('#message-status')).toBeEmpty();
   await expect(ui.locator('#thread-context')).toContainText('2025-01-01T00:00:00.000Z');
   await page.clock.runFor(10000);
   expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').at(-1).params.arguments.start_time)).toBe('2025-01-01T00:00:00.000Z');
   expect(await page.evaluate(() => window.sends.length)).toBe(0);
 });
 
-test('manual refresh coalesces, preserves keyed list focus and labels account names; spinner supports reduced motion', async ({ page }) => {
+test('manual refresh coalesces, preserves keyed list focus and labels account names without a global spinner', async ({ page }) => {
   const ui = await open(page, [channel(), channel('other')]);
   const peer = ui.getByRole('button', { name: 'peer', exact: true });
   await peer.focus();
@@ -148,10 +152,8 @@ test('manual refresh coalesces, preserves keyed list focus and labels account na
   expect(id).toBeTruthy();
   await page.evaluate(() => { window.hold = ['get_data_catalog']; window.shares.incoming = [{ sharing_fulcra_userid: 'peer', sharing_fulcra_user_name: 'Alex' }]; });
   await page.clock.runFor(10000);
-  await expect(busy(ui)).toBeVisible();
-  await expect(ui.locator('.refresh-spinner')).toHaveCSS('animation-name', 'refresh-spin');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(ui.locator('.refresh-spinner')).toHaveCSS('animation-name', 'none');
+  await expect(ui.locator('#refresh-status')).toHaveCount(0);
+  await expect(busy(ui)).toBeHidden();
   await release(page);
   await expect(peer).toBeFocused(); expect(await peer.getAttribute('id')).toBe(id);
   await expect(ui.locator('#meshes')).toContainText('Account: Alex');
@@ -163,7 +165,7 @@ test('manual refresh coalesces, preserves keyed list focus and labels account na
   await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
   await page.clock.runFor(10000);
   expect(await page.evaluate(() => window.calls.length)).toBe(before);
-  await expect(busy(ui)).toBeVisible();
+  await expect(busy(ui)).toBeHidden();
   await page.evaluate(() => { window.fail = []; }); await release(page);
   await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(before + 2);
   await expect(busy(ui)).toBeHidden();
@@ -271,7 +273,7 @@ test('discovery and partial-message failures back off, reset on success, and man
   await page.clock.runFor(10000); await expect.poll(() => reads(page)).toBe(++count);
   await page.evaluate(() => { window.fail = ['list_shares']; });
   await page.clock.runFor(10000);
-  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
   const calls = await page.evaluate(() => window.calls.length);
   await page.clock.runFor(19999); expect(await page.evaluate(() => window.calls.length)).toBe(calls);
   await page.clock.runFor(1); await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(calls + 2);
@@ -285,7 +287,7 @@ test('hidden discovery drains without message reads; SDK teardown stops queued r
   await expect(busy(ui)).toBeHidden();
   await page.evaluate(() => { window.hold = ['get_data_catalog']; });
   await page.clock.runFor(10000);
-  await expect(busy(ui)).toBeVisible();
+  await expect(busy(ui)).toBeHidden();
   await visibility(page, 'hidden');
   await release(page);
   await expect(busy(ui)).toBeHidden();
@@ -343,7 +345,8 @@ test('revoked source is removed even while a changed range fails; retained range
   await expect(ui.locator('#thread-context')).not.toContainText('revoked content');
   await release(page);
   await expect(ui.locator('#messages')).toContainText('retained content');
-  await expect(ui.locator('#message-status')).toContainText('Showing previous applied range');
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  await expect(ui.locator('#thread-context')).toContainText('Showing previous applied range');
   await expect(ui.locator('#thread-context')).toContainText('2026-01-09T00:00:00.000Z');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
   const tell = ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
@@ -361,16 +364,16 @@ test('discovery failure permits a previously loaded empty thread but not an unlo
   const ui = await open(page, [channel()]);
   await page.evaluate(() => { window.fail = ['list_shares']; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
-  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
   const tell = ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
   await expect(tell).toBeDisabled();
   await page.evaluate(() => { window.fail = []; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(ui.locator('#message-status')).toContainText('0 messages shown');
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
   await expect(tell).toBeEnabled();
   await page.evaluate(() => { window.fail = ['list_shares']; });
   await page.clock.runFor(10000);
-  await expect(ui.locator('#message-status')).toContainText('discovery failed');
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
   await expect(tell).toBeEnabled();
   const preview = await ui.locator('#thread-context').textContent();
   await page.clock.runFor(20000);
@@ -380,30 +383,247 @@ test('discovery failure permits a previously loaded empty thread but not an unlo
   expect(await page.evaluate(() => window.sends.length)).toBe(0);
 });
 
+test('narrow retry status changes preserve the visible reader anchor and text selection', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 850 });
+  const ui = await open(page, [channel()]);
+  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = Array.from({ length: 20 }, (_, i) => ({ id: `m${i}`, note: 'Reading this message. '.repeat(12) })); });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#messages li')).toHaveCount(20);
+  await page.evaluate(() => { window.fail = ['get_records']; });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  const row = ui.locator('#messages li').nth(8);
+  await row.evaluate(el => {
+    el.scrollIntoView(); scrollBy(0, 20);
+    const text = el.lastChild.firstChild;
+    getSelection().setBaseAndExtent(text, 0, text, 6);
+  });
+  const top = await row.evaluate(el => el.getBoundingClientRect().top);
+  await page.evaluate(() => { window.hold = ['get_records']; });
+  await page.clock.runFor(20000);
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
+  expect(Math.abs(await row.evaluate(el => el.getBoundingClientRect().top) - top)).toBeLessThan(2);
+  expect(await row.evaluate(() => getSelection().toString())).toBe('Unreco');
+  await visibility(page, 'hidden');
+  expect(Math.abs(await row.evaluate(el => el.getBoundingClientRect().top) - top)).toBeLessThan(2);
+});
+
+test('new keyed rows animate once without moving layout; reorder preserves selection and hierarchy', async ({ page }) => {
+  const ui = await open(page, [channel()]);
+  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [
+    { id: 'one', recorded_at: '2026-01-10T01:00:00Z', note: 'first body' },
+    { id: 'two', recorded_at: '2026-01-10T02:00:00Z', note: 'second body' },
+  ]; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  const row = ui.locator('#messages li').first();
+  expect(await row.evaluate(el => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
+  expect(await row.evaluate(el => getComputedStyle(el).transform)).toBe('none');
+  const hierarchy = await row.evaluate(el => ({
+    heading: +getComputedStyle(el.firstChild).fontWeight, body: +getComputedStyle(el.lastChild).fontWeight,
+    dateMargin: parseFloat(getComputedStyle(el.children[1]).marginBottom),
+    dateLine: parseFloat(getComputedStyle(el.children[1]).lineHeight),
+  }));
+  expect(hierarchy.heading).toBeGreaterThan(hierarchy.body);
+  expect(hierarchy.dateMargin).toBeLessThanOrEqual(4);
+  expect(hierarchy.dateLine).toBeLessThanOrEqual(17);
+  await expect(ui.locator('#message-status')).toBeEmpty();
+  await ui.locator('#messages').evaluate(el => {
+    window.animations = el.getAnimations({ subtree: true });
+    for (const animation of window.animations) animation.finish();
+    const text = el.firstChild.lastChild.firstChild;
+    getSelection().setBaseAndExtent(text, 0, text, 6);
+    window.selectedText = getSelection().toString();
+    window.selectedNode = text;
+  });
+  await ui.getByLabel('Message order').selectOption('oldest');
+  expect(await ui.locator('#messages').evaluate(el => ({
+    text: getSelection().toString(), sameNode: getSelection().anchorNode === window.selectedNode,
+    expected: window.selectedText, animations: el.getAnimations({ subtree: true }).filter(a => !window.animations.includes(a)).length,
+  }))).toEqual({ text: 'Unreco', expected: 'Unreco', sameNode: true, animations: 0 });
+  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'three', note: 'new body' }); });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#messages li')).toHaveCount(3);
+  expect(await ui.locator('#messages li').last().evaluate(el => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
+  expect(await ui.locator('#messages').evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.effect.target.closest('li') !== el.lastChild && !window.animations.includes(a)).length)).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'four', note: 'reduced motion body' }); });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#messages li')).toHaveCount(4);
+  expect(await ui.locator('#messages li').last().evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+});
+
+test('first attempt alone has an in-area spinner; retry countdown uses the drained scheduler deadline', async ({ page }) => {
+  const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two')]);
+  await page.evaluate(() => { window.hold = ['get_records']; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.held.length)).toBe(2);
+  await expect(ui.locator('#refresh-status')).toHaveCount(0);
+  await expect(ui.getByText('Accessible messages.', { exact: false })).toHaveCount(0);
+  const spinner = ui.locator('#message-loading');
+  await expect(spinner).toBeVisible();
+  expect(await spinner.evaluate(el => el.parentElement.id)).toBe('message-area');
+  await expect(ui.locator('.refresh-spinner')).toHaveCSS('animation-name', 'refresh-spin');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(ui.locator('.refresh-spinner')).toHaveCSS('animation-name', 'none');
+  await page.evaluate(() => window.reply(window.held.shift().id, { isError: true }));
+  await page.clock.runFor(5000);
+  await expect(spinner).toBeVisible(); // The batch is still draining.
+  await release(page);
+  await expect(spinner).toBeHidden();
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  await page.clock.runFor(7000);
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 13 seconds.');
+  const before = await reads(page);
+  await page.evaluate(() => { window.hold = ['get_records']; });
+  await page.clock.runFor(13000);
+  await expect.poll(() => reads(page)).toBe(before + 2);
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
+  await expect(spinner).toBeHidden();
+  await page.evaluate(() => { window.fail = ['get_records']; });
+  await release(page);
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 40 seconds.');
+  await visibility(page, 'hidden');
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retries paused while this app is hidden.');
+  await page.clock.runFor(90000);
+  expect(await reads(page)).toBe(before + 2);
+  await page.evaluate(() => { window.hold = ['get_records']; window.fail = []; });
+  await visibility(page, 'visible');
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
+  await expect(spinner).toBeHidden();
+  await release(page);
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await page.evaluate(() => { window.hold = ['get_records']; });
+  await ui.locator('#message-start').fill('2025-01-01');
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await expect.poll(() => reads(page)).toBe(before + 6);
+  await expect(spinner).toBeHidden();
+  await release(page);
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await page.evaluate(() => { window.hold = ['get_records']; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(spinner).toBeVisible(); // A fresh selected view gets its own first attempt.
+  expect(await page.evaluate(() => window.sends.length)).toBe(0);
+});
+
+for (const queued of [false, true]) test(`first-load feedback spans held discovery and drained reads (queued ${queued})`, async ({ page }) => {
+  const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two'), channel('other')]);
+  if (queued) {
+    await ui.getByRole('button', { name: 'other', exact: true }).click();
+    await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+    await page.evaluate(() => { window.hold = ['get_records']; });
+    await page.clock.runFor(10000);
+    await expect.poll(() => page.evaluate(() => window.held.length)).toBe(1);
+    await ui.getByRole('button', { name: 'Back to threads' }).click();
+  }
+  await page.evaluate(() => { window.hold = ['get_data_catalog', 'get_records']; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(busy(ui)).toBeVisible();
+  if (queued) {
+    // The obsolete read must not clear the new selection's feedback.
+    await page.evaluate(() => window.answer(window.held.shift()));
+  }
+  await expect.poll(() => page.evaluate(() => window.held.map(r => r.params.name))).toEqual(['get_data_catalog']);
+  await page.clock.runFor(5000);
+  await expect(busy(ui)).toBeVisible();
+  await page.evaluate(() => window.answer(window.held.shift()));
+  await expect.poll(() => page.evaluate(() => window.held.length)).toBe(2);
+  await expect(busy(ui)).toBeVisible();
+  await page.evaluate(() => window.answer(window.held.shift()));
+  await page.clock.runFor(1000);
+  await expect(busy(ui)).toBeVisible();
+  await release(page);
+  await expect(busy(ui)).toBeHidden();
+  await page.evaluate(() => { window.hold = ['get_data_catalog', 'get_records']; });
+  await page.clock.runFor(10000);
+  await expect.poll(() => page.evaluate(() => window.held.length)).toBe(1);
+  await expect(busy(ui)).toBeHidden();
+  await page.evaluate(() => window.answer(window.held.shift()));
+  await expect.poll(() => page.evaluate(() => window.held.length)).toBe(2);
+  await expect(busy(ui)).toBeHidden();
+  await release(page);
+});
+
+for (const ending of ['failure', 'navigation', 'disposal']) test(`first-load discovery feedback clears on ${ending}`, async ({ page }) => {
+  const ui = await open(page, [channel()]);
+  await page.evaluate(() => { window.hold = ['get_data_catalog']; });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.held.length)).toBe(1);
+  await expect(busy(ui)).toBeVisible();
+  if (ending === 'failure') {
+    await page.evaluate(() => { window.fail = ['get_data_catalog']; });
+    await release(page);
+    await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  } else if (ending === 'navigation') {
+    await ui.getByRole('button', { name: 'Back to threads' }).click();
+    await expect(ui.getByRole('button', { name: 'peer', exact: true })).toBeFocused();
+  } else {
+    await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: 'teardown', method: 'ui/resource-teardown', params: {} }, '*'));
+    await expect.poll(() => page.evaluate(() => window.teardownReply)).toBe(true);
+  }
+  expect(await busy(ui).evaluate(el => el.hidden)).toBe(true);
+  await release(page);
+  expect(await reads(page)).toBe(0);
+  expect(await busy(ui).evaluate(el => el.hidden)).toBe(true);
+});
+
+for (const priorFailure of [false, true]) test(`invalid range survives ticks and successful poll publication (prior failure ${priorFailure})`, async ({ page }) => {
+  const ui = await open(page, [channel()]);
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  if (priorFailure) {
+    await page.evaluate(() => { window.fail = ['get_records']; });
+    await page.clock.runFor(10000);
+    await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
+  }
+  const before = await reads(page);
+  await ui.locator('#message-start').fill('2026-01-11');
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  const validation = 'Choose a valid date range (start on or before end).';
+  await expect(ui.locator('#message-status')).toHaveText(validation);
+  await page.clock.runFor(1000);
+  await expect(ui.locator('#message-status')).toHaveText(validation);
+  expect(await reads(page)).toBe(before);
+  await page.evaluate(() => { window.fail = []; window.hold = ['get_records']; });
+  await page.clock.runFor(priorFailure ? 19000 : 9000);
+  await expect.poll(() => reads(page)).toBe(before + 1);
+  await expect(ui.locator('#message-status')).toHaveText(validation);
+  await release(page);
+  // A scheduled next batch proves the successful batch has published its state.
+  await page.clock.runFor(10000);
+  await expect.poll(() => reads(page)).toBe(before + 2);
+  await expect(ui.locator('#message-status')).toHaveText(validation);
+  expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').at(-1).params.arguments.start_time)).toBe('2026-01-09T00:00:00.000Z');
+  await ui.locator('#message-start').fill('2026-01-09');
+  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await expect.poll(() => reads(page)).toBe(before + 3);
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+});
+
 const reads = page => page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').length);
-const busy = ui => ui.locator('#refresh-status');
+const busy = ui => ui.locator('#message-loading');
 async function release(page) { await page.evaluate(() => { window.hold = []; for (const r of window.held.splice(0)) window.answer(r); }); }
 async function visibility(page, state) {
   await page.frames()[1].evaluate(state => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: state }); document.dispatchEvent(new Event('visibilitychange')); }, state);
 }
 
-test('visible polling discovers first thread from empty, reads only selected peer, shows actual busy state, resumes and stops', async ({ page }) => {
+test('visible polling discovers first thread from empty, reads only selected peer without background spinners, resumes and stops', async ({ page }) => {
   const ui = await open(page);
   await expect(ui.locator('#meshes li')).toHaveCount(0);
   await page.evaluate(entries => { window.entries = entries; window.hold = ['get_data_catalog']; }, [channel(), channel('other')]);
   await page.clock.runFor(10000);
-  await expect(busy(ui)).toBeVisible();
-  await expect(busy(ui)).toContainText('Refreshing');
+  await expect(busy(ui)).toBeHidden();
+  await expect(ui.locator('#refresh-status')).toHaveCount(0);
   await release(page);
   await expect(ui.locator('#meshes li')).toHaveCount(2);
   await expect(busy(ui)).toBeHidden();
   expect(await reads(page)).toBe(0);
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => reads(page)).toBe(1);
-  await expect(ui.locator('#message-status')).toContainText('0 messages');
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'newly arrived' }]; window.hold = ['get_records']; });
   await page.clock.runFor(10000);
-  await expect(busy(ui)).toBeVisible();
+  await expect(busy(ui)).toBeHidden();
   await release(page);
   await expect(ui.locator('#messages')).toContainText('newly arrived');
   expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').every(c => c.params.arguments.fulcra_userid === 'peer'))).toBe(true);

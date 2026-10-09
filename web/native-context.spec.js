@@ -119,7 +119,7 @@ test('Back during late attachment serializes cleanup before a new peer attach, n
   await expect(action(ui)).toBeDisabled();
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'other', exact: true }).click();
-  await expect(ui.locator('#message-status')).toContainText('0 messages');
+  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
   await expect(action(ui)).toBeDisabled();
   expect(await page.evaluate(() => window.contexts.length)).toBe(1);
   await page.evaluate(() => window.reply(window.contexts[0].id, {}));
@@ -186,7 +186,7 @@ test('stale clipped current context preserves source, applied range and warnings
   await expect(ui.locator('#messages li')).toHaveCount(2);
   await page.evaluate(() => { window.fail = ['get_records']; });
   await page.clock.runFor(10000);
-  await expect(ui.locator('#message-status')).toContainText('Stale');
+  await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
   await action(ui).click();
   await expect(status(ui)).toContainText('Context attached');
   const text = await page.evaluate(() => window.contexts[0].params.content[0].text);

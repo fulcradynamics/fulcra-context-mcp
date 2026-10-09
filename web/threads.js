@@ -5,7 +5,7 @@ import { createRefreshScheduler } from './refresh.js';
 export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) {
   const status = doc.querySelector('#mesh-status');
   const list = doc.querySelector('#meshes');
-  const indicator = doc.querySelector('#refresh-status');
+
   let disposed = false, disposal, lastSuccess, nextRow = 0;
   const rows = new Map();
   const refreshButton = doc.querySelector('#refresh-threads');
@@ -55,7 +55,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   }
   const scheduler = createRefreshScheduler({
     isVisible: () => doc.visibilityState === 'visible',
-    onBusy: busy => { indicator.hidden = !busy; },
+    onState: state => detail.refreshState(state),
     async refresh() {
       try {
         const discovery = await discoverThreads(app);

@@ -254,6 +254,7 @@ test('uncertain send and navigation preserve draft and app-wide pending guard', 
 for (const text of ['["<img src=x onerror=alert(1)>"]', '["1","2","3","4"]', 'Here are some replies']) test(`sampling handles plain text and invalid formats: ${text}`, async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdSampling: true });
   await ui.getByRole('button', { name: 'Suggest replies', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.samples.length)).toBe(1);
   await page.evaluate(text => window.reply(window.samples[0].id, { role: 'assistant', model: 'synthetic', content: { type: 'text', text } }), text);
   if (text.includes('<img')) {
     await expect(ui.locator('#reply-suggestions button')).toHaveText('<img src=x onerror=alert(1)>');

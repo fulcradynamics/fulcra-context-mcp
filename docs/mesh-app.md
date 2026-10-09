@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v19.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v20.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -63,7 +63,7 @@ is required by these automated tests.
   discovery and selected-thread reads; the latter reuse that same discovery.
 - **Refresh threads** is available only on the thread list. Detail retains **Back
   to threads** and **Load messages** (which also applies edited dates). Automatic
-  polling and the in-flight spinner remain active in both views. Manual requests during a
+  polling remains active in both views, without a global refresh indicator. Manual requests during a
   batch coalesce into one follow-up. Discovery and all source reads drain before
   the next batch, even when a sibling request fails. Tool timeout is 30 seconds.
 - Discovery or message-read failure backs off to 20, 40, then at most 80 seconds;
@@ -72,9 +72,21 @@ is required by these automated tests.
 - Hidden documents start no requests. In-flight requests finish; a discovery
   completed while hidden starts no message reads. SDK resource teardown and
   pagehide clear timers/listeners, discard queued refreshes and ignore late data.
-- A text status and subtle spinner are visible for the actual in-flight batch,
-  including slow/failing sibling requests, not while waiting for the timer.
-  Reduced-motion preference removes animation, retaining the text/static marker.
+- Only the first message-read attempt per selected thread view shows a spinner,
+  inside the message area below its divider. It drains all sibling reads, then
+  disappears on success or failure. Discovery failure also consumes the first
+  attempt. Subsequent polls, manual retries and date loads never show a spinner;
+  navigating away and selecting again starts a new view. Reduced motion keeps
+  the loading text/static marker without rotation.
+- Read failures (including partial failures) and selected-view discovery failures
+  show `Could not load messages. Retrying in X seconds.` The scheduler publishes
+  the actual next deadline only after the whole batch drains; a display-only tick
+  derives the live countdown from that deadline and never starts requests.
+  During retry: `Could not load messages. Retrying…`. Hidden apps show
+  `Could not load messages. Retries paused while this app is hidden.` instead of
+  a fictitious deadline. Countdown ticks are cleared on navigation and disposal.
+  Known revoked peers stay `This thread is no longer available.`, including after
+  a later discovery failure; retry text is not a promise to restore access.
 - Polls never make model turns, write mesh data, acknowledge messages, attach model
   context, send instructions, or schedule unattended agents. They may clear an
   explicitly attached snapshot when its displayed content becomes invalid.
@@ -99,8 +111,11 @@ Deliberate adaptation: retain Fulcra's black/charcoal surfaces, Rubik, mint acti
 and readable violet disclosure selection rather than the generic warm monochrome
 palette and alternative fonts. Use whitespace, thin dividers, flat surfaces and
 compact controls, not boxed panels, pills, decorative gradients, shadows, icons,
-decorative animations, hero/bento layouts or stock imagery. The refresh spinner is
-a functional exception for request observability. The identity image is the existing
+decorative animations, hero/bento layouts or stock imagery. First-load feedback and
+a subtle 180ms opacity/4px translation on newly created message content are functional
+exceptions. Unchanged/reordered keyed rows do not animate again; reduced motion skips
+insertion animation. Row geometry does not animate, preserving reader anchors.
+The identity image is the existing
 `fulcra_mcp/static/icon.png`, embedded unchanged, alongside a plain text wordmark;
 no new logo was invented. Metadata uses a lighter gray for readability on dark
 surfaces. Message bodies, catalog labels and expanded context wrap at narrow widths.
@@ -194,7 +209,7 @@ agents sharing one account are not distinguishable through these APIs.
   owners remain distinct. No self thread is created.
 - Ineligible own channels (including orphan and self-only channels) are omitted,
   with a discovery warning count, not turned into fake threads. Incoming-only and
-  outgoing-only threads show an explicit missing-side/incomplete notice.
+  outgoing-only threads retain an explicit missing-side/incomplete notice in context.
 - Discovery failure, malformed results, or missing own user ID stops the load.
   No guessing of owners or fallback to cached channels.
 
@@ -206,10 +221,10 @@ parameter. Every displayed record retains its original exact owner/type identity
 
 The initial window is today and yesterday: two UTC calendar dates. Editable
 From/Through dates are inclusive, converted to timezone-aware start/end-exclusive
-bounds. The result shows the **applied** range; editing dates alone does not relabel
+bounds. Context retains the **applied** range; editing dates alone does not relabel
 it or change agent context. Polls use the last submitted dates, ignoring unsaved
 picker edits. There is no pagination or Load more. A failed newly requested range
-may retain the previous displayed range, explicitly labeled stale but still sendable;
+may retain the previous displayed range, marked stale in context but still sendable;
 retries continue to request the submitted range, never the unsubmitted inputs.
 
 ## Messages and completeness
@@ -220,16 +235,20 @@ missing/blank names use `Catalog name unavailable`. Names are display-only:
 keyed row identity and authorization still use exact owner/type IDs, which remain
 in the bounded context and its preview rather than message headers. **Latest
 first** is the default; **Oldest first** reverses valid timestamps. Browser-local
-timestamps appear on a separate muted, smaller line; invalid/missing timestamps
+timestamps appear on a separate muted, smaller line with tighter spacing/line-height.
+Direction/catalog-name headers have stronger weight than body text without larger type;
+invalid/missing timestamps
 are labeled unavailable and placed last. Recognized v1 mesh envelopes show only
 the existing parsed body, without the generated routing/kind/slug/message-ID line.
 No new parsing or normalization is applied; unrecognized notes remain intact as raw text.
 All content is rendered as text, never HTML. Reading does not send, acknowledge,
 write records, or update model context automatically.
 
-Errors and truncation are identified per source while successful records from other
-channels remain visible. A zero result is called an empty conversation only when
-all discovered eligible reads complete without warnings. Completeness applies only
+Errors and truncation are retained per source in context while successful records from other
+channels remain visible. Successful nonempty loads show no redundant status, count,
+range or last-success label. Successful empty reads show `No messages in this date range.`;
+failures never masquerade as empty success. Missing sides/truncation remain in context.
+Completeness applies only
 to accessible channels in the applied range, not all history or data outside share
 permissions (including time-limited grants). Narrow the dates for truncated results.
 
@@ -241,23 +260,23 @@ content, except when focusing thread controls. Refresh retains
 focus, open disclosures and pending attachment state; navigation invalidates old reads
 and composers. Late responses cannot replace the current peer view.
 
-Discovery failure retains last-good displayed data with explicit stale/unverified
-status and last-success time. Previously loaded context remains sendable, including
+Discovery failure retains last-good displayed data with stale/unverified metadata
+and original provenance internally and in context. Previously loaded context remains sendable, including
 a successfully loaded empty thread; the preview and sent payload include stale and
 incomplete warnings. Discovery failure reads no cached channels. A message-source
 failure retains only that source's last-good
 records from the same range, marked stale with source identity and last-success
-time in bounded context. Thread-level failure warnings and last-success status
-remain visible; the repeated per-message stale/access/last-success line is omitted.
+time in bounded context. The reading view uses the concise retry status above, not
+technical errors, source IDs, counts, ranges or diagnostic timestamps.
 This is a presentation change, not a claim that retained records are current.
 Other successful sources refresh normally.
 Successful discovery removes revoked sources immediately, even if subsequent
 reads fail; a disappeared peer has no sendable cached context. Load messages or
 Refresh threads retries. Invite remains independent.
-The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
-appear in the conversation UI.
+The host decides whether app-originated calls appear in its conversation UI;
+the app does not depend on those traces for first-load or failure feedback.
 
-## Global presentation: Continue conversation in chat (resource v19)
+## Global presentation: Continue conversation in chat (resource v20)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -312,7 +331,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v19)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v20)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -325,7 +344,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v19.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v20.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -393,11 +412,11 @@ These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screensh
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
 
-## Inline Mesh threads (PLAT-666, resource v19)
+## Inline Mesh threads (PLAT-666, resource v20)
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v19.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v20.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -406,7 +425,7 @@ global/thread entrypoint metadata and controls are unchanged.
 The compact list uses the existing authorized exact-peer discovery and keyed rows.
 Initial-result and host-context handlers are registered before connection; initial
 results arriving before or after initialization are consumed without recalling the
-opener. Refresh/polling and the in-flight spinner remain shared. No messages or
+opener. Refresh/polling and first-load/failure feedback remain shared. No messages or
 composer are mounted until an explicit row selection has host panel acceptance.
 
 A row click requests fullscreen once only if the host advertises it, or directly
@@ -518,7 +537,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v19.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v20.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

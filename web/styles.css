@@ -69,11 +69,16 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 .range-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
 #message-range { margin-top: 24px; }
 #message-status { margin-block: 20px; }
+#message-area { border-top: 1px solid var(--divider); }
+#messages > li:first-child { border-top: 0; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
 #meshes > li { padding: 20px 0; border-top: 1px solid var(--divider); }
 #meshes button { text-align: left; }
 #messages > li { padding: 20px 0; border-top: 1px solid var(--divider); }
 #messages > li > p { margin-top: 0; }
+#messages > li > p:first-child { font-weight: 500; line-height: 1.35; margin-bottom: 4px; }
+#messages .message-date { line-height: 1.35; margin-bottom: 4px; }
+#messages pre { margin-top: 8px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
 #thread-composer:not(:empty) { margin-top: 12px; padding-top: 24px; border-top: 1px solid var(--divider); }
 #thread-composer label { color: #fff; font-size: 16px; }
@@ -86,8 +91,7 @@ details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); font-family: ui-monospace, monospace; font-size: 12px; }
 .invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 
-/* Keep request observability out of flow so it cannot move a reader. */
-#refresh-status { position: fixed; top: 4px; right: 12px; z-index: 2; max-width: calc(100% - 24px); padding: 4px 8px; background: var(--surface); }
+
 .refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--mint); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-spinner { animation: none; } }

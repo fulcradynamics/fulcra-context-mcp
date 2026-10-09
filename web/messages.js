@@ -9,6 +9,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const listPanel = doc.querySelector('#mesh-list');
   const title = doc.querySelector('#message-title');
   const status = doc.querySelector('#message-status');
+  const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
   const start = doc.querySelector('#message-start');
@@ -23,6 +24,27 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   let generation = 0;
   let queryVersion = 0;
   let returnFocus;
+  let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer, validation = '';
+  let refreshState = { running: false, paused: false, nextAt: null };
+  function renderStatus() {
+    clearTimeout(statusTimer);
+    if (!selected) return;
+    let text = '';
+    if (validation) text = validation;
+    else if (unavailable) text = 'This thread is no longer available.';
+    else if (loadFailed) {
+      const state = refreshState;
+      text = 'Could not load messages. ';
+      if (state.paused) text += 'Retries paused while this app is hidden.';
+      else if (state.running) text += 'Retrying…';
+      else if (state.nextAt !== null) {
+        text += `Retrying in ${Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000))} seconds.`;
+        // Display-only tick. The scheduler alone owns retry requests/deadlines.
+        statusTimer = setTimeout(renderStatus, 1000);
+      } else text += 'Automatic retries are paused.';
+    } else if (displayed && !displayed.messages.length) text = 'No messages in this date range.';
+    if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
+  }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
     (item, { record, source, direction }) => {
       if (!item.firstChild) {
@@ -55,16 +77,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     }) };
     messageList.update(result.messages, () => {
       setTitle(selected);
-      status.textContent = result.warnings.length
-        ? `${result.messages.length} messages shown. ${result.warnings.join(' ')}`
-        : `${result.messages.length} messages returned for this range${result.messages.length === 0 ? '. No messages in this range.' : '.'}`;
-      status.textContent += ` Range: ${rangeLabel}. Last success: ${lastSuccess ?? 'not yet'}.`;
+      renderStatus();
       updateComposer(selected.peer, range, result, ready, Boolean(lastSuccess || result.messages.length));
     });
   }
 
-  function failed(error, unavailable = false) {
+  function failed(error, revoked = false) {
     if (!selected) return;
+    firstAttempt = false; loading.hidden = true;
+    loadFailed = true; unavailable = revoked || unavailable;
     const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
     const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Use Load messages to retry.`;
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
@@ -74,6 +95,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
 
   async function read(discovery) {
     if (!selected) return true;
+    loading.hidden = !firstAttempt;
     const requestGeneration = generation;
     const requestVersion = queryVersion;
     const query = requested;
@@ -100,6 +122,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       }
       if (success) lastSuccess = new Date().toISOString();
       else if (!sameRange) lastSuccess = undefined;
+      loadFailed = !success; unavailable = false;
+      loading.hidden = true;
       range = query.range; rangeLabel = query.label;
       displayed = result;
       render(result);
@@ -107,15 +131,20 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     } catch (error) {
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
+    } finally {
+      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; }
     }
   }
   function applyDates() {
     const startDate = new Date(`${start.value}T00:00:00Z`);
     const endDate = new Date(`${end.value}T00:00:00Z`);
     if (!Number.isFinite(+startDate) || !Number.isFinite(+endDate) || startDate > endDate) {
-      status.textContent = 'Choose a valid date range (start on or before end).';
+      validation = 'Choose a valid date range (start on or before end).';
+      renderStatus();
       return false;
     }
+    validation = '';
+    renderStatus();
     endDate.setUTCDate(endDate.getUTCDate() + 1);
     const next = { label: `${start.value} through ${end.value} UTC`, range: { start_time: startDate.toISOString(), end_time: endDate.toISOString() } };
     if (JSON.stringify(next) !== JSON.stringify(requested)) {
@@ -132,6 +161,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
+    clearTimeout(statusTimer); loading.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
@@ -144,6 +174,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     generation++;
     const selectionGeneration = generation;
     selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined;
+    firstAttempt = true; loadFailed = false; unavailable = false; validation = '';
+    clearTimeout(statusTimer); loading.hidden = false;
     returnFocus = button;
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
@@ -156,11 +188,14 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     applyDates();
     range = requested.range; rangeLabel = requested.label;
     panel.hidden = false; listPanel.hidden = true; back.focus();
-    status.textContent = 'Loading messages…';
+    status.textContent = '';
     requestRefresh();
   }
-  return { select, back: onBack, refresh: read, failed, dispose() {
+  return { select, back: onBack, refresh: read, failed,
+    refreshState(state) { refreshState = state; renderStatus(); },
+    dispose() {
     generation++; selected = undefined;
+    clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     load.removeEventListener('click', onLoad);
     order.removeEventListener('change', onOrder);
