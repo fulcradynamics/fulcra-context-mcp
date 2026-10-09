@@ -5,9 +5,10 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v20.html"
-THREAD_UI_URI = "ui://fulcra/mesh/thread/v20.html"
-THREADS_UI_URI = "ui://fulcra/mesh/threads/v20.html"
+UI_URI = "ui://fulcra/mesh/v21.html"
+THREAD_UI_URI = "ui://fulcra/mesh/thread/v21.html"
+THREADS_UI_URI = "ui://fulcra/mesh/threads/v21.html"
+MESHES_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 
 @app_mcp.tool(
@@ -32,6 +33,16 @@ def threads_html() -> str:
     """Same compiled app, initially a compact thread list."""
     return mesh_html().replace('<meta name="mesh-presentation" content="global">',
                                '<meta name="mesh-presentation" content="threads">', 1)
+
+
+@app_mcp.resource(
+    MESHES_UI_URI,
+    mime_type="text/html;profile=mcp-app",
+    meta={"openai/ui": {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}},
+)
+def meshes_html() -> str:
+    """Direct-resource variant: no invoking tool result is required for startup."""
+    return threads_html().replace('</head>', '<meta name="mesh-startup" content="resource"></head>', 1)
 
 
 @app_mcp.tool(

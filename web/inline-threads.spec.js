@@ -36,6 +36,7 @@ async function open(page, options = {}) {
       if (r.method === 'ui/message') window.reply(r.id, {});
     });
     frame.srcdoc = bundle.replace('<meta name="mesh-presentation" content="global">', '<meta name="mesh-presentation" content="threads">');
+    if (options.direct) frame.srcdoc = frame.srcdoc.replace('</head>', '<meta name="mesh-startup" content="resource"></head>');
   }, { bundle, options });
   return page.frameLocator('iframe');
 }
@@ -43,6 +44,20 @@ async function noSideEffects(page) {
   expect(await page.evaluate(() => window.requests.filter(r => ['ui/message', 'sampling/createMessage'].includes(r.method)))).toEqual([]);
   expect(await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').every(r => ['get_data_catalog', 'list_shares', 'get_records'].includes(r.params.name)))).toBe(true);
 }
+test('direct resource boots without tool result and ignores late result', async ({ page }) => {
+  const ui = await open(page, { direct: true, holdInitial: true });
+  await expect(ui.locator('#mesh-status')).toContainText('2 threads returned');
+  await expect(ui.locator('#entrypoint-status')).not.toContainText('Waiting');
+  expect(await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').map(r => r.params.name))).toEqual(['get_data_catalog', 'list_shares']);
+  await expect(ui.locator('#mesh-detail')).toBeHidden();
+  await page.evaluate(() => window.initial());
+  await page.clock.runFor(1000);
+  expect(await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').length)).toBe(2);
+  await noSideEffects(page);
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#messages')).toContainText('Untrusted');
+  await noSideEffects(page);
+});
 for (const outcome of ['denied', 'unsupported', 'error']) test(`panel ${outcome} stays a read-only list`, async ({ page }) => {
   const ui = await open(page, { [outcome]: true });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();

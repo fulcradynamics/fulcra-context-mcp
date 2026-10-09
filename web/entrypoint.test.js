@@ -2,6 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { receiveEntrypoint } from './entrypoint.js';
 
+for (const presentation of ['global', 'thread', 'threads']) {
+  for (const startup of [undefined, 'resource', 'unknown']) {
+    test(`direct startup requires both server markers: ${presentation}/${startup}`, () => {
+      const app = { addEventListener() {} };
+      const launch = receiveEntrypoint(app, { querySelector: selector => ({
+        content: selector.includes('mesh-presentation') ? presentation : startup,
+      }) });
+      assert.equal(launch.directResource, presentation === 'threads' && startup === 'resource');
+    });
+  }
+}
+
 test('host handler is installed before connect and partial changes are buffered', () => {
   const listeners = new Map();
   const app = { addEventListener: (name, fn) => listeners.set(name, fn),

@@ -4,6 +4,9 @@
 export function receiveEntrypoint(app, doc) {
   const marker = doc.querySelector('meta[name="mesh-presentation"]')?.content;
   const presentation = ['thread', 'threads'].includes(marker) ? marker : 'global';
+  // Server-owned direct-resource variant, not a host capability or timeout guess.
+  const directResource = presentation === 'threads'
+    && doc.querySelector('meta[name="mesh-startup"]')?.content === 'resource';
   let deliver, first, received = false;
   app.ontoolresult = result => {
     if (received) return;
@@ -18,7 +21,7 @@ export function receiveEntrypoint(app, doc) {
     hostListener?.(context);
   };
   app.addEventListener('hostcontextchanged', onHost);
-  return { presentation, observeHost(callback) {
+  return { presentation, directResource, observeHost(callback) {
     hostListener = callback;
     callback({ ...app.getHostContext(), ...hostChanges });
     return () => { hostListener = undefined; app.removeEventListener('hostcontextchanged', onHost); };

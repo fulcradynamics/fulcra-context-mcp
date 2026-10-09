@@ -2,7 +2,6 @@
 
 import json
 import re
-from urllib.parse import quote
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ResourceError, ToolError
@@ -10,6 +9,7 @@ from fastmcp.resources.resource import ResourceContent, ResourceResult
 from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
+from .apps import MESHES_UI_URI
 
 mentions_mcp = FastMCP("Fulcra Mesh mentions")
 
@@ -79,13 +79,11 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 async def mesh_mentions_search(query: str) -> ToolResult:
-    """Find accessible peer threads for the native composer, without reading messages."""
-    threads = await _discover_threads()
-    items = [
-        {"type": "resource_link", "uri": "mesh://threads/id-" + quote(peer, safe=""),
-         "name": peer, "title": title, "mimeType": "application/json"}
-        for peer, title in threads.items() if query.casefold() in title.casefold()
-    ][:20]
+    """Return the static Meshes suggestion for any query (diagnostic experiment)."""
+    # Hosted MCP authentication remains at the transport boundary. Do not discover
+    # peers or construct a backend client here, even when the backend is unavailable.
+    items = [{"type": "resource_link", "uri": MESHES_UI_URI,
+              "name": "Meshes", "title": "Meshes", "mimeType": "text/html;profile=mcp-app"}]
     return ToolResult(content=[], structured_content={"items": items})
 
 

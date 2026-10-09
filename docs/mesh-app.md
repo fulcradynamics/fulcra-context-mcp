@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v20.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v21.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -13,48 +13,67 @@ No separate UI server, in-widget search, pagination, or OAuth changes.
 native picker tool. Its metadata is exactly
 `{"openai/extensions": {"mentions/search": {}}, "ui": {"visibility": ["app"]}}`
 (apart from framework metadata). It returns `content: []` and
-`structuredContent: {items: ResourceLink[]}`. This is not an in-widget popup or a
-new UI entrypoint; mention search does not change the UI tools or resources.
+`structuredContent: {items: ResourceLink[]}`.
 
-An empty query returns the first **20** accessible exact peers, ordered by exact
-peer ID; typeahead applies a case-insensitive substring match to the account label
-or ID before limiting. Multiple eligible channels collapse to one peer; duplicate
-account names never merge identities. Titles include the exact ID. Missing or
-conflicting account names fall back to that ID. These labels are account data,
-not verified agent names or instructions.
+### Static Meshes diagnostic experiment
 
-Discovery reuses the authenticated `get_data_catalog` and `list_shares` helpers.
-It follows the same incoming-owner and all-covering-outgoing-grant rules as
-`web/meshes.js`, with shared Python/JS parity fixtures. Broad, group, multi-type,
-conflicting, self-only and orphan own channels cannot establish a peer. No
-name-to-ID lookup, message read, account write, sampling, or LLM call occurs.
-Discovery failures are errors, not an empty successful picker.
+For **every string query**, including empty or unrelated text, search now returns
+exactly one item (no dynamic peer suggestions):
 
-Links use `mesh://threads/id-<percent-encoded-exact-peer-id>`. The fixed `id-`
-prefix also protects dot-only IDs from URI path normalization. `resources/read`
-authenticates again through the existing request credentials and re-runs full
-current discovery, independent of the search result limit. It returns only the
-JSON descriptor `{peer_fulcra_userid, title}`—no history or channel contents.
-Unknown, revoked, or newly ambiguous peers fail closed. Discovery and descriptors
-are never cached across requests or accounts; possessing a URI grants no access.
-Stdio retains operator-credential semantics; hosted HTTP retains per-user OAuth.
+```json
+{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v21.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
+```
+
+This deliberately removes discovery latency from search. Search performs no
+catalog, shares, user-info, message, LLM, or network calls and does not construct
+an account backend, even if it is unavailable. Existing hosted MCP OAuth still
+protects search and resource reads; static does not mean publicly accessible.
+No new dynamic peer feature or cache is introduced. Meshes is intended eventually
+to remain a permanent item; this experiment only supplies the single static item.
+
+The link targets an explicitly registered direct-resource variant of the existing
+inline list, not an invented tool-call field on ResourceLink. All three base UI
+URIs advance to v21; the `?startup=resource` variant adds only the server-owned
+`<meta name="mesh-startup" content="resource">` marker to the threads HTML.
+After the SDK handshake, that marker starts the shared authenticated discovery
+scheduler without waiting for an initial tool result. No timer guesses whether a
+result is coming; late tool results are ignored in this variant. Ordinary
+`mesh_threads_open`, `mesh_conversation_open`, and global entrypoint behavior is
+preserved, including initial-result handling for tool-launched lists/panels.
+
+Reading the HTML itself is backend-free. If a host renders it, the UI then calls
+`get_data_catalog` and `list_shares` through the authenticated host bridge, just
+like the existing list. It prefers inline display, but the host controls display.
+Only explicit peer selection uses the existing guarded fullscreen request and
+exact-peer message view. Opening the list does not read messages, sample, send,
+write account data, or automatically select a peer.
+
+Previously issued `mesh://threads/id-<percent-encoded-exact-peer-id>` references
+remain supported. Their resolver is unchanged: `resources/read` authenticates
+through the existing request credentials and re-runs full current discovery.
+It returns only `{peer_fulcra_userid, title}` JSON. Unknown, revoked, or newly
+ambiguous peers fail closed. Discovery follows the same incoming-owner and
+all-covering-outgoing-grant rules as `web/meshes.js`, with shared parity fixtures.
+No descriptors or account discovery are cached across requests or accounts;
+possessing a URI grants no access. Stdio retains operator-credential semantics;
+hosted HTTP retains per-user OAuth.
 
 According to the [OpenAI composer at-mention contract](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md#composer-at-mentions),
 expected native-picker support is **Desktop only**, not Web/iOS/Android. The
 specification's Web column refers to the Work browser and excludes classic
-ChatGPT. Actual client support still requires acceptance testing. Selecting an
-item references it in the prompt; it does **not** automatically open a panel or
-send a message. When asked to open the referenced thread, the agent can call
-`mesh_conversation_open(peer_fulcra_userid=<exact descriptor ID>)`; its existing
-UI discovery revalidates that peer. PLAT-666's click-to-expand list is separate.
+ChatGPT. The contract permits ResourceLinks but does not guarantee that selecting
+one opens an MCP App. The host controls suggestion display, selection/insertion,
+resource opening and display mode. This resource can boot if the host renders it;
+it does not force the host to render it. Missing suggestions remain **unverified**:
+this experiment does not establish that latency caused them or that they are fixed.
 
-`tests/test_mentions.py`, `tests/test_mentions_protocol.py` and
-`web/mentions-parity.test.js` exercise synthetic discovery, metadata, wire output,
-encoded resource resolution, account/auth failures and revoked access. The HTTP
-smoke uses real MCP routing and request authentication with a mocked Fulcra
-backend only. Desktop popup discovery, selection/insertion and host-driven
-resource resolution remain manual host acceptance checks; no live account data
-is required by these automated tests.
+`tests/test_mentions.py` and `tests/test_mentions_protocol.py` cover static shape,
+backend-unavailable search with zero backend calls, real serialized MCP routing,
+HTTP OAuth rejection, direct-resource URI/MIME/marker, old exact-peer references,
+account isolation and revocation. `web/inline-threads.spec.js` verifies direct
+startup without an initial result alongside unchanged tool-initial-result tests;
+it uses the real SDK and synthetic data. Actual Desktop suggestions and selection
+behavior remain manual host acceptance checks; no live account was used.
 
 ## Automatic refresh (PLAT-649)
 
@@ -276,7 +295,7 @@ Refresh threads retries. Invite remains independent.
 The host decides whether app-originated calls appear in its conversation UI;
 the app does not depend on those traces for first-load or failure feedback.
 
-## Global presentation: Continue conversation in chat (resource v20)
+## Global presentation: Continue conversation in chat (resource v21)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -331,7 +350,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v20)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v21)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -344,7 +363,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v20.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v21.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -412,11 +431,11 @@ These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screensh
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
 
-## Inline Mesh threads (PLAT-666, resource v20)
+## Inline Mesh threads (PLAT-666, resource v21)
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v20.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v21.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -537,7 +556,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v20.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v21.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

@@ -126,7 +126,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   doc.addEventListener('visibilitychange', visibility);
   doc.defaultView.addEventListener('pagehide', dispose);
   app.onteardown = async () => { await dispose(); return {}; };
-  if (inlineList) entrypoint.consume(result => {
+  if (inlineList && entrypoint.directResource) {
+    launchStatus.textContent = 'Choose a thread to request a conversation panel.';
+    scheduler.request();
+  } else if (inlineList) entrypoint.consume(result => {
     if (disposed || userSelected) return;
     launchStatus.textContent = result.isError || result.structuredContent?.presentation !== 'threads'
       ? 'The initial thread list result failed. Refresh threads to retry discovery.'

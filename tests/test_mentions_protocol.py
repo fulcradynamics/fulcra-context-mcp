@@ -2,7 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
-from unittest.mock import create_autospec
+from unittest.mock import create_autospec, Mock
 
 from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
@@ -12,6 +12,7 @@ from fulcra_mcp import credentials, tools
 from fulcra_mcp.main import oauth_provider
 from fulcra_mcp.settings import settings
 from test_stateless import INITIALIZE, mcp_client
+from test_mentions import STATIC_ITEM
 
 
 async def test_mentions_http_protocol(tmp_path, monkeypatch):
@@ -35,8 +36,8 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch):
     # Keep the actual get_fulcra_object and HTTP OAuth middleware. No real
     # credentials are loaded and no API object capable of networking is created.
     monkeypatch.setattr(settings, "fulcra_environment", "test")
-    monkeypatch.setattr(credentials, "FulcraAPI",
-                        lambda **kwargs: fake if kwargs["credentials"] is creds else other)
+    factory = Mock(side_effect=lambda **kwargs: fake if kwargs["credentials"] is creds else other)
+    monkeypatch.setattr(credentials, "FulcraAPI", factory)
     monkeypatch.setattr(oauth_provider, "credentials_for_token",
                         lambda token: {"mcp_test": ("synthetic-grant", creds),
                                        "mcp_other": ("synthetic-other-grant", other_creds)}.get(token))
@@ -67,25 +68,41 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch):
         assert result["content"] == []
         assert not result.get("isError")
         item, = result["structuredContent"]["items"]
-        assert item == {"type": "resource_link", "uri": "mesh://threads/id-peer%2F%252F",
-                        "name": "peer/%2F", "title": "peer/%2F", "mimeType": "application/json"}
-        read = {"uri": item["uri"]}
+        assert item == STATIC_ITEM
+        direct_read = {"uri": item["uri"]}
+        ui, = (await rpc("resources/read", direct_read))["result"]["contents"]
+        assert ui["uri"] == item["uri"]
+        assert ui["mimeType"] == item["mimeType"]
+        assert ui["_meta"]["openai/ui"]["preferredDisplayMode"] == "inline"
+        assert '<meta name="mesh-startup" content="resource">' in ui["text"]
+        assert '<meta name="mesh-presentation" content="threads">' in ui["text"]
+        factory.assert_not_called()
+        assert not fake.mock_calls and not other.mock_calls
+        # Backend unavailable: real authenticated routing still returns the static item.
+        factory.side_effect = RuntimeError("backend offline")
+        for query in ["anyquery", "Meshes", "unmatched"]:
+            assert (await rpc("tools/call", {"name": "mesh_mentions_search", "arguments": {"query": query}}))["result"]["structuredContent"] == {"items": [item]}
+        factory.assert_not_called()
+        factory.side_effect = lambda **kwargs: fake if kwargs["credentials"] is creds else other
+        # Old references continue to resolve only with current account authorization.
+        read = {"uri": "mesh://threads/id-peer%2F%252F"}
         resource, = (await rpc("resources/read", read))["result"]["contents"]
         assert resource["mimeType"] == "application/json"
         assert json.loads(resource["text"]) == {"peer_fulcra_userid": "peer/%2F", "title": "peer/%2F"}
 
         # A new account context on the next request must not inherit discovery.
         http.headers["Authorization"] = "Bearer mcp_other"
-        assert (await rpc("tools/call", call))["result"]["structuredContent"] == {"items": []}
+        assert (await rpc("tools/call", call))["result"]["structuredContent"] == {"items": [item]}
         assert "error" in await rpc("resources/read", read)
         http.headers["Authorization"] = "Bearer mcp_test"
         assert (await rpc("tools/call", call))["result"]["structuredContent"]["items"] == [item]
         fake.v1_catalog.return_value = []
         assert "error" in await rpc("resources/read", read)
-        for method, params in [("tools/call", call), ("resources/read", read)]:
-            response = await http.post("/mcp", headers={"Authorization": ""},
-                                       json={"jsonrpc": "2.0", "id": 3, "method": method, "params": params})
-            assert response.status_code == 401
+        for authorization in ["", "Bearer invalid-token"]:
+            for method, params in [("tools/call", call), ("resources/read", read), ("resources/read", direct_read)]:
+                response = await http.post("/mcp", headers={"Authorization": authorization},
+                                           json={"jsonrpc": "2.0", "id": 3, "method": method, "params": params})
+                assert response.status_code == 401
 
     assert {c[0] for c in fake.mock_calls} == {
         "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
