@@ -18,6 +18,23 @@ ANN_UUID = "6a0d0d5e-2b7a-4f5c-9c0e-3a3f1b2c4d5e"
 FILE_RECORD = {"id": "v1", "name": "a.txt", "path": "/", "size": 5}
 
 
+async def test_set_mesh_identifier(call, fake_fulcra):
+    from fulcra_mcp.mesh_identifier import write_mesh_identifier
+    type_id = f'MomentAnnotation/{ANN_UUID}'
+    before = {'id': type_id, 'fulcra_userid': FAKE_USER_ID, 'name': 'Mesh Outbox', 'description': 'Prose'}
+    description = write_mesh_identifier('Prose', 'Trip')
+    fake_fulcra.resolve_data_type.side_effect = [[before], [{**before, 'description': description}]]
+    row = {**before, 'id': ANN_UUID, 'annotation_type': 'moment', 'spec': None, 'measurement_spec': None, 'tags': []}
+    fake_fulcra.fulcra_api.side_effect = [json.dumps(row), b'ignored PUT response', json.dumps({**row, 'description': description})]
+    text = await call('set_mesh_identifier', {'data_type': type_id, 'identifier': 'Trip'})
+    assert json.loads(text)['verified'] is True
+    fake_fulcra.update_data_type.assert_not_called()
+    body = {k: row[k] for k in ('name', 'description', 'annotation_type', 'spec', 'measurement_spec', 'tags')}
+    body['description'] = description
+    fake_fulcra.fulcra_api.assert_any_call('/user/v1alpha1/annotation/' + ANN_UUID, method='PUT', data=body, authenticated=True)
+    fake_fulcra.resolve_data_type.assert_called_with(type_id, fulcra_userid=FAKE_USER_ID)
+
+
 async def test_annotations_catalog(call, fake_fulcra):
     fake_fulcra.annotations_catalog.return_value = [{"id": ANN_UUID, "name": "mood"}]
     text = await call("annotations_catalog")

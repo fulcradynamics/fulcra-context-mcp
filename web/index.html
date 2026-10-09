@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="mesh-presentation" content="global">
+  <title>Fulcra Mesh</title>
+  <style>/* APP_STYLES */</style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div class="brand-identity">
+        <img src="/* BRAND_ICON */" alt="" width="32" height="32">
+        <h1>Fulcra Mesh</h1>
+      </div>
+      <button id="invite" type="button" disabled>Invite someone</button>
+    </header>
+    <section class="invite-section" aria-label="Invitation help and status">
+      <p>Ask your agent to help connect with someone on Fulcra Mesh.</p>
+      <p class="meta">Starts a conversation with your agent. Does not create a share or send an invitation.</p>
+      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
+    </section>
+
+    <section id="mesh-list" aria-labelledby="meshes-title">
+      <button id="refresh-threads" type="button">Refresh threads</button>
+      <div class="section-header">
+        <h2 id="meshes-title">Threads</h2>
+        <span id="mesh-count" class="section-count"></span>
+        <span class="section-rule" aria-hidden="true"></span>
+        <span class="section-tag">mesh</span>
+      </div>
+      <p>Conversations with your Fulcra connections, grouped by user ID.</p>
+      <p class="meta">A thread does not prove reciprocal sharing or acknowledgement.</p>
+      <p id="mesh-status" role="status" aria-live="polite">Connecting to load threads…</p>
+      <ul id="meshes"></ul>
+      <section id="pending-section" aria-labelledby="pending-title" hidden>
+        <div class="section-header">
+          <h2 id="pending-title">Pending</h2>
+          <span class="section-rule" aria-hidden="true"></span>
+        </div>
+        <ul id="pending-meshes"></ul>
+      </section>
+    </section>
+    <section id="mesh-detail" aria-labelledby="message-title" hidden>
+      <button id="message-back" type="button">Back to threads</button>
+      <h2 id="message-title"></h2>
+
+      <details class="reading-details">
+        <summary>About this thread</summary>
+        <p>Includes this peer’s accessible channels and your narrow direct channels to them. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
+        <p id="thread-help" class="meta"></p>
+      </details>
+      <div id="message-range">
+        <div class="range-controls">
+          <label>From <input id="message-start" type="date" required></label>
+          <label>Through <input id="message-end" type="date" required></label>
+          <button id="message-load" type="button">Load messages</button>
+        </div>
+      </div>
+      <div id="thread-composer"></div>
+      <label id="message-order-field" class="order-field">
+        <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select>
+        <span class="order-caption">Message order</span>
+      </label>
+      <div id="message-area">
+        <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
+        <p id="message-status" role="status" aria-live="polite"></p>
+        <button id="new-activity" type="button" hidden>New activity</button>
+        <ol id="messages"></ol>
+      </div>
+    </section>
+    <p id="context-status" role="status" aria-live="polite"></p>
+  </main>
+  <script>/* APP_SCRIPT */</script>
+</body>
+</html>
