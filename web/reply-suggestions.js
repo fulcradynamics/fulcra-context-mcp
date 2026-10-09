@@ -1,3 +1,5 @@
+import { icon, Sparkles } from './icons.js';
+
 // No markdown/HTML interpretation and no best-effort extraction from prose.
 export function parseSuggestions(result) {
   if (result.role !== 'assistant' || result.content?.type !== 'text'
@@ -11,7 +13,8 @@ export function parseSuggestions(result) {
 
 export function setupReplySuggestions(app, lifecycle, context, container, isCurrent, input, draft, changed) {
   const doc = container.ownerDocument;
-  const button = doc.createElement('button'); button.type = 'button'; button.textContent = 'Suggest replies';
+  const button = doc.createElement('button'); button.type = 'button';
+  button.append(icon(Sparkles, 'btn-icon'), doc.createTextNode('Suggest replies'));
   const status = doc.createElement('p'); status.id = 'suggestion-status'; status.setAttribute('role', 'status');
   const list = doc.createElement('div'); list.id = 'reply-suggestions';
   container.append(button, status, list);

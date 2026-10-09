@@ -24,7 +24,12 @@
 
     <section id="mesh-list" aria-labelledby="meshes-title">
       <button id="refresh-threads" type="button">Refresh threads</button>
-      <h2 id="meshes-title">Threads</h2>
+      <div class="section-header">
+        <h2 id="meshes-title">Threads</h2>
+        <span id="mesh-count" class="section-count"></span>
+        <span class="section-rule" aria-hidden="true"></span>
+        <span class="section-tag">mesh</span>
+      </div>
       <p>Conversations with your Fulcra connections, grouped by user ID.</p>
       <p class="meta">A thread does not prove reciprocal sharing or acknowledgement.</p>
       <p id="mesh-status" role="status" aria-live="polite">Connecting to load threads…</p>
@@ -47,7 +52,10 @@
         </div>
       </div>
       <div id="thread-composer"></div>
-      <label>Message order <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select></label>
+      <label id="message-order-field" class="order-field">
+        <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select>
+        <span class="order-caption">Message order</span>
+      </label>
       <div id="message-area">
         <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
         <p id="message-status" role="status" aria-live="polite"></p>

@@ -1,12 +1,13 @@
 import { buildThreadContext } from './thread-context.js';
 import { setupNativeContext } from './native-context.js';
 import { setupThreadActions } from './thread-actions.js';
+import { icon, MessageSquare } from './icons.js';
 
 // Mounted once per peer, never on a refresh, preserving focus and disclosure.
-export function createThreadComposer(app, container, isCurrent, lifecycle, presentation = 'global', draft) {
+export function createThreadComposer(app, container, isCurrent, lifecycle, presentation = 'global', draft, orderField) {
   const doc = container.ownerDocument;
   const button = doc.createElement('button');
-  button.type = 'button'; button.textContent = 'Continue conversation in chat';
+  button.type = 'button'; button.className = 'primary composer-primary';
   const help = presentation === 'thread' ? doc.createElement('p') : doc.querySelector('#thread-help');
   help.textContent = '';
   const details = doc.createElement('details');
@@ -18,9 +19,15 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   container.replaceChildren();
   const currentContext = () => usable ? context : undefined;
   const update = presentation === 'thread'
-    ? setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId)
+    ? setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, orderField)
     : setupNativeContext(app, lifecycle, currentContext, button, doc.querySelector('#context-status'), isCurrent);
-  if (presentation !== 'thread') container.append(button);
+  if (presentation !== 'thread') {
+    button.append(icon(MessageSquare, 'btn-icon'), doc.createTextNode('Continue conversation in chat'));
+    const actions = doc.createElement('div'); actions.className = 'composer-actions';
+    actions.append(button);
+    if (orderField) actions.append(orderField);
+    container.append(actions);
+  }
   if (presentation === 'thread') container.append(help);
   container.append(details);
   return (peer, range, result, ready, loaded) => {

@@ -420,9 +420,9 @@ test('new keyed rows animate once without moving layout; reorder preserves selec
   expect(await row.evaluate(el => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
   expect(await row.evaluate(el => getComputedStyle(el).transform)).toBe('none');
   const hierarchy = await row.evaluate(el => ({
-    heading: +getComputedStyle(el.firstChild).fontWeight, body: +getComputedStyle(el.lastChild).fontWeight,
-    dateMargin: parseFloat(getComputedStyle(el.children[1]).marginBottom),
-    dateLine: parseFloat(getComputedStyle(el.children[1]).lineHeight),
+    heading: +getComputedStyle(el.querySelector('.message-header')).fontWeight, body: +getComputedStyle(el.lastChild).fontWeight,
+    dateMargin: parseFloat(getComputedStyle(el.querySelector('.message-date')).marginBottom),
+    dateLine: parseFloat(getComputedStyle(el.querySelector('.message-date')).lineHeight),
   }));
   expect(hierarchy.heading).toBeGreaterThan(hierarchy.body);
   expect(hierarchy.dateMargin).toBeLessThanOrEqual(4);

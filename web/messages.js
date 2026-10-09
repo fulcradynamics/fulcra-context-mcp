@@ -2,6 +2,7 @@ import { createThreadComposer } from './thread-composer.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { createContextLifecycle } from './native-context.js';
+import { icon, ArrowUpRight, ArrowDownLeft, CalendarRange, ArrowLeft } from './icons.js';
 export { parseRecords } from './records.js';
 
 export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
@@ -17,6 +18,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const load = doc.querySelector('#message-load');
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
+  const orderField = doc.querySelector('#message-order-field');
+  load.prepend(icon(CalendarRange, 'btn-icon'));
+  back.prepend(icon(ArrowLeft, 'btn-icon'));
   const contextLifecycle = createContextLifecycle(app, doc.querySelector('#context-status'), presentation);
   const drafts = new Map();
 
@@ -47,22 +51,34 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
     (item, { record, source, direction }) => {
+      let header, date, body;
       if (!item.firstChild) {
-        const date = doc.createElement('p');
-        date.className = 'message-date';
-        item.append(doc.createElement('p'), date, doc.createElement('pre'));
+        item.className = 'message-row';
+        // The direction tile is placed in grid column 1; header/date/body stay
+        // direct <li> children so each sits in column 2 and keeps a flat shape.
+        const incoming = direction === 'Incoming';
+        const tile = doc.createElement('span');
+        tile.className = incoming ? 'row-tile incoming' : 'row-tile';
+        tile.append(icon(incoming ? ArrowDownLeft : ArrowUpRight, 'row-icon'));
+        header = doc.createElement('p'); header.className = 'message-header';
+        date = doc.createElement('p'); date.className = 'message-date';
+        body = doc.createElement('pre');
+        item.append(tile, header, date, body);
+      } else {
+        header = item.querySelector('.message-header');
+        date = item.querySelector('.message-date');
+        body = item.querySelector('pre');
       }
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
       const text = `${direction} (${name})`;
-      if (item.firstChild.textContent !== text) item.firstChild.textContent = text;
+      if (header.textContent !== text) header.textContent = text;
       const dateText = timestamp && Number.isFinite(+timestamp)
         ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
-      const date = item.children[1];
       if (date.textContent !== dateText) date.textContent = dateText;
-      const body = messageText(record);
-      if (item.lastChild.textContent !== body) item.lastChild.textContent = body;
+      const bodyText = messageText(record);
+      if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => { title.textContent = `Thread with ${thread.peer}${thread.accountName ? ` — Account: ${thread.accountName}` : ''}`; };
 
@@ -179,7 +195,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     returnFocus = button;
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer));
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), orderField);
     setTitle(thread);
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);

@@ -13,12 +13,19 @@
   line-height: 1.6;
   color: #fff;
   background: #000;
-  --surface: #16161d;
-  --raised: #222227;
-  --divider: #38383a;
-  --muted: #a6a6ad;
-  --mint: #56d6b7;
-  --violet: #9c88ff;
+  /* Palette shared with the Portal web app (fulcra-* tokens). */
+  --surface: #16161d;      /* fulcra-black */
+  --raised: #222227;       /* fulcra-black-50 */
+  --divider: #38383a;      /* fulcra-black-20 */
+  --muted: #8a8a8e;        /* fulcra-gray */
+  --teal: #56d6b7;         /* fulcra-teal */
+  --teal-soft: #abebdb;    /* fulcra-teal-50 */
+  --violet: #7b61ff;       /* fulcra-lavender-100 / fulcra-purple */
+  --lavender: #9c88ff;     /* fulcra-lavender-75 */
+  --teal-tint: rgba(86, 214, 183, 0.1);
+  --teal-tint-hover: rgba(86, 214, 183, 0.18);
+  --violet-tint: rgba(123, 97, 255, 0.12);
+  --row-hover: rgba(0, 0, 0, 0.25);
   /* The host's floating composer is separate from device safe-area insets. */
   --footer-clearance: calc(160px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
@@ -38,72 +45,152 @@ main { max-width: 760px; margin-inline: auto; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
 .brand img { flex: none; }
-h1, h2 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; }
-h1 { margin: 0; font-size: 24px; }
-h2 { margin: 20px 0 12px; font-size: 20px; }
+h1 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 0; font-size: 24px; }
+h2 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 20px 0 12px; font-size: 20px; }
 p { margin: 12px 0; }
 .meta, [role='status'], #meshes p, #messages .message-date, #thread-composer > p { color: var(--muted); font-size: 12px; }
 [role='status'] { font-variant-numeric: tabular-nums; }
 [role='status']:empty { display: none; }
+
+/* Section header: an uppercase micro-label, a count, a hairline rule filling the
+   row, and a right-aligned tag — matching Portal's data-types section headings. */
+.section-header { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
+.section-header h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.section-count { font-size: 12px; color: rgba(138, 138, 142, .6); font-variant-numeric: tabular-nums; }
+.section-count:empty { display: none; }
+.section-rule { flex: 1; height: 1px; background: var(--divider); }
+.section-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: rgba(86, 214, 183, .7); }
+
 button, input, textarea, select { font: inherit; max-width: 100%; min-width: 0; }
+/* Soft tinted pill — Portal's default action affordance. */
 button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 40px;
   padding: 8px 14px;
-  border: 1px solid var(--mint);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mint);
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal-tint);
+  color: var(--teal);
+  font-weight: 500;
   cursor: pointer;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-button:hover:not(:disabled) { background: var(--raised); }
-button:disabled { color: var(--muted); border-color: var(--divider); cursor: default; }
-:where(button, input, textarea, select, summary):focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
-::selection { background: #7b61ff; color: #fff; }
+button:hover:not(:disabled) { background: var(--teal-tint-hover); }
+button:disabled { color: var(--muted); background: rgba(255, 255, 255, .04); cursor: default; }
+.btn-icon { flex: none; }
+/* Primary actions get a solid fill with dark text. */
+button.primary:not(:disabled) { background: var(--teal); color: #000; }
+button.primary:hover:not(:disabled) { background: var(--teal-soft); }
+button.primary:disabled { background: rgba(255, 255, 255, .04); }
+:where(button, input, textarea, select, summary):focus-visible { outline: 2px solid var(--teal); outline-offset: 4px; }
+::selection { background: var(--violet); color: #fff; }
 label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
-input, textarea, select { color: #fff; background: var(--surface); border: 1px solid var(--divider); border-radius: 6px; padding: 10px 12px; }
-select { width: fit-content; margin-bottom: 12px; }
+input, textarea, select { color: #fff; background: var(--surface); border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; }
+select { width: fit-content; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 .range-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
 #message-range { margin-top: 24px; }
 #message-status { margin-block: 20px; }
-#message-area { border-top: 1px solid var(--divider); }
-#messages > li:first-child { border-top: 0; }
+
+/* Card-container lists: a bordered, rounded panel on a raised surface whose rows
+   are divided by hairlines and lift on hover (Portal data-types row cards). */
+#meshes, #messages {
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--raised);
+  overflow: hidden;
+}
+#messages:empty { border: 0; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
-#meshes > li { padding: 20px 0; border-top: 1px solid var(--divider); }
-#meshes button { text-align: left; }
-#messages > li { padding: 20px 0; border-top: 1px solid var(--divider); }
-#messages > li > p { margin-top: 0; }
-#messages > li > p:first-child { font-weight: 500; line-height: 1.35; margin-bottom: 4px; }
-#messages .message-date { line-height: 1.35; margin-bottom: 4px; }
+#meshes > li, #messages > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
+#meshes > li:first-child, #messages > li:first-child { border-top: 0; }
+#meshes > li:hover, #messages > li:hover { background: var(--row-hover); }
+
+/* Leading icon tile shared by thread and message rows. */
+.row-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--teal-tint);
+  color: var(--teal);
+}
+.row-tile.incoming { background: var(--violet-tint); color: var(--lavender); }
+
+/* Thread rows: a full-width clickable button (tile + peer id) with the account
+   subline aligned under the name. */
+.thread-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-weight: 500;
+}
+.thread-button:hover:not(:disabled) { background: transparent; }
+.thread-peer { min-width: 0; overflow-wrap: anywhere; }
+.thread-account { margin: 4px 0 0; padding-left: 48px; }
+
+/* Message rows: direction tile in column 1, stacked header / date / body in
+   column 2. A grid (not a wrapper div) keeps each text node a direct <li> child. */
+.message-row { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
+.message-row .row-tile { grid-column: 1; grid-row: 1; align-self: start; }
+.message-row .message-header { grid-column: 2; grid-row: 1; }
+.message-row .message-date { grid-column: 2; grid-row: 2; }
+.message-row pre { grid-column: 2; grid-row: 3; }
+.message-header { margin: 0; font-weight: 600; font-size: 15px; line-height: 1.2; }
+#messages .message-date { margin: 1px 0 0; line-height: 1.35; }
 #messages pre { margin-top: 8px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
+
+/* Primary action and the message-order control share one row; the order control
+   is right-aligned with its caption beneath the select. */
+.composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.composer-actions .order-field { margin-left: auto; }
+.order-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.order-field select { width: 100%; }
+.order-caption { font-size: 12px; color: var(--muted); }
+
 #thread-composer:not(:empty) { margin-top: 12px; padding-top: 24px; border-top: 1px solid var(--divider); }
 #thread-composer label { color: #fff; font-size: 16px; }
-#thread-composer button { margin-top: 12px; }
-#thread-composer button:not(:disabled) { background: var(--mint); color: #000; }
-#thread-composer button:hover:not(:disabled) { background: #85e2cb; }
+#thread-composer .composer-actions { margin-top: 12px; }
 details { margin-block: 16px; }
-summary { color: var(--mint); cursor: pointer; width: fit-content; max-width: 100%; }
+summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
 details[open] > summary { color: var(--violet); }
-#thread-context { padding: 16px; background: var(--surface); font-family: ui-monospace, monospace; font-size: 12px; }
+#thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
 .invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 
-
-.refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--mint); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
+.refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--teal); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .refresh-spinner { animation: none; } }
-#new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); }
+#new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); border: 1px solid var(--divider); }
+#new-activity:hover:not(:disabled) { background: var(--raised); }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
+
+/* Subtle staggered entrance for thread rows (mirrors Portal's rise-in). */
+@keyframes mesh-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.animate-rise { opacity: 0; animation: mesh-rise .5s cubic-bezier(.16, 1, .3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spinner { animation: none; }
+  .animate-rise { animation: none; opacity: 1; }
+}
 
 /* Inline launch has no floating host composer to clear until a panel opens. */
 .compact-threads { --footer-clearance: calc(16px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px)); }
 .compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
 .compact-threads .invite-section > p:not([role='status']) { display: none; }
-.compact-threads #meshes > li { padding: 8px 0; }
+.compact-threads #meshes > li { padding: 10px 16px; }
 .compact-threads #mesh-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
@@ -111,5 +198,5 @@ html { overflow-anchor: none; }
   .invite-section { margin-bottom: 24px; }
   .range-controls { grid-template-columns: minmax(0, 1fr); }
   .range-controls button { justify-self: start; }
-  h2 { font-size: 18px; }
+  .section-header h2 { font-size: 11px; }
 }
