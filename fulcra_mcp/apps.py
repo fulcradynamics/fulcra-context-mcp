@@ -20,6 +20,7 @@ def mesh_threads_open() -> dict[str, str]:
     """Show clickable Mesh threads in chat. Select a peer to request a conversation panel.
 
     Does not write account data or send messages.
+    Use for a submitted List Meshes mention unless the user asks for another task.
     """
     return {"presentation": "threads"}
 
@@ -56,6 +57,7 @@ def mesh_conversation_open(peer_fulcra_userid: str | None = None) -> dict:
 
     Omit the ID to choose a thread. Accessible peers are discovered by the app;
     names are not identifiers. Does not write account data or send messages.
+    Use for a submitted Open Mesh: mention after resolving its exact peer ID.
     """
     if peer_fulcra_userid is not None and not peer_fulcra_userid.strip():
         raise ValueError("Provide a nonblank exact peer user ID or omit it.")

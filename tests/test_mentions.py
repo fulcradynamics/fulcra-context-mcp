@@ -1,9 +1,8 @@
-"""Static picker experiment and authorization of previously issued peer references."""
+"""Native opening suggestions and authorization of exact peer references."""
 
 import json
 from pathlib import Path
 from urllib.parse import quote
-from unittest.mock import Mock, AsyncMock
 
 import pytest
 from fastmcp import Client
@@ -11,10 +10,11 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ResourceLink
 from mcp.shared.exceptions import McpError
 from fulcra_mcp.main import mcp
-from fulcra_mcp import mentions, tools
+from fulcra_mcp import mentions
 
-STATIC_ITEM = {"type": "resource_link", "uri": "ui://fulcra/mesh/threads/v24.html?startup=resource",
-               "name": "Meshes", "title": "Meshes", "mimeType": "text/html;profile=mcp-app"}
+LIST_ITEM = {"type": "resource_link", "uri": "mesh://threads",
+             "name": "List Meshes", "title": "List Meshes", "mimeType": "application/json",
+             "description": "Open the clickable mesh list in chat with mesh_threads_open({})."}
 
 
 def entry(id, owner=None):
@@ -32,21 +32,56 @@ async def search(client, query=""):
     return (await client.call_tool("mesh_mentions_search", {"query": query})).structured_content["items"]
 
 
-@pytest.mark.parametrize("query", ["", "Meshes", "anyquery", "PEER-29", "雪", " " * 10000],
-                         ids=["empty", "label", "anyquery", "old-peer", "unicode", "long"])
-async def test_static_search_without_backend(query, fake_fulcra, monkeypatch):
-    unavailable = Mock(side_effect=AssertionError("Backend must not be constructed"))
-    discovery = AsyncMock(side_effect=AssertionError("Discovery must not run"))
-    monkeypatch.setattr(tools, "get_fulcra_object", unavailable)
-    monkeypatch.setattr(mentions, "_discover_threads", discovery)
+@pytest.mark.parametrize("query,expected", [("", ["other", "peer"]), ("aLeX", ["other", "peer"]),
+                                               ("PEER", ["peer"]), ("unmatched", [])])
+async def test_search_includes_list_and_exact_peer_actions(query, expected, fake_fulcra):
+    backend(fake_fulcra, [entry("a", "peer"), entry("b", "peer"), entry("c", "other")],
+            incoming=[{"sharing_fulcra_userid": p, "sharing_fulcra_user_name": "Alex"}
+                      for p in ["peer", "other"]])
     async with Client(mcp) as client:
         result = await client.call_tool("mesh_mentions_search", {"query": query})
         assert result.content == []
-        assert result.structured_content == {"items": [STATIC_ITEM]}
-        assert ResourceLink.model_validate(STATIC_ITEM).mimeType == "text/html;profile=mcp-app"
-    unavailable.assert_not_called()
-    discovery.assert_not_called()
-    assert not fake_fulcra.mock_calls
+        items = result.structured_content["items"]
+        assert items[0]["name"] == items[0]["title"] == "List Meshes"
+        assert items[0]["uri"] == "mesh://threads"
+        assert [item["uri"] for item in items[1:]] == ["mesh://threads/id-" + p for p in expected]
+        for item, peer in zip(items[1:], expected):
+            assert item["name"] == item["title"] == f"Open Mesh: Alex ({peer})"
+            assert "mesh_conversation_open" in item["description"]
+        for item in items:
+            assert ResourceLink.model_validate(item).mimeType == "application/json"
+    assert {c[0] for c in fake_fulcra.mock_calls} == {
+        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+
+
+async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
+    backend(fake_fulcra, [entry("a", "peer")])
+    async with Client(mcp) as client:
+        instructions = client.initialize_result.instructions
+        assert "List Meshes" in instructions and "Open Mesh:" in instructions
+        assert "without asking what to do next" in instructions
+        assert "explicit request takes precedence" in instructions
+        items = await search(client)
+        for item, name, arguments in zip(items, ["mesh_threads_open", "mesh_conversation_open"],
+                                         [{}, {"peer_fulcra_userid": "peer"}]):
+            descriptor = json.loads((await client.read_resource(item["uri"]))[0].text)
+            assert descriptor["open_tool"] == {"name": name, "arguments": arguments}
+            result = await client.call_tool(name, arguments)
+            assert result.structured_content["presentation"] in ["threads", "thread"]
+            tool = next(t for t in await client.list_tools() if t.name == name)
+            assert "model" in tool.meta["ui"]["visibility"]
+            assert (await client.read_resource(tool.meta["ui"]["resourceUri"]))[0].mimeType == "text/html;profile=mcp-app"
+    assert {c[0] for c in fake_fulcra.mock_calls} == {
+        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+
+
+async def test_search_is_bounded_but_exact_peer_remains_searchable(fake_fulcra):
+    backend(fake_fulcra, [entry(str(i), f"peer-{i:02}") for i in reversed(range(25))])
+    async with Client(mcp) as client:
+        initial = await search(client, "  ")
+        assert len(initial) == 21
+        assert [item["uri"] for item in initial[1:]] == [f"mesh://threads/id-peer-{i:02}" for i in range(20)]
+        assert (await search(client, "peer-24"))[1]["uri"] == "mesh://threads/id-peer-24"
 
 
 async def test_old_descriptors_keep_exact_peers_and_label_rules(fake_fulcra):
@@ -58,7 +93,9 @@ async def test_old_descriptors_keep_exact_peers_and_label_rules(fake_fulcra):
         for peer in ["peer", "other", "conflicting", "unnamed"]:
             resource = (await client.read_resource("mesh://threads/id-" + peer))[0]
             title = f"Alex ({peer})" if peer in ["peer", "other"] else peer
-            assert json.loads(resource.text) == {"peer_fulcra_userid": peer, "title": title}
+            descriptor = json.loads(resource.text)
+            assert descriptor["peer_fulcra_userid"] == peer
+            assert descriptor["title"] == title
 
 
 CASES = json.loads((Path(__file__).parent / "fixtures/mesh-discovery.json").read_text())
@@ -90,14 +127,17 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
         {"sharing_fulcra_userid": peer, "sharing_fulcra_user_name": "Alex"}])
     uri = "mesh://threads/id-" + quote(peer, safe="")
     async with Client(mcp) as client:
+        assert (await search(client, peer))[1]["uri"] == uri
         for _ in range(2):
             resource = (await client.read_resource(uri))[0]
             assert resource.mimeType == "application/json"
-            assert json.loads(resource.text) == {"peer_fulcra_userid": peer, "title": f"Alex ({peer})"}
+            assert json.loads(resource.text) == {
+                "peer_fulcra_userid": peer, "title": f"Alex ({peer})",
+                "open_tool": {"name": "mesh_conversation_open", "arguments": {"peer_fulcra_userid": peer}}}
             assert str(resource.uri) == uri
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
-    assert fake_fulcra.v1_catalog.call_count == 2
+    assert fake_fulcra.v1_catalog.call_count == 3
 
 
 @pytest.mark.parametrize("failure", ["missing-own", "numeric-own", "catalog-owner", "catalog-offline", "shares-offline", "incoming-offline"])
@@ -114,7 +154,8 @@ async def test_descriptor_discovery_failure_is_not_empty_success(failure, fake_f
                   "incoming-offline": "get_shared_datasets"}[failure]
         getattr(fake_fulcra, method).side_effect = RuntimeError("private upstream detail")
     async with Client(mcp) as client:
-        assert await search(client) == [STATIC_ITEM]
+        with pytest.raises(ToolError, match="Mesh thread discovery failed"):
+            await search(client)
         with pytest.raises(McpError, match="Mesh thread discovery failed"):
             await client.read_resource("mesh://threads/id-peer")
 
@@ -142,9 +183,9 @@ async def test_descriptor_requires_account_auth(monkeypatch):
     from fulcra_mcp.settings import settings
     monkeypatch.setattr(settings, "fulcra_environment", "test")
     async with Client(mcp) as client:
-        # In-memory Client bypasses HTTP auth. Static search needs no backend;
-        # hosted transport auth for both search and reads is tested separately.
-        assert await search(client) == [STATIC_ITEM]
+        # In-memory Client bypasses HTTP auth; backend reads still require credentials.
+        with pytest.raises(ToolError, match="not connected to a Fulcra account"):
+            await search(client)
         with pytest.raises(McpError, match="not connected to a Fulcra account"):
             await client.read_resource("mesh://threads/id-peer")
 
@@ -178,19 +219,22 @@ async def test_backend_denial_after_success_never_reuses_discovery(method, fake_
         uri = "mesh://threads/id-peer"
         await client.read_resource(uri)
         getattr(fake_fulcra, method).side_effect = http_error(403)
-        assert await search(client) == [STATIC_ITEM]
+        with pytest.raises(ToolError, match="Mesh thread discovery failed"):
+            await search(client)
         with pytest.raises(McpError, match="Mesh thread discovery failed"):
             await client.read_resource(uri)
 
 
 async def test_native_picker_metadata(fake_fulcra):
+    backend(fake_fulcra, [])
     async with Client(mcp) as client:
         tool = next(t for t in await client.list_tools() if t.name == "mesh_mentions_search")
         assert tool.meta["ui"] == {"visibility": ["app"]}
-        assert tool.meta["openai/extensions"] == {"mentions/search": {}}
+        capabilities = client.initialize_result.capabilities.model_dump(by_alias=True)
+        assert capabilities["experimental"]["openai/mentions"] == {"searchTool": "mesh_mentions_search"}
+        assert "openai/extensions" not in tool.meta
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.inputSchema["required"] == ["query"]
         assert tool.inputSchema["properties"]["query"]["type"] == "string"
-        assert await search(client) == [STATIC_ITEM]
-    assert not fake_fulcra.mock_calls
+        assert await search(client) == [LIST_ITEM]

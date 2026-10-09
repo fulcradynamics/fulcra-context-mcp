@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import create_autospec, Mock
 
+import pytest
 from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.provider import AccessToken
@@ -12,10 +13,13 @@ from fulcra_mcp import credentials, tools
 from fulcra_mcp.main import oauth_provider
 from fulcra_mcp.settings import settings
 from test_stateless import INITIALIZE, mcp_client
-from test_mentions import STATIC_ITEM
+from test_mentions import LIST_ITEM
 
 
-async def test_mentions_http_protocol(tmp_path, monkeypatch):
+@pytest.mark.parametrize("requested,negotiated", [("2025-06-18", "2025-06-18"),
+                                                ("2025-11-25", "2025-11-25"),
+                                                ("2026-07-28", "2025-11-25")])
+async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiated):
     fake = create_autospec(FulcraAPI, instance=True)
     fake.get_fulcra_userid.return_value = "synthetic-own"
     fake.v1_catalog.return_value = [{
@@ -56,10 +60,12 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch):
             return json.loads(next(line[6:] for line in body.splitlines() if line.startswith("data: "))
                               if body.startswith("event:") else body)
 
-        assert (await http.post("/mcp", json=INITIALIZE)).status_code == 200
+        initialized = (await rpc("initialize", INITIALIZE["params"] | {"protocolVersion": requested}))["result"]
+        assert initialized["protocolVersion"] == negotiated
+        assert initialized["capabilities"]["experimental"]["openai/mentions"] == {"searchTool": "mesh_mentions_search"}
         listed = (await rpc("tools/list"))["result"]["tools"]
         tool = next(t for t in listed if t["name"] == "mesh_mentions_search")
-        assert tool["_meta"]["openai/extensions"] == {"mentions/search": {}}
+        assert "openai/extensions" not in tool["_meta"]
         assert tool["_meta"]["ui"] == {"visibility": ["app"]}
         templates = (await rpc("resources/templates/list"))["result"]["resourceTemplates"]
         assert any(t["uriTemplate"] == "mesh://threads/id-{peer}" for t in templates)
@@ -67,35 +73,33 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch):
         result = (await rpc("tools/call", call))["result"]
         assert result["content"] == []
         assert not result.get("isError")
-        item, = result["structuredContent"]["items"]
-        assert item == STATIC_ITEM
+        item, peer_item = result["structuredContent"]["items"]
+        assert item == LIST_ITEM
+        assert peer_item["uri"] == "mesh://threads/id-peer%2F%252F"
         direct_read = {"uri": item["uri"]}
-        ui, = (await rpc("resources/read", direct_read))["result"]["contents"]
-        assert ui["uri"] == item["uri"]
-        assert ui["mimeType"] == item["mimeType"]
-        assert ui["_meta"]["openai/ui"]["preferredDisplayMode"] == "inline"
-        assert '<meta name="mesh-startup" content="resource">' in ui["text"]
-        assert '<meta name="mesh-presentation" content="threads">' in ui["text"]
-        factory.assert_not_called()
-        assert not fake.mock_calls and not other.mock_calls
-        # Backend unavailable: real authenticated routing still returns the static item.
+        descriptor, = (await rpc("resources/read", direct_read))["result"]["contents"]
+        assert descriptor["uri"] == item["uri"]
+        assert descriptor["mimeType"] == item["mimeType"]
+        assert json.loads(descriptor["text"])["open_tool"] == {"name": "mesh_threads_open", "arguments": {}}
+        # Discovery failures must not masquerade as an empty peer list.
         factory.side_effect = RuntimeError("backend offline")
         for query in ["anyquery", "Meshes", "unmatched"]:
-            assert (await rpc("tools/call", {"name": "mesh_mentions_search", "arguments": {"query": query}}))["result"]["structuredContent"] == {"items": [item]}
-        factory.assert_not_called()
+            assert (await rpc("tools/call", {"name": "mesh_mentions_search", "arguments": {"query": query}}))["result"]["isError"]
         factory.side_effect = lambda **kwargs: fake if kwargs["credentials"] is creds else other
         # Old references continue to resolve only with current account authorization.
         read = {"uri": "mesh://threads/id-peer%2F%252F"}
         resource, = (await rpc("resources/read", read))["result"]["contents"]
         assert resource["mimeType"] == "application/json"
-        assert json.loads(resource["text"]) == {"peer_fulcra_userid": "peer/%2F", "title": "peer/%2F"}
+        assert json.loads(resource["text"]) == {
+            "peer_fulcra_userid": "peer/%2F", "title": "peer/%2F",
+            "open_tool": {"name": "mesh_conversation_open", "arguments": {"peer_fulcra_userid": "peer/%2F"}}}
 
         # A new account context on the next request must not inherit discovery.
         http.headers["Authorization"] = "Bearer mcp_other"
         assert (await rpc("tools/call", call))["result"]["structuredContent"] == {"items": [item]}
         assert "error" in await rpc("resources/read", read)
         http.headers["Authorization"] = "Bearer mcp_test"
-        assert (await rpc("tools/call", call))["result"]["structuredContent"]["items"] == [item]
+        assert (await rpc("tools/call", call))["result"]["structuredContent"]["items"] == [item, peer_item]
         fake.v1_catalog.return_value = []
         assert "error" in await rpc("resources/read", read)
         for authorization in ["", "Bearer invalid-token"]:

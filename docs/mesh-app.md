@@ -80,77 +80,70 @@ marked `Account:` and are not verified mesh/agent labels. Labels are untrusted
 plain text, never HTML, grouping keys, routing values, or authorization evidence.
 Rename polling updates existing keyed rows and headings, not identities. Message
 block catalog names and owner/type provenance in attached context stay unchanged;
-display identifiers are excluded from message source context. Static `Meshes`
-mention-search behavior is unchanged; the three base resources and direct-start
+display identifiers are excluded from message source context. Mention search uses
+account labels and exact peer IDs; the three base resources and direct-start
 variant use v24.
 
 ## Native composer at-mentions
 
 `mesh_mentions_search(query: string)` is an authenticated, read-only, app-visible
-native picker tool. Its metadata is exactly
-`{"openai/extensions": {"mentions/search": {}}, "ui": {"visibility": ["app"]}}`
-(apart from framework metadata). It returns `content: []` and
-`structuredContent: {items: ResourceLink[]}`.
+native picker tool. The server advertises the current named capability
+`openai/mentions: {"searchTool": "mesh_mentions_search"}`. On the pinned
+FastMCP/MCP stack this is emitted in `initialize.capabilities.experimental`, a
+supported capability location for negotiated protocols through `2025-11-25`.
+The stack negotiates newer requests down to that version; it does not implement
+`2026-07-28`'s `server/discover`. The deprecated tool-level
+`openai/extensions.mentions/search` marker is removed, not dual-advertised.
+Standard MCP Apps metadata and read-only annotations remain intact.
 
-### Static Meshes diagnostic experiment
+Search returns `content: []` and `structuredContent: {items: ResourceLink[]}`:
 
-For **every string query**, including empty or unrelated text, search now returns
-exactly one item (no dynamic peer suggestions):
+- **List Meshes**, always first after successful discovery, references
+  `mesh://threads`. Its JSON descriptor names `mesh_threads_open` with `{}`.
+- Up to **20 peer suggestions**, named **Open Mesh: <account label> (<peer ID>)**
+  or **Open Mesh: <peer ID>** when the account label is unavailable/ambiguous.
+  Search is case-insensitive over account labels and exact IDs, with surrounding
+  query whitespace ignored. Empty queries return the first peers, ordered by
+  exact ID. Same-name peers stay distinct; same-peer channels are deduplicated.
+- Peer links use `mesh://threads/id-<percent-encoded-exact-peer-id>`. The resolver
+  rechecks current authorization and returns `peer_fulcra_userid`, `title`, and
+  `open_tool: {name: "mesh_conversation_open", arguments: {peer_fulcra_userid}}`.
+  `open_tool` is application descriptor data for the agent, not a host extension
+  or a promise that resource selection invokes a tool.
 
-```json
-{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v24.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
-```
+Server instructions and opener descriptions tell the agent to open the list or
+exact thread when the user submits one of these action mentions without another
+task, rather than asking what to do next. An explicit user request takes
+precedence. Titles remain untrusted data, and opening grants no permission to
+send messages, create shares, or mutate data. Resolving a suggestion does not
+read message bodies; an opened thread subsequently loads its normal dated view.
+The list link is now a small action descriptor rather than an HTML attachment,
+so the model has an explicit tool-backed path to rendering. Previously issued
+peer links and the direct-start HTML resource remain supported.
 
-This deliberately removes discovery latency from search. Search performs no
-catalog, shares, user-info, message, LLM, or network calls and does not construct
-an account backend, even if it is unavailable. Existing hosted MCP OAuth still
-protects search and resource reads; static does not mean publicly accessible.
-No new dynamic peer feature or cache is introduced. Meshes is intended eventually
-to remain a permanent item; this experiment only supplies the single static item.
-
-The link targets an explicitly registered direct-resource variant of the existing
-inline list, not an invented tool-call field on ResourceLink. All three base UI
-URIs use v24; the `?startup=resource` variant adds only the server-owned
-`<meta name="mesh-startup" content="resource">` marker to the threads HTML.
-After the SDK handshake, that marker starts the shared authenticated discovery
-scheduler without waiting for an initial tool result. No timer guesses whether a
-result is coming; late tool results are ignored in this variant. Ordinary
-`mesh_threads_open`, `mesh_conversation_open`, and global entrypoint behavior is
-preserved, including initial-result handling for tool-launched lists/panels.
-
-Reading the HTML itself is backend-free. If a host renders it, the UI then calls
-`get_data_catalog` and `list_shares` through the authenticated host bridge, just
-like the existing list. It prefers inline display, but the host controls display.
-Only explicit peer selection uses the existing guarded fullscreen request and
-exact-peer message view. Opening the list does not read messages, sample, send,
-write account data, or automatically select a peer.
-
-Previously issued `mesh://threads/id-<percent-encoded-exact-peer-id>` references
-remain supported. Their resolver is unchanged: `resources/read` authenticates
-through the existing request credentials and re-runs full current discovery.
-It returns only `{peer_fulcra_userid, title}` JSON. Unknown, revoked, or newly
-ambiguous peers fail closed. Discovery follows the same incoming-owner and
-all-covering-outgoing-grant rules as `web/meshes.js`, with shared parity fixtures.
-No descriptors or account discovery are cached across requests or accounts;
-possessing a URI grants no access. Stdio retains operator-credential semantics;
-hosted HTTP retains per-user OAuth.
+Search and peer resolution use current request credentials, catalog and shares,
+not cached account discovery. Incoming-owner and all-covering-outgoing-grant
+rules match `web/meshes.js`, with shared parity fixtures. Unknown, revoked, or
+newly ambiguous peers fail closed. Discovery failure is an error, not an empty
+list or stale result. There are no message reads, model calls or writes during
+search/resolution. Hosted HTTP retains OAuth; stdio uses operator credentials.
 
 According to the [OpenAI composer at-mention contract](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md#composer-at-mentions),
-expected native-picker support is **Desktop only**, not Web/iOS/Android. The
-specification's Web column refers to the Work browser and excludes classic
-ChatGPT. The contract permits ResourceLinks but does not guarantee that selecting
-one opens an MCP App. The host controls suggestion display, selection/insertion,
-resource opening and display mode. This resource can boot if the host renders it;
-it does not force the host to render it. Missing suggestions remain **unverified**:
-this experiment does not establish that latency caused them or that they are fixed.
+expected native-picker support is **Desktop only**, not Web/iOS/Android. The Web
+column refers to the Work browser and excludes classic ChatGPT. Selection inserts
+a prompt reference; actual agent tool choice and UI rendering remain host
+acceptance checks, not guarantees supplied by the mention protocol.
 
-`tests/test_mentions.py` and `tests/test_mentions_protocol.py` cover static shape,
-backend-unavailable search with zero backend calls, real serialized MCP routing,
-HTTP OAuth rejection, direct-resource URI/MIME/marker, old exact-peer references,
-account isolation and revocation. `web/inline-threads.spec.js` verifies direct
-startup without an initial result alongside unchanged tool-initial-result tests;
-it uses the real SDK and synthetic data. Actual Desktop suggestions and selection
-behavior remain manual host acceptance checks; no live account was used.
+Tests cover serialized capability negotiation, removal of the legacy marker,
+search bounds/filtering, encoded exact IDs, descriptor-to-opener/resource routing,
+HTTP OAuth rejection, account isolation, revocation and metadata-only backend
+access. To test in ChatGPT: restart the server, refresh connection discovery,
+and use a fresh conversation. Submit **List Meshes** alone, then a peer action
+alone; expect `mesh_threads_open({})` and `mesh_conversation_open` with the resolved
+ID respectively, without a clarification. Also test an explicit different task,
+duplicate names and a revoked peer. Compare the direct tunnel target and plugin
+target separately; protocol success does not prove plugin-mediated discovery.
+No plugin rebuild is required for these server-only instructions.
 
 ## Automatic refresh
 

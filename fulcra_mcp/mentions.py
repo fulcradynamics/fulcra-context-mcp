@@ -2,6 +2,7 @@
 
 import json
 import re
+from urllib.parse import quote
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ResourceError, ToolError
@@ -9,7 +10,6 @@ from fastmcp.resources.resource import ResourceContent, ResourceResult
 from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
-from .apps import MESHES_UI_URI
 
 mentions_mcp = FastMCP("Fulcra Mesh mentions")
 
@@ -75,16 +75,30 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
 
 @mentions_mcp.tool(
     title="Search Mesh mentions",
-    meta={"ui": {"visibility": ["app"]}, "openai/extensions": {"mentions/search": {}}},
+    meta={"ui": {"visibility": ["app"]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 async def mesh_mentions_search(query: str) -> ToolResult:
-    """Return the static Meshes suggestion for any query (diagnostic experiment)."""
-    # Hosted MCP authentication remains at the transport boundary. Do not discover
-    # peers or construct a backend client here, even when the backend is unavailable.
-    items = [{"type": "resource_link", "uri": MESHES_UI_URI,
-              "name": "Meshes", "title": "Meshes", "mimeType": "text/html;profile=mcp-app"}]
+    """Find Mesh opening actions for the composer without reading messages."""
+    threads = await _discover_threads()
+    items = [{"type": "resource_link", "uri": "mesh://threads",
+              "name": "List Meshes", "title": "List Meshes", "mimeType": "application/json",
+              "description": "Open the clickable mesh list in chat with mesh_threads_open({})."}]
+    items += [
+        {"type": "resource_link", "uri": "mesh://threads/id-" + quote(peer, safe=""),
+         "name": f"Open Mesh: {title}", "title": f"Open Mesh: {title}",
+         "mimeType": "application/json",
+         "description": "Open this exact peer's thread with mesh_conversation_open; resolve this reference for its peer ID."}
+        for peer, title in threads.items() if query.strip().casefold() in title.casefold()
+    ][:20]
     return ToolResult(content=[], structured_content={"items": items})
+
+
+@mentions_mcp.resource("mesh://threads", mime_type="application/json")
+def mesh_list_descriptor() -> dict:
+    """Describe the list-opening action, not account data or an HTML attachment."""
+    return {"title": "List Meshes",
+            "open_tool": {"name": "mesh_threads_open", "arguments": {}}}
 
 
 @mentions_mcp.resource("mesh://threads/id-{peer}", mime_type="application/json")
@@ -95,6 +109,8 @@ async def mesh_thread_descriptor(peer: str) -> ResourceResult:
     if peer not in threads:
         raise ResourceError("Mesh thread is not available to this account.")
     return ResourceResult([ResourceContent(
-        json.dumps({"peer_fulcra_userid": peer, "title": threads[peer]}),
+        json.dumps({"peer_fulcra_userid": peer, "title": threads[peer],
+                    "open_tool": {"name": "mesh_conversation_open",
+                                  "arguments": {"peer_fulcra_userid": peer}}}),
         mime_type="application/json",
     )])
