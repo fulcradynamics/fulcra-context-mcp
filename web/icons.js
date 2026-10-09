@@ -12,6 +12,7 @@ import {
   Send,
   Sparkles,
   CalendarRange,
+  ChevronDown,
 } from 'lucide';
 
 // Builds a decorative inline SVG. Icons are always paired with visible text, so
@@ -38,4 +39,5 @@ export {
   Send,
   Sparkles,
   CalendarRange,
+  ChevronDown,
 };

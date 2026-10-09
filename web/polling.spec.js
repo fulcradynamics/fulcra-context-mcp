@@ -449,7 +449,7 @@ test('narrow retry status changes preserve the visible reader anchor and text se
   const row = ui.locator('#messages li').nth(8);
   await row.evaluate(el => {
     el.scrollIntoView(); scrollBy(0, 20);
-    const text = el.lastChild.firstChild;
+    const text = el.querySelector('pre').firstChild;
     getSelection().setBaseAndExtent(text, 0, text, 6);
   });
   const top = await row.evaluate(el => el.getBoundingClientRect().top);
@@ -485,7 +485,7 @@ test('new keyed rows animate once without moving layout; reorder preserves selec
   await ui.locator('#messages').evaluate(el => {
     window.animations = el.getAnimations({ subtree: true });
     for (const animation of window.animations) animation.finish();
-    const text = el.firstChild.lastChild.firstChild;
+    const text = el.querySelector('pre').firstChild;
     getSelection().setBaseAndExtent(text, 0, text, 6);
     window.selectedText = getSelection().toString();
     window.selectedNode = text;

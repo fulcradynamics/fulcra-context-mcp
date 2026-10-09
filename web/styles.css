@@ -145,13 +145,24 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* Message rows: direction tile in column 1, stacked header / date / body in
    column 2. A grid (not a wrapper div) keeps each text node a direct <li> child. */
 .message-row { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
-.message-row .row-tile { grid-column: 1; grid-row: 1; align-self: start; }
+/* The tile spans (and centers over) the title and date rows so it sits beside
+   both, rather than inflating the title row and pushing the date down. */
+.message-row .row-tile { grid-column: 1; grid-row: 1 / 3; align-self: center; }
 .message-row .message-header { grid-column: 2; grid-row: 1; }
 .message-row .message-date { grid-column: 2; grid-row: 2; }
-.message-row pre { grid-column: 2; grid-row: 3; }
-.message-header { margin: 0; font-weight: 600; font-size: 15px; line-height: 1.2; }
+.message-row .message-body { grid-column: 2; grid-row: 3; }
+.message-header { margin: 0; font-weight: 700; font-size: 16px; line-height: 1.2; }
+.message-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.message-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.message-title { min-width: 0; overflow-wrap: anywhere; }
+.message-chevron { flex: none; margin-left: auto; color: var(--muted); transition: transform .15s ease; }
+.message-row.collapsed .message-chevron { transform: rotate(-90deg); }
 #messages .message-date { margin: 1px 0 0; line-height: 1.35; }
-#messages pre { margin-top: 8px; }
+/* Collapsible body: animate the grid row between content height (1fr) and 0fr
+   while the clipped <pre> hides. Spacing/divider collapse together. */
+.message-body { margin-top: 10px; display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease, margin-top .2s ease; }
+.message-body > pre { overflow: hidden; min-height: 0; margin: 0; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.message-row.collapsed .message-body { grid-template-rows: 0fr; margin-top: 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
 
 /* Primary action and the message-order control share one row; the order control
@@ -184,6 +195,8 @@ html { overflow-anchor: none; }
 @media (prefers-reduced-motion: reduce) {
   .refresh-spinner { animation: none; }
   .animate-rise { animation: none; opacity: 1; }
+  .message-chevron { transition: none; }
+  .message-body { transition: none; }
 }
 
 /* Inline launch has no floating host composer to clear until a panel opens. */

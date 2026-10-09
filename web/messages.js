@@ -3,7 +3,7 @@ import { threadTitle } from './mesh-identifier.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { createContextLifecycle } from './native-context.js';
-import { icon, ArrowUpRight, ArrowDownLeft, CalendarRange, ArrowLeft } from './icons.js';
+import { icon, ArrowUpRight, ArrowDownLeft, CalendarRange, ArrowLeft, ChevronDown } from './icons.js';
 export { parseRecords } from './records.js';
 
 export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
@@ -52,7 +52,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
     (item, { record, source, direction }) => {
-      let header, date, body;
+      let title, date, body;
       if (!item.firstChild) {
         item.className = 'message-row';
         // The direction tile is placed in grid column 1; header/date/body stay
@@ -61,12 +61,22 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         const tile = doc.createElement('span');
         tile.className = incoming ? 'row-tile incoming' : 'row-tile';
         tile.append(icon(incoming ? ArrowDownLeft : ArrowUpRight, 'row-icon'));
-        header = doc.createElement('p'); header.className = 'message-header';
+        // The header is a toggle: clicking it collapses/expands the body (below).
+        const header = doc.createElement('p');
+        header.className = 'message-header message-toggle';
+        header.setAttribute('role', 'button');
+        header.tabIndex = 0;
+        header.setAttribute('aria-expanded', 'true');
+        title = doc.createElement('span'); title.className = 'message-title';
+        header.append(title, icon(ChevronDown, 'message-chevron'));
         date = doc.createElement('p'); date.className = 'message-date';
         body = doc.createElement('pre');
-        item.append(tile, header, date, body);
+        // The body is wrapped so collapse can animate via grid-template-rows.
+        const bodyWrap = doc.createElement('div'); bodyWrap.className = 'message-body';
+        bodyWrap.append(body);
+        item.append(tile, header, date, bodyWrap);
       } else {
-        header = item.querySelector('.message-header');
+        title = item.querySelector('.message-title');
         date = item.querySelector('.message-date');
         body = item.querySelector('pre');
       }
@@ -74,7 +84,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
       const text = `${direction} (${name})`;
-      if (header.textContent !== text) header.textContent = text;
+      if (title.textContent !== text) title.textContent = text;
       const dateText = timestamp && Number.isFinite(+timestamp)
         ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
@@ -183,9 +193,26 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
   };
+  // Collapse a message by clicking its header (title/date/tile); the body is
+  // left clickable for text selection. Collapse state lives on the reused row.
+  function toggleMessage(target) {
+    if (target.closest('pre')) return;
+    const li = target.closest('.message-row');
+    if (!li || !messages.contains(li)) return;
+    const collapsed = li.classList.toggle('collapsed');
+    li.querySelector('.message-toggle')?.setAttribute('aria-expanded', String(!collapsed));
+  }
+  const onMessageClick = e => toggleMessage(e.target);
+  const onMessageKey = e => {
+    if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.message-toggle')) return;
+    e.preventDefault();
+    toggleMessage(e.target);
+  };
   load.addEventListener('click', onLoad);
   order.addEventListener('change', onOrder);
   back.addEventListener('click', onBack);
+  messages.addEventListener('click', onMessageClick);
+  messages.addEventListener('keydown', onMessageKey);
   function select(thread, button) {
     contextLifecycle.invalidate();
     generation++;
@@ -217,6 +244,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     load.removeEventListener('click', onLoad);
     order.removeEventListener('change', onOrder);
     back.removeEventListener('click', onBack);
+    messages.removeEventListener('click', onMessageClick);
+    messages.removeEventListener('keydown', onMessageKey);
     return contextLifecycle.dispose();
   } };
 }
