@@ -51,6 +51,7 @@ export async function discoverThreads(app) {
   const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
   const threads = new Map();
+  const pending = [];
   const seen = new Set();
   let omitted = 0;
   for (const entry of catalog) {
@@ -60,20 +61,25 @@ export async function discoverThreads(app) {
     seen.add(key);
     let peer = owner;
     const direction = owner === own ? 'Outgoing' : 'Incoming';
+    const identifier = parseMeshIdentifier(entry.description);
+    const source = { id: entry.id, name: entry.name, fulcra_userid: owner, direction,
+      ...(identifier ? { identifier } : {}) };
     if (owner === own) {
       const covering = shares.outgoing.filter(s => s.share_all_data === true
         || (Array.isArray(s.data_types) && s.data_types.includes(entry.id)));
+      if (!covering.length) {
+        pending.push(source);
+        continue;
+      }
       const recipients = covering.map(directRecipient);
-      if (!recipients.length || recipients.some(p => !p || p === own || p !== recipients[0])) {
+      if (recipients.some(p => !p || p === own || p !== recipients[0])) {
         omitted++;
         continue;
       }
       [peer] = recipients;
     }
     if (!threads.has(peer)) threads.set(peer, { peer, sources: [], warnings: [] });
-    const identifier = parseMeshIdentifier(entry.description);
-    threads.get(peer).sources.push({ id: entry.id, name: entry.name, fulcra_userid: owner, direction,
-      ...(identifier ? { identifier } : {}) });
+    threads.get(peer).sources.push(source);
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {
@@ -89,7 +95,7 @@ export async function discoverThreads(app) {
       if (!thread.sources.some(s => s.direction === direction)) thread.warnings.push(`Conversation incomplete — missing ${direction.toLowerCase()} channel for this peer.`);
     }
   }
-  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), warnings };
+  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), pending, warnings };
 }
 
 export async function loadMeshes(app, status, list, onSelect) {

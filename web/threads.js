@@ -8,6 +8,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const status = doc.querySelector('#mesh-status');
   const list = doc.querySelector('#meshes');
   const count = doc.querySelector('#mesh-count');
+  const pendingSection = doc.querySelector('#pending-section');
+  const pendingList = doc.querySelector('#pending-meshes');
+  const pendingRows = new Map();
 
   let disposed = false, disposal, lastSuccess, nextRow = 0;
   const rows = new Map();
@@ -90,6 +93,23 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           entry.account.textContent = accountName ? `Account: ${accountName}` : '';
           entry.account.hidden = !accountName;
         }
+        const pendingKeys = new Set();
+        for (const source of discovery.pending) {
+          const key = JSON.stringify([source.fulcra_userid, source.id]);
+          pendingKeys.add(key);
+          let entry = pendingRows.get(key);
+          if (!entry) {
+            const row = doc.createElement('li');
+            const label = doc.createElement('span'); label.className = 'pending-label';
+            const state = doc.createElement('p'); state.className = 'meta';
+            state.textContent = 'Not shared yet';
+            row.append(label, state); pendingList.append(row);
+            entry = { row, label }; pendingRows.set(key, entry);
+          }
+          entry.label.textContent = source.identifier || source.name;
+        }
+        for (const [key, entry] of pendingRows) if (!pendingKeys.has(key)) { entry.row.remove(); pendingRows.delete(key); }
+        pendingSection.hidden = pendingRows.size === 0;
         if (launchPending) {
           launchPending = false;
           const matches = discovery.threads.filter(t => t.peer === requestedPeer);

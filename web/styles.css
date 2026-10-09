@@ -98,7 +98,7 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
    are divided by hairlines and lift on hover (Portal data-types row cards). */
-#meshes, #messages {
+#meshes, #messages, #pending-meshes {
   border: 1px solid var(--divider);
   border-radius: 12px;
   background: var(--raised);
@@ -106,8 +106,10 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 }
 #messages:empty { border: 0; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
-#meshes > li, #messages > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
-#meshes > li:first-child, #messages > li:first-child { border-top: 0; }
+#meshes > li, #messages > li, #pending-meshes > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
+#meshes > li:first-child, #messages > li:first-child, #pending-meshes > li:first-child { border-top: 0; }
+#pending-meshes .pending-label { font-weight: 500; }
+#pending-meshes p { margin: 2px 0 0; }
 #meshes > li:hover, #messages > li:hover { background: var(--row-hover); }
 
 /* Leading icon tile shared by thread and message rows. */

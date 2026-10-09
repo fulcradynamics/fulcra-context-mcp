@@ -87,7 +87,7 @@ test('orphans and self do not become threads; broad/mixed grants cannot hide beh
     const result = await load([entry('own'), entry('orphan'), entry('self', 'me'), entry('incoming', 'peer')], [grant('own'), extra, grant('self', 'me')]);
     assert.deepEqual(result.selections.map(t => t.peer), ['peer']);
     assert.equal(result.selections[0].sources.length, 1);
-    assert.match(result.status, /3 own outboxes omitted/);
+    assert.match(result.status, new RegExp(`${extra.share_all_data ? 3 : 2} own outboxes omitted`));
     assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   }
 });
