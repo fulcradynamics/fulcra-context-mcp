@@ -593,8 +593,7 @@ It then offers optional recipient/purpose context to personalize the invitation,
 prepare an authorized unshared outbox and draft a first message. No sharing or
 posting until peer identity is verified and the user authorizes it. The plugin's
 0.2.5 mesh skill owns this workflow; the button does not create data or invites.
-For PLAT-671 testing, pull/restart this server branch (UI v23), refresh the connection,
-and rebuild/reinstall plugin PR #2. Test the actual model response in a fresh chat:
+Test the actual model response in a fresh chat:
 copyable prompt before optional questions, no recipient-ID prerequisite, no writes
 on a generic invite request. Synthetic SDK tests verify only the button payload.
 It does not call data tools, create shares, or send an invitation to another user.
