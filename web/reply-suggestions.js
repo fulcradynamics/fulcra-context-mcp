@@ -56,7 +56,7 @@ export function setupReplySuggestions(app, lifecycle, context, container, isCurr
         });
         list.append(choice);
       }
-      status.textContent = 'Select a suggestion to fill the draft (replaces its text). Review before clicking Tell my agent. Nothing has been sent.';
+      status.textContent = 'Select a suggestion to fill the draft (replaces its text). Review first: Send posts directly to the peer; the secondary button discusses it with your agent. Nothing has been sent.';
     } catch {
       if (current()) status.textContent = 'Could not obtain valid reply suggestions. The host may reject or not support sampling. No suggestions were invented.';
       else if (isCurrent()) status.textContent = 'Context or draft changed; late suggestions discarded. Click Suggest replies again.';

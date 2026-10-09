@@ -23,7 +23,7 @@ async function open(page, { paired = true, multiple = false, outgoingOnly = fals
       if (event.source !== frame.contentWindow) return;
       const message = event.data;
       if (message.method === 'ui/notifications/size-changed') window.resizeNotifications.push(message.params);
-      if (message.method === 'ui/message') window.agentRequests.push(message);
+      if (message.method === 'ui/message') { window.agentRequests.push(message); if (message.params.content[0].text === 'Let’s talk about this mesh thread.') window.reply(message.id, {}); }
       if (message.method === 'ui/update-model-context') { window.contexts.push(message); window.reply(message.id, {}); }
       if (message.method === 'ui/initialize') window.reply(message.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test', version: '1' }, hostCapabilities: supported ? { message: { text: {} }, updateModelContext: { text: {} } } : {}, hostContext: { displayMode: 'fullscreen', safeAreaInsets } });
       if (message.method === 'tools/call') {
@@ -116,7 +116,7 @@ test('global handoff help lives in About this thread and obsolete date copy is a
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, []); await respond(page, 1, []);
   const about = ui.locator('.reading-details');
-  const help = about.getByText(/Attaches only the displayed thread context/);
+  const help = about.getByText(/Send posts your exact message directly/);
   await expect(help).toHaveCount(1);
   await expect(help).toBeHidden();
   await expect(ui.locator('#thread-composer > p')).toHaveCount(0);
@@ -226,14 +226,16 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   };
   await ui.locator('#message-load').focus();
   await page.keyboard.press('Tab');
+  await expect(ui.locator('textarea')).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(tell(ui)).toBeFocused();
   expect(await tell(ui).evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid');
   await aboveOverlay(tell(ui));
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
-  await expect(ui.locator('#context-status')).toContainText('Context attached');
-  await aboveOverlay(ui.locator('#context-status'));
-  const disclosure = ui.locator('#thread-composer summary');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
+  await aboveOverlay(ui.locator('#send-status'));
+  const disclosure = ui.locator('#thread-composer .context-details summary');
   await aboveOverlay(disclosure);
   await disclosure.focus();
   await page.keyboard.press('Enter');
@@ -242,15 +244,15 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   await page.keyboard.press('Enter');
   await aboveOverlay(ui.locator('#invite'));
   if (process.env.BRAND_PREVIEW_DIR) {
-    await aboveOverlay(ui.locator('#context-status'));
-    const feedbackBox = await ui.locator('#context-status').boundingBox();
+    await aboveOverlay(ui.locator('#send-status'));
+    const feedbackBox = await ui.locator('#send-status').boundingBox();
     expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(740);
     await page.screenshot({ path: `${process.env.BRAND_PREVIEW_DIR}/brand-preview-composer-${width === 320 ? 'narrow' : 'wide'}.png` });
   }
   await ui.locator('#invite').focus();
   await page.keyboard.press('Enter');
-  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(1);
-  await page.evaluate(() => window.reply(window.agentRequests[0].id, {}));
+  await expect.poll(() => page.evaluate(() => window.agentRequests.length)).toBe(2);
+  await page.evaluate(() => window.reply(window.agentRequests[1].id, {}));
   await aboveOverlay(ui.locator('#status'));
   await assertNoOverflow();
   expect(networkRequests).toEqual([]);
@@ -261,7 +263,7 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   }
 });
 
-const tell = ui => ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
+const tell = ui => ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
 const choose = ui => ui.getByRole('button', { name: 'peer-user', exact: true }).click();
 
 test('one row per exact peer, all same-peer channels latest first, one top composer with exact current context', async ({ page }) => {
@@ -290,7 +292,7 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   await expect(ui.locator('#messages textarea')).toHaveCount(0);
   await expect(ui.locator('#message-range + #thread-composer')).toBeVisible();
   await expect(tell(ui)).toBeEnabled();
-  await expect(ui.locator('textarea')).toHaveCount(0);
+  await expect(ui.locator('textarea')).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   // Unsubmitted edits must not change the applied context.
   await ui.locator('#message-start').fill('2020-01-01');
@@ -308,8 +310,8 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   expect(context.messages.map(m => m.source)).toEqual([
     { id: second.id, name: second.name, fulcra_userid: 'me' }, { id: own.id, name: own.name, fulcra_userid: 'me' }, { id: peer.id, name: peer.name, fulcra_userid: 'peer-user' },
   ]);
-  await expect(ui.locator('#context-status')).toContainText('Context attached');
-  expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
+  await expect(ui.locator('#send-status')).toContainText('accepted');
+  expect(await page.evaluate(() => window.agentRequests.length)).toBe(1);
   expect(await page.evaluate(() => window.reads.every(r => r.params.name === 'get_records'))).toBe(true);
 });
 
@@ -334,7 +336,7 @@ test('each load refreshes discovery; reload preserves disclosure, applies same d
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, [{ note: 'old record' }]);
-  await ui.locator('#thread-composer summary').click();
+  await ui.locator('#thread-composer .context-details summary').click();
   await ui.locator('#message-start').fill('2026-01-01');
   await ui.locator('#message-end').fill('2026-01-02');
   await page.evaluate(id => { window.shares.outgoing.push({ data_types: [id], with_user_ids: ['peer-user'], share_all_data: false }); window.holdDiscovery = true; }, own.id);
@@ -342,7 +344,7 @@ test('each load refreshes discovery; reload preserves disclosure, applies same d
   await expect(tell(ui)).toHaveCount(1);
   await expect(tell(ui)).toBeDisabled();
   await expect(ui.locator('#messages > li')).toHaveCount(1);
-  await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
+  await expect(ui.locator('#thread-composer .context-details')).toHaveAttribute('open', '');
   await expect.poll(() => page.evaluate(() => window.discovery.length)).toBe(6);
   await page.evaluate(() => {
     window.holdDiscovery = false;
@@ -356,7 +358,7 @@ test('each load refreshes discovery; reload preserves disclosure, applies same d
   await respond(page, 1, []); await respond(page, 2, []);
   await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
   await expect(ui.locator('#thread-context')).toContainText('2026-01-01T00:00:00.000Z');
-  await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
+  await expect(ui.locator('#thread-composer .context-details')).toHaveAttribute('open', '');
   await expect(tell(ui)).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
   await ui.locator('#message-start').fill('2026-02-01');
@@ -466,6 +468,6 @@ test('unsupported host still reads an empty thread, but cannot attach context', 
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, []);
   await expect(tell(ui)).toBeDisabled();
-  await expect(ui.locator('#context-status')).toContainText('cannot attach thread context');
+  await expect(ui.locator('#send-status')).toContainText('does not support');
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
 });

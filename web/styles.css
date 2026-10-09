@@ -171,6 +171,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 /* Primary action and the message-order control share one row; the order control
    is right-aligned with its caption beneath the select. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+#thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 .composer-actions .order-field { margin-left: auto; }
 .order-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
 .order-field select { width: 100%; }

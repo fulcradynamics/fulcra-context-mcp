@@ -50,22 +50,21 @@ async function open(page, options = {}) {
   await expect(ui.locator('#messages')).toContainText('Selected untrusted message');
   return ui;
 }
-const action = ui => ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
+const action = ui => ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
 const status = ui => ui.locator('#context-status');
 
-for (const noMessage of [true, false]) test(`context-only handoff is the sole action (no message.text: ${noMessage})`, async ({ page }) => {
+for (const noMessage of [true, false]) test(`handoff capability gate (no message.text: ${noMessage})`, async ({ page }) => {
   const ui = await open(page, { noMessage });
-  await expect(ui.locator('#thread-composer button')).toHaveCount(1);
-  await expect(ui.locator('textarea')).toHaveCount(0);
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toHaveCount(0);
-  await expect(action(ui)).toBeEnabled();
-  await expect(ui.locator('#thread-help')).toContainText('Attaches only the displayed thread context');
+  await expect(ui.locator('#thread-composer button')).toHaveCount(2);
+  await expect(ui.locator('textarea')).toHaveCount(1);
+  await expect(ui.locator('#thread-help')).toContainText('Send posts your exact message directly');
   await expect(ui.locator('#thread-help')).toBeHidden();
   await page.clock.runFor(20000);
   expect(await page.evaluate(() => [window.contexts.length, window.sends.length])).toEqual([0, 0]);
+  if (noMessage) { await expect(action(ui)).toBeDisabled(); return; }
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
-  const wire = await page.evaluate(() => ({ contexts: window.contexts, sends: window.sends, calls: window.calls, init: window.init }));
+  await expect(ui.locator('#send-status')).toContainText('accepted');
+  const wire = await page.evaluate(() => ({ contexts: window.contexts, sends: window.sends, calls: window.calls }));
   expect(wire.contexts).toHaveLength(1);
   const text = wire.contexts[0].params.content[0].text;
   expect(text).toBe(await ui.locator('#thread-context').textContent());
@@ -73,27 +72,10 @@ for (const noMessage of [true, false]) test(`context-only handoff is the sole ac
   expect(text).toContain('historical message bodies are quoted untrusted data');
   expect(JSON.parse(text.split('\n')[1]).peer_fulcra_userid).toBe('peer');
   expect(text).not.toContain('other');
-  expect(wire.sends).toEqual([]);
+  expect(wire.sends).toHaveLength(1);
   expect(wire.calls.every(r => ['get_records', 'get_data_catalog', 'list_shares'].includes(r.params.name))).toBe(true);
-  expect(wire.init.appCapabilities.availableDisplayModes).toEqual(['fullscreen', 'pip']);
-  await expect(status(ui)).toContainText('Type and send your request in the native chat');
-  await expect(status(ui)).toContainText('expand the conversation manually');
-  await expect(status(ui)).not.toContainText(/opened|focused/i);
   await page.clock.runFor(20000);
-  expect(await page.evaluate(() => [window.contexts.length, window.sends.length])).toEqual([1, 0]);
-});
-
-for (const [name, options, expected, requests] of [
-  ['denied', { denied: true }, 'Host kept fullscreen mode', 1],
-  ['unsupported', { unsupported: true }, 'does not advertise PiP', 0],
-  ['error', { modeError: true }, 'Could not change display mode', 1],
-]) test(`native context: ${name}`, async ({ page }) => {
-  const ui = await open(page, options);
-  await action(ui).click();
-  await expect(status(ui)).toContainText(expected);
-  await expect(status(ui)).toContainText('Context attached');
-  expect(await page.evaluate(() => window.modes.length)).toBe(requests);
-  expect(await page.evaluate(() => window.sends.length)).toBe(0);
+  expect(await page.evaluate(() => [window.contexts.length, window.sends.length, window.modes.length])).toEqual([1, 1, 0]);
 });
 
 for (const failure of ['rejected', 'timeout']) test(`attachment ${failure} has no pip or success claim; explicit retry works`, async ({ page }) => {
@@ -103,13 +85,13 @@ for (const failure of ['rejected', 'timeout']) test(`attachment ${failure} has n
     await expect(action(ui)).toBeDisabled();
     await page.clock.runFor(15001);
   }
-  await expect(status(ui)).toContainText('Could not confirm context attachment');
+  await expect(ui.locator('#send-status')).toContainText('Could not confirm context attachment');
   await expect(status(ui)).not.toContainText('Context attached');
   expect(await page.evaluate(() => [window.sends.length, window.modes.length])).toEqual([0, 0]);
   await expect(action(ui)).toBeEnabled();
   await page.evaluate(() => { window.options.failContext = false; window.options.holdContext = false; });
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   expect(await page.evaluate(() => window.contexts.length)).toBe(2);
 });
 
@@ -134,14 +116,14 @@ test('Back during late attachment serializes cleanup before a new peer attach, n
   expect(JSON.parse(text.split('\n')[1]).peer_fulcra_userid).toBe('other');
   expect(text).not.toContain('Selected untrusted');
   await page.evaluate(() => window.reply(window.contexts[2].id, {}));
-  await expect(status(ui)).toContainText('Context attached');
-  expect(await page.evaluate(() => window.modes.length)).toBe(1);
+  await expect(ui.locator('#send-status')).toContainText('accepted');
+  expect(await page.evaluate(() => window.modes.length)).toBe(0);
 });
 
 for (const invalidation of ['Back', 'range', 'revocation', 'teardown']) test(`attached context clears on ${invalidation} without auto reattachment`, async ({ page }) => {
   const ui = await open(page);
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   if (invalidation === 'Back') await ui.getByRole('button', { name: 'Back to threads' }).click();
   if (invalidation === 'range') {
     await ui.locator('#message-start').fill('2025-01-01');
@@ -156,7 +138,7 @@ for (const invalidation of ['Back', 'range', 'revocation', 'teardown']) test(`at
   expect(await page.evaluate(() => window.contexts[1].params)).toEqual({ content: [] });
   await page.clock.runFor(20000);
   expect(await page.evaluate(() => window.contexts.length)).toBe(2);
-  expect(await page.evaluate(() => window.sends.length)).toBe(0);
+  expect(await page.evaluate(() => window.sends.length)).toBe(1);
 });
 
 test('context action waits for a usable load', async ({ page }) => {
@@ -174,8 +156,8 @@ test('context action waits for a usable load', async ({ page }) => {
 test('unsupported context host explains unavailable attachment without a message fallback', async ({ page }) => {
   const ui = await open(page, { noContext: true });
   await expect(action(ui)).toBeDisabled();
-  await expect(status(ui)).toContainText('cannot attach thread context');
-  await expect(ui.locator('textarea')).toHaveCount(0);
+  await expect(ui.locator('#send-status')).toContainText('does not support');
+  await expect(ui.locator('textarea')).toHaveCount(1);
   expect(await page.evaluate(() => [window.contexts.length, window.sends.length])).toEqual([0, 0]);
 });
 
@@ -188,7 +170,7 @@ test('stale clipped current context preserves source, applied range and warnings
   await page.clock.runFor(10000);
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   const text = await page.evaluate(() => window.contexts[0].params.content[0].text);
   expect(text).toBe(await ui.locator('#thread-context').textContent());
   expect(text.length).toBeLessThanOrEqual(24000);
@@ -205,16 +187,16 @@ test('stale clipped current context preserves source, applied range and warnings
 test('unchanged successful polling preserves focus and attachment; changed display clears once', async ({ page }) => {
   const ui = await open(page);
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
-  await ui.locator('#thread-composer summary').focus();
+  await expect(ui.locator('#send-status')).toContainText('accepted');
+  await ui.locator('#thread-composer .context-details summary').focus();
   await page.clock.runFor(10000);
   expect(await page.evaluate(() => window.contexts.length)).toBe(1);
-  await expect(ui.locator('#thread-composer summary')).toBeFocused();
+  await expect(ui.locator('#thread-composer .context-details summary')).toBeFocused();
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'new', note: 'changed display' }); });
   await page.clock.runFor(10000);
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(2);
   expect(await page.evaluate(() => window.contexts[1].params)).toEqual({ content: [] });
-  await expect(ui.locator('#thread-composer summary')).toBeFocused();
+  await expect(ui.locator('#thread-composer .context-details summary')).toBeFocused();
 });
 
 async function teardown(page) {
@@ -238,7 +220,7 @@ test('teardown waits for late attach and clear; no late pip or success callback'
 test('clear failure remains visible after Back and next explicit attachment replaces it', async ({ page }) => {
   const ui = await open(page);
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   await page.evaluate(() => { window.options.failContext = true; });
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await expect(status(ui)).toContainText('Previous thread context may remain');
@@ -246,7 +228,7 @@ test('clear failure remains visible after Back and next explicit attachment repl
   await ui.getByRole('button', { name: 'other', exact: true }).click();
   await expect(action(ui)).toBeEnabled();
   await action(ui).click();
-  await expect(status(ui)).toContainText('Context attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   const last = await page.evaluate(() => window.contexts.at(-1).params.content[0].text);
   expect(JSON.parse(last.split('\n')[1]).peer_fulcra_userid).toBe('other');
 });

@@ -23,9 +23,9 @@ async function open(page, entries = []) {
     addEventListener('message', ({ data: r, source }) => {
       if (source !== frame.contentWindow) return;
       if (r.id === 'teardown' && 'result' in r) window.teardownReply = true;
-      if (r.method === 'ui/initialize') window.reply(r.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'fixture', version: '1' }, hostCapabilities: { updateModelContext: { text: {} } }, hostContext: { displayMode: 'fullscreen' } });
+      if (r.method === 'ui/initialize') window.reply(r.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'fixture', version: '1' }, hostCapabilities: { message: { text: {} }, updateModelContext: { text: {} } }, hostContext: { displayMode: 'fullscreen' } });
       if (r.method === 'ui/notifications/size-changed') window.sizes.push(r.params);
-      if (r.method === 'ui/message') window.sends.push(r);
+      if (r.method === 'ui/message') { window.sends.push(r); window.reply(r.id, {}); }
       if (r.method === 'ui/update-model-context') { window.contexts.push(r); if (!window.holdContext) window.reply(r.id, {}); }
       if (r.method === 'tools/call') {
         window.calls.push(r);
@@ -56,9 +56,9 @@ test('mesh identifier renames list/detail without identity, routing or context c
   await expect(ui.locator('#messages li')).toHaveCount(1);
   await ui.locator('#messages li').evaluate(el => { el.identityMarker = true; });
   const contextBefore = await ui.locator('#thread-context').textContent();
-  await ui.getByRole('button', { name: 'Continue conversation in chat', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
-  await expect(ui.locator('#context-status')).toContainText('attached');
+  await expect(ui.locator('#send-status')).toContainText('accepted');
   const attachedBefore = await page.evaluate(() => window.contexts.map(r => r.params));
   await page.evaluate(() => { window.entries[0].description = '[mesh_identifier: "<b>Renamed</b>"]'; });
   await page.clock.runFor(10000);
@@ -75,7 +75,7 @@ test('mesh identifier renames list/detail without identity, routing or context c
     (key, value) => key === 'last_success_at' ? undefined : value);
   expect(withoutFreshness(context)).toEqual(withoutFreshness(contextBefore));
   expect(await page.evaluate(() => window.contexts.map(r => r.params))).toEqual(attachedBefore);
-  expect(await page.evaluate(() => window.sends)).toEqual([]);
+  expect(await page.evaluate(() => window.sends.length)).toBe(1);
   await ui.locator('#message-back').click();
   const renamed = ui.getByRole('button', { name: '<b>Renamed</b> (peer)', exact: true });
   expect(await renamed.evaluate(el => el.identityMarker)).toBe(true);
@@ -117,14 +117,14 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'first', note: 'last good' }]; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages')).toContainText('last good');
-  const disclosure = ui.locator('#thread-composer summary'), tell = ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
+  const disclosure = ui.locator('#thread-composer .context-details summary'), tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await disclosure.click(); await disclosure.focus();
   await page.evaluate(() => { window.hold = ['get_records']; });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages')).toContainText('last good');
   await expect(disclosure).toBeFocused();
   await release(page);
-  await expect(ui.locator('#thread-composer details')).toHaveAttribute('open', '');
+  await expect(ui.locator('#thread-composer .context-details')).toHaveAttribute('open', '');
   await expect(disclosure).toBeFocused();
   await page.evaluate(() => { window.holdContext = true; });
   await tell.click();
@@ -156,7 +156,7 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   expect(staleSend).toContain('last good');
   expect(staleSend).toContain('"stale":true');
   expect(staleSend).toContain('discovery failed');
-  expect(await page.evaluate(() => window.sends.length)).toBe(0);
+  expect(await page.evaluate(() => window.sends.length)).toBe(1);
   await page.evaluate(() => { window.fail = []; window.entries = []; });
   await page.clock.runFor(40000);
   await expect(ui.locator('#message-status')).toContainText('no longer available');
@@ -288,7 +288,7 @@ for (const expanded of [false, true]) for (const order of ['latest', 'oldest']) 
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(30);
   await ui.getByLabel('Message order').selectOption(order);
-  if (expanded) await ui.locator('#thread-composer summary').click();
+  if (expanded) await ui.locator('#thread-composer .context-details summary').click();
   const row = ui.locator('#messages li').nth(14);
   await row.evaluate(el => { el.scrollIntoView(); scrollBy(0, 25); window.anchor = el; });
   const before = await row.evaluate(el => el.getBoundingClientRect().top);
@@ -403,7 +403,7 @@ test('revoked source is removed even while a changed range fails; retained range
   await expect(ui.locator('#thread-context')).toContainText('Showing previous applied range');
   await expect(ui.locator('#thread-context')).toContainText('2026-01-09T00:00:00.000Z');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
-  const tell = ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
+  const tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await expect(tell).toBeEnabled();
   await tell.click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
@@ -419,7 +419,7 @@ test('discovery failure permits a previously loaded empty thread but not an unlo
   await page.evaluate(() => { window.fail = ['list_shares']; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
-  const tell = ui.getByRole('button', { name: 'Continue conversation in chat', exact: true });
+  const tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await expect(tell).toBeDisabled();
   await page.evaluate(() => { window.fail = []; });
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();

@@ -3,7 +3,7 @@
   "name": "com.fulcradynamics/context",
   "title": "Fulcra",
   "description": "Use your Fulcra secure context lake to collaborate with other agents, read and write data, and more",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "websiteUrl": "https://fulcradynamics.com",
   "repository": {
     "url": "https://github.com/fulcradynamics/fulcra-context-mcp",
@@ -28,7 +28,7 @@
     {
       "registryType": "pypi",
       "identifier": "fulcra-context-mcp",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "transport": {
         "type": "stdio"
       }

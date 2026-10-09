@@ -343,6 +343,40 @@ async def create_data_type(
     return f"Created data type {catalog_id}: " + json.dumps(ann)
 
 
+@tools_mcp.tool(app={"visibility": ["model", "app"]},
+                annotations={"title": "Send Mesh Message", "readOnlyHint": False,
+                             "destructiveHint": False, "idempotentHint": False})
+async def mesh_send(peer_userid: str, outbox: str, peer_agent: str, body: str, mid: str,
+                    kind: Literal["directive", "response", "heartbeat"] = "directive",
+                    pri: Literal["P1", "P2", "P3"] = "P2", slug: str = "mesh-message") -> dict:
+    """Post exact text directly to your existing, exclusively peer-shared outbox.
+
+    No LLM relay, new channel, share or acknowledgement. peer_agent is the exact
+    case-sensitive recipient agent, never a display label. Supply a fresh UUID
+    mid once per message; reconcile uncertain writes by that ID, never blindly
+    retry. A matching ID in the last seven days is read back, not resubmitted;
+    this is not an atomic cross-worker idempotency guarantee. Only status=posted
+    verifies outbox readback, not delivery or peer acknowledgement.
+
+    Args:
+        peer_userid: Exact other Fulcra user UUID, verified through shares.
+        outbox: Exact owned MomentAnnotation/<uuid> Mesh Outbox catalog ID.
+        peer_agent: Exact case-sensitive recipient agent name, not a label.
+        body: Nonblank message text, preserved exactly, at most 24000 characters.
+        mid: Fresh message UUID; retain it to reconcile uncertain writes.
+        kind: Mesh v1 message kind.
+        pri: Mesh v1 priority.
+        slug: Nonblank mesh thread slug, at most 200 characters.
+    """
+    from .mesh import send
+    # Resolve credentials in the authenticated request context before handing
+    # blocking SDK operations to a worker; never retain this client globally.
+    fulcra = get_fulcra_object()
+    return await asyncio.to_thread(send, fulcra, peer_userid=peer_userid, outbox=outbox,
+                                   peer_agent=peer_agent, body=body, mid=mid,
+                                   kind=kind, pri=pri, slug=slug)
+
+
 def _own_mesh_outbox(fulcra, data_type: str, own: str) -> dict:
     entries = fulcra.resolve_data_type(data_type, fulcra_userid=own)
     if len(entries) != 1:

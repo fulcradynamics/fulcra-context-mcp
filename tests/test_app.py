@@ -7,8 +7,8 @@ from fulcra_mcp.main import mcp
 
 async def test_direct_meshes_resource_contract():
     async with Client(mcp) as client:
-        direct = (await client.read_resource("ui://fulcra/mesh/threads/v23.html?startup=resource"))[0]
-        normal = (await client.read_resource("ui://fulcra/mesh/threads/v23.html"))[0]
+        direct = (await client.read_resource("ui://fulcra/mesh/threads/v24.html?startup=resource"))[0]
+        normal = (await client.read_resource("ui://fulcra/mesh/threads/v24.html"))[0]
         assert direct.mimeType == "text/html;profile=mcp-app"
         assert direct.meta["openai/ui"] == {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}
         assert direct.text == normal.text.replace('</head>', '<meta name="mesh-startup" content="resource"></head>', 1)
@@ -22,7 +22,7 @@ async def test_inline_threads_opener():
         tool = tools["mesh_threads_open"]
         assert tool.title == "Mesh threads"
         assert tool.meta["ui"] == {
-            "resourceUri": "ui://fulcra/mesh/threads/v23.html",
+            "resourceUri": "ui://fulcra/mesh/threads/v24.html",
             "visibility": ["model", "app"],
         }
         assert not tool.meta.get("openai/ui", {}).get("entrypoints")
@@ -51,7 +51,7 @@ async def test_thread_entrypoint():
         assert "mesh_conversation_open" in tools
         tool = tools["mesh_conversation_open"]
         assert tool.title == "Mesh conversation"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/thread/v23.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/thread/v24.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
         assert tool.annotations.readOnlyHint is True
@@ -75,7 +75,7 @@ async def test_mesh_app():
         tool = tools["aicq_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Fulcra Mesh"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v23.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v24.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -83,7 +83,7 @@ async def test_mesh_app():
         result = await client.call_tool("aicq_open", {})
         assert not result.is_error
         assert result.data == {"message": "Fulcra Mesh is ready."}
-        resources = await client.read_resource("ui://fulcra/mesh/v23.html")
+        resources = await client.read_resource("ui://fulcra/mesh/v24.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Fulcra Mesh</h1>" in resources[0].text
         assert "hello world" not in resources[0].text.lower()
@@ -107,11 +107,11 @@ async def test_mesh_app():
         assert resources[0].text.index('id="message-range"') < resources[0].text.index('id="thread-composer"') < resources[0].text.index('id="messages"')
         assert 'get_records' in resources[0].text
         assert '<meta name="mesh-presentation" content="global">' in resources[0].text
-        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v23.html")
+        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v24.html")
         assert thread_resource[0].text == resources[0].text.replace(
             '<meta name="mesh-presentation" content="global">',
             '<meta name="mesh-presentation" content="thread">', 1)
-        assert 'Tell my agent' in resources[0].text  # Shared code, mounted only by thread presentation.
+        assert 'talk with my agent about this thread' in resources[0].text
         assert resources[0].text.count('id="thread-composer"') == 1
         assert 'peer_fulcra_userid' in resources[0].text
         assert 'omitted_records' in resources[0].text
@@ -124,5 +124,5 @@ async def test_mesh_app():
         assert "Showing selected outbox only" not in resources[0].text
         assert resources[0].meta["openai/ui"]["preferredDisplayMode"] == "fullscreen"
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen", "pip"]
-        assert 'Continue conversation in chat' in resources[0].text
+        assert 'mesh_send' in resources[0].text
         assert "get_data_catalog" in tools  # Existing tools remain mounted.

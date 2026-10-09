@@ -3,6 +3,7 @@ import { threadTitle } from './mesh-identifier.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { createContextLifecycle } from './native-context.js';
+import { reconcilePosts } from './mesh-send.js';
 import { icon, ArrowUpRight, ArrowDownLeft, CalendarRange, ArrowLeft, ChevronDown } from './icons.js';
 export { parseRecords } from './records.js';
 
@@ -51,7 +52,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
-    (item, { record, source, direction }) => {
+    (item, { record, source, direction, state }) => {
       let title, date, body;
       if (!item.firstChild) {
         item.className = 'message-row';
@@ -85,6 +86,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
       const text = `${direction} (${name})`;
       if (title.textContent !== text) title.textContent = text;
+      let badge = item.querySelector('.send-badge');
+      if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; title.after(badge); }
+      if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
       const dateText = timestamp && Number.isFinite(+timestamp)
         ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
@@ -95,6 +99,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
 
   function render(result, canSend = true) {
     ready = canSend;
+    const draft = drafts.get(selected.peer);
+    const confirmed = reconcilePosts(draft, result.messages).at(-1);
+    if (confirmed) doc.querySelector('#send-status').textContent = `Peer ${selected.peer}, message ${confirmed.envelope.mid}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
+    const posts = unavailable ? [] : (draft.posts ?? [])
+      .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
+      .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
+    result = { ...result, messages: [...result.messages, ...posts] };
     result = { ...result, messages: [...result.messages].sort((a, b) => {
       const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
       const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
@@ -129,12 +140,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     const current = () => generation === requestGeneration && queryVersion === requestVersion;
     try {
       const thread = discovery.threads.find(t => t.peer === selected.peer);
-      if (selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid))) contextLifecycle.invalidate();
+      const sourcesRemoved = selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid));
+      if (sourcesRemoved) contextLifecycle.invalidate();
       if (thread) selected = thread;
       // Exclude revoked channels immediately, including when a new range fails.
       if (displayed) {
         const accessible = displayed.messages.filter(m => thread?.sources.some(s => s.id === m.source.id && s.fulcra_userid === m.source.fulcra_userid));
-        if (accessible.length !== displayed.messages.length) {
+        if (sourcesRemoved || accessible.length !== displayed.messages.length) {
           displayed = { ...displayed, messages: accessible, warnings: [...displayed.warnings, 'Previously displayed sources no longer accessible; removed.'] };
           render(displayed, false);
         }
@@ -217,13 +229,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
-    selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined;
+    selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined; ready = false;
     firstAttempt = true; loadFailed = false; unavailable = false; validation = '';
     clearTimeout(statusTimer); loading.hidden = false;
     returnFocus = button;
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), orderField);
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), orderField,
+      () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
+      () => { if (selected && displayed) render(displayed, ready); });
     setTitle(thread);
     const today = new Date();
     end.value = today.toISOString().slice(0, 10);

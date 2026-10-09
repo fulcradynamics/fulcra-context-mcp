@@ -141,7 +141,7 @@ test('inline return during attachment clears context and never sends', async ({ 
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages')).toContainText('Untrusted');
   await ui.locator('textarea').fill('Do not send after navigation');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.requests.filter(r => r.method === 'ui/update-model-context').length)).toBe(1);
   await page.evaluate(() => window.notify('ui/notifications/host-context-changed', { displayMode: 'inline' }));
   await expect(ui.locator('#mesh-detail')).toBeHidden();
@@ -222,7 +222,7 @@ for (const width of [320, 1120]) test(`compact inline list and exact-peer shared
   await page.evaluate(() => window.reply(window.requests.find(r => r.method === 'ui/request-display-mode').id, { mode: 'fullscreen' }));
   await expect(ui.locator('#messages')).toContainText('Untrusted peer text');
   await expect(ui.locator('#message-title')).toHaveText('Thread with peer');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeVisible();
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeVisible();
   await expect(ui.locator('#suggestion-status')).toHaveText('This host does not support reply suggestions (sampling).');
   await expect(ui.getByRole('button', { name: 'Suggest replies', exact: true })).toBeHidden();
   expect(await page.evaluate(() => window.requests.filter(r => r.method === 'ui/request-display-mode').map(r => r.params))).toEqual([{ mode: 'fullscreen' }]);

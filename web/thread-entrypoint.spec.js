@@ -42,7 +42,7 @@ for (const early of [true, false]) test(`initial exact peer consumed ${early ? '
   const ui = await open(page, { peer: 'peer', early });
   await expect(ui.locator('#message-title')).toContainText('Thread with peer');
   await expect(ui.locator('#messages')).toContainText('Untrusted peer text');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeVisible();
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.calls.every(r => ['get_data_catalog', 'list_shares', 'get_records'].includes(r.params.name)))).toBe(true);
   expect(await page.evaluate(() => [window.samples.length, window.sends.length, window.contexts.length])).toEqual([0, 0, 0]);
 });
@@ -64,9 +64,9 @@ test('delayed initial result selects requested peer, never guesses from display 
 test('exact original nonblank text is sent once only after context ack', async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdContext: true });
   const draft = ui.locator('textarea');
-  const send = ui.getByRole('button', { name: 'Tell my agent', exact: true });
+  const send = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await expect(draft).toBeVisible();
-  await draft.fill('   \n'); await expect(send).toBeDisabled();
+  await draft.fill('   \n'); await expect(send).toBeEnabled();
   const text = '  Please draft a reply.\nKeep this whitespace.  ';
   await draft.fill(text); await send.click();
   await expect(send).toBeDisabled();
@@ -83,13 +83,13 @@ test('exact original nonblank text is sent once only after context ack', async (
 for (const noCapability of ['noMessage', 'noContext']) test(`send unavailable honestly: ${noCapability}`, async ({ page }) => {
   const ui = await open(page, { peer: 'peer', [noCapability]: true });
   await ui.locator('textarea').fill('request');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeDisabled();
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeDisabled();
   await expect(ui.locator('#send-status')).toContainText('does not support');
 });
 test('failed delivery preserves draft and durable feedback across cleanup', async ({ page }) => {
   const ui = await open(page, { peer: 'peer', failSend: true });
   await ui.locator('textarea').fill('keep me');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect(ui.locator('#send-status')).toContainText('Check the conversation');
   await expect(ui.locator('textarea')).toHaveValue('keep me');
   await page.evaluate(() => { window.note = 'changed'; });
@@ -100,12 +100,12 @@ test('failed delivery preserves draft and durable feedback across cleanup', asyn
 for (const change of ['navigation', 'poll']) test(`pending attachment revalidates ${change}, no send, keeps draft`, async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdContext: true });
   await ui.locator('textarea').fill('keep me');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   if (change === 'navigation') {
     await ui.getByRole('button', { name: 'Back to threads' }).click();
     await ui.getByRole('button', { name: 'other', exact: true }).click();
     await ui.locator('textarea').fill('other draft');
-    await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeDisabled();
+    await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeDisabled();
   } else {
     await page.evaluate(() => { window.note = 'changed'; });
     await page.clock.runFor(10000);
@@ -125,7 +125,7 @@ for (const change of ['navigation', 'poll']) test(`pending attachment revalidate
 test('accepted send cannot clear an edited current draft', async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdSend: true });
   await ui.locator('textarea').fill('first');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
   await ui.locator('textarea').fill('second');
   await page.evaluate(() => window.reply(window.sends[0].id, {}));
@@ -137,7 +137,7 @@ for (const outcome of ['accept', 'reject']) test(`cross-navigation ${outcome} at
   const ui = await open(page, { peer: 'peer', holdSend: true });
   const text = '  Original request.\nPreserve exact whitespace.  ';
   await ui.locator('textarea').fill(text);
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'other', exact: true }).click();
@@ -166,6 +166,8 @@ test('sampling is explicit, bounded, and suggestions only populate the draft', a
   await ui.getByRole('button', { name: 'Suggest replies', exact: true }).click();
   const suggestion = ui.getByRole('button', { name: 'Yes, thanks.', exact: true });
   await expect(suggestion).toBeVisible();
+  await expect(ui.locator('#suggestion-status')).toContainText('Send posts directly');
+  await expect(ui.locator('#suggestion-status')).not.toContainText('Tell my agent');
   await expect(ui.locator('textarea')).toHaveValue('');
   await suggestion.click();
   await expect(ui.locator('textarea')).toHaveValue('Yes, thanks.');
@@ -237,15 +239,15 @@ test('late initial result cannot replace an explicit picker choice', async ({ pa
 test('uncertain send and navigation preserve draft and app-wide pending guard', async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdSend: true });
   await ui.locator('textarea').fill('original');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'other', exact: true }).click();
   await ui.locator('textarea').fill('other draft');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeDisabled();
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeDisabled();
   await page.clock.runFor(15001);
   await expect(ui.locator('#send-status')).toContainText('Check the conversation');
-  await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toBeEnabled();
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeEnabled();
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('textarea')).toHaveValue('original');
@@ -276,7 +278,7 @@ test('late rejected sampling reports invalidation instead of staying pending', a
 test('thread cleanup guidance names an action present in thread presentation', async ({ page }) => {
   const ui = await open(page, { peer: 'peer' });
   await ui.locator('textarea').fill('request');
-  await ui.getByRole('button', { name: 'Tell my agent', exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect(ui.locator('#send-status')).toContainText('accepted');
   await page.evaluate(() => { window.note = 'changed'; });
   await page.clock.runFor(10000);
@@ -302,10 +304,11 @@ for (const width of [1120, 320]) test(`thread presentation layout at ${width}px`
   expect(await page.evaluate(() => window.sends.length)).toBe(0);
 });
 
-test('global fullscreen remains context-only even with thread-shaped notification', async ({ page }) => {
+test('global fullscreen has the shared composer even with thread-shaped notification', async ({ page }) => {
   const ui = await open(page, { global: true, peer: 'peer' });
   await expect(ui.locator('#mesh-status')).toContainText('threads returned');
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
-  await expect(ui.getByRole('button', { name: 'Continue conversation in chat', exact: true })).toBeVisible();
-  await expect(ui.locator('textarea')).toHaveCount(0);
+  await expect(ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true })).toBeVisible();
+  await expect(ui.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+  await expect(ui.locator('textarea')).toHaveCount(1);
 });
