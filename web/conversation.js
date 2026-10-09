@@ -18,7 +18,8 @@ export async function readConversation(app, selected, range, isCurrent = () => t
   if (!isCurrent()) return;
   const thread = discovery.threads.find(t => t.peer === selected.peer);
   if (!thread) throw new Error('Peer thread no longer available in refreshed discovery. No cached channels were read.');
-  const results = await Promise.all(thread.sources.map(async ({ direction, ...source }) => {
+  // Display labels never enter record provenance or model context.
+  const results = await Promise.all(thread.sources.map(async ({ direction, identifier: _identifier, ...source }) => {
     const label = `${direction} (${source.fulcra_userid} / ${source.id})`;
     try {
       const args = { data_type: source.id, ...range };

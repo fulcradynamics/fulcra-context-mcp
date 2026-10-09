@@ -1,3 +1,5 @@
+import { parseMeshIdentifier, threadIdentifier, threadTitle } from './mesh-identifier.js';
+
 const prefix = 'Available data types, grouped by compatible tool: ';
 
 export function parseMeshes(result) {
@@ -69,10 +71,14 @@ export async function discoverThreads(app) {
       [peer] = recipients;
     }
     if (!threads.has(peer)) threads.set(peer, { peer, sources: [], warnings: [] });
-    threads.get(peer).sources.push({ id: entry.id, name: entry.name, fulcra_userid: owner, direction });
+    const identifier = parseMeshIdentifier(entry.description);
+    threads.get(peer).sources.push({ id: entry.id, name: entry.name, fulcra_userid: owner, direction,
+      ...(identifier ? { identifier } : {}) });
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {
+    const identifier = threadIdentifier(thread.sources);
+    if (identifier) thread.identifier = identifier;
     // tools.py _slim_share exposes an account-owner name, not an agent name.
     const names = new Set(shares.incoming.filter(s => s.sharing_fulcra_userid === thread.peer
       && typeof s.sharing_fulcra_user_name === 'string' && s.sharing_fulcra_user_name.trim())
@@ -95,7 +101,7 @@ export async function loadMeshes(app, status, list, onSelect) {
       const row = list.ownerDocument.createElement('li');
       const button = list.ownerDocument.createElement('button');
       button.type = 'button';
-      button.textContent = thread.peer;
+      button.textContent = threadTitle(thread);
       button.addEventListener('click', () => onSelect(thread));
       row.append(button);
       list.append(row);

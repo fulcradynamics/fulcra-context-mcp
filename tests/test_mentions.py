@@ -13,7 +13,7 @@ from mcp.shared.exceptions import McpError
 from fulcra_mcp.main import mcp
 from fulcra_mcp import mentions, tools
 
-STATIC_ITEM = {"type": "resource_link", "uri": "ui://fulcra/mesh/threads/v21.html?startup=resource",
+STATIC_ITEM = {"type": "resource_link", "uri": "ui://fulcra/mesh/threads/v22.html?startup=resource",
                "name": "Meshes", "title": "Meshes", "mimeType": "text/html;profile=mcp-app"}
 
 

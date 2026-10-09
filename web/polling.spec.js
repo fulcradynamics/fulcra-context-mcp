@@ -38,6 +38,34 @@ async function open(page, entries = []) {
   await expect(ui.locator('#mesh-status')).toContainText('threads returned');
   return ui;
 }
+test('mesh identifier renames list/detail without identity, routing or context changes', async ({ page }) => {
+  const ui = await open(page, [{ ...channel(), description: '[mesh_identifier: "Travel"]' }]);
+  const button = ui.getByRole('button', { name: 'Travel (peer)', exact: true });
+  await expect(button).toBeVisible();
+  await button.evaluate(el => { el.identityMarker = true; });
+  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'record', note: 'body' }]; });
+  await button.click();
+  await expect(ui.locator('#message-title')).toHaveText('Thread with Travel (peer)');
+  await expect(ui.locator('#messages li')).toHaveCount(1);
+  await ui.locator('#messages li').evaluate(el => { el.identityMarker = true; });
+  await page.evaluate(() => { window.entries[0].description = '[mesh_identifier: "<b>Renamed</b>"]'; });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#message-title')).toHaveText('Thread with <b>Renamed</b> (peer)');
+  await expect(ui.locator('#message-title b')).toHaveCount(0);
+  await expect(ui.locator('#messages li p').first()).toHaveText('Incoming (Mesh Outbox)');
+  expect(await ui.locator('#messages li').evaluate(el => el.identityMarker)).toBe(true);
+  const context = await ui.locator('#thread-context').textContent();
+  expect(context).toContain('MomentAnnotation/in');
+  expect(context).toContain('peer');
+  expect(context).not.toContain('Renamed');
+  await ui.locator('#message-back').click();
+  const renamed = ui.getByRole('button', { name: '<b>Renamed</b> (peer)', exact: true });
+  expect(await renamed.evaluate(el => el.identityMarker)).toBe(true);
+  const calls = await page.evaluate(() => window.calls.map(r => r.params));
+  expect(calls.every(c => ['get_data_catalog', 'list_shares', 'get_records'].includes(c.name))).toBe(true);
+  expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'MomentAnnotation/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
+});
+
 test('catalog label changes do not replace keyed rows or merge identically named sources', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'a'), channel('peer', 'b')]);
   await page.evaluate(() => {

@@ -2,6 +2,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { discoverThreads, loadMeshes, parseMeshes } from './meshes.js';
 
+test('identifier is display only, outgoing preferred, stable type-ID tie break and fallback', async () => {
+  const labeled = (id, owner, label) => ({ ...entry(id, owner), description: `Prose [mesh_identifier: ${JSON.stringify(label)}]` });
+  const catalog = [labeled('z', 'me', 'Other own'), labeled('a', 'me', '<b>Trip</b>'),
+    labeled('incoming', 'peer', 'Incoming label'), labeled('same', 'other', '<b>Trip</b>'), entry('none', 'unknown')];
+  for (const items of [catalog, [...catalog].reverse()]) {
+    const result = await load(items, [grant('z'), grant('a')]);
+    assert.deepEqual(result.rows.map(r => r.button.textContent), ['<b>Trip</b> (other)', '<b>Trip</b> (peer)', 'unknown']);
+    assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer', 'unknown']);
+    assert.equal(result.selections[1].sources.length, 3);
+    assert.equal(result.selections[1].sources.find(s => s.id === 'MomentAnnotation/a').name, 'Mesh Outbox same name');
+    assert.deepEqual(result.calls.map(c => c.name), ['get_data_catalog', 'list_shares']);
+  }
+  catalog[1].description = '[mesh_identifier: "Renamed"]';
+  const renamed = await load(catalog, [grant('z'), grant('a')]);
+  assert.equal(renamed.rows[1].button.textContent, 'Renamed (peer)');
+  catalog[1].description = '[mesh_identifier: bad]';
+  catalog[0].description = 'no marker';
+  assert.equal((await load(catalog, [grant('z'), grant('a')])).rows[1].button.textContent, 'Incoming label (peer)');
+});
+
 test('failed discovery drains both requests before releasing the scheduler', async () => {
   let finish, settled = false;
   const pending = discoverThreads({ callServerTool({ name }, options) {

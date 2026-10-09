@@ -1,11 +1,88 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v21.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v22.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
 Visible-app polling refreshes discovery and only the selected thread's messages.
 No separate UI server, in-widget search, pagination, or OAuth changes.
+
+## Human-readable mesh identifiers (PLAT-670, v22)
+
+`set_mesh_identifier(data_type: str, identifier: str)` is a dedicated authenticated
+write tool for the caller's own active `MomentAnnotation/<uuid>` Mesh Outbox only.
+It resolves the exact catalog ID with `fulcra_userid=<authenticated user ID>`,
+requires one entry with that same owner and ID and a Mesh Outbox name, and refuses
+incoming/shared, missing, ambiguous, deprecated, or non-mesh types. An outgoing
+outbox need not already be shared (creation/backfill can precede sharing).
+
+The description contract is one suffix `[mesh_identifier: "JSON string label"]`.
+After the closing bracket, both parsers allow only JSON whitespace: U+0020
+(space), U+0009 (tab), U+000D (CR), and U+000A (LF). All other characters,
+including U+FEFF, U+0085, and U+001C–U+001F, make the marker malformed.
+This explicit set avoids Python `strip()` versus JavaScript `trim()` differences.
+The value is 1–80 Unicode code points, already trimmed, single-line, with no
+Unicode control/format/surrogate characters or line/paragraph separators.
+Brackets, quotes and backslashes inside a label are JSON escaped, not parsed by
+a bracket regex. The shared Python parse/write helpers are in
+`fulcra_mcp.mesh_identifier`; the display parser is in `web/mesh-identifier.js`.
+The writer JSON-escapes spaces as `\u0020`, preserving repeated spaces through
+catalog whitespace folding. Catalog output also protects existing raw JSON
+string values while normalizing surrounding prose; invalid markers remain
+invalid rather than being repaired by whitespace folding.
+
+Appending or replacing one valid suffix preserves unrelated description bytes.
+An identical value is a no-op. Multiple markers, malformed reserved markers, or
+a marker followed by non-whitespace prose fail closed without writes. A marker
+string inside the JSON label is data, not another marker. Generic
+`create_data_type(base_type="moment", name="Mesh Outbox …", description=...)`
+still accepts descriptions with the marker at creation. Agents that lack context
+at creation can backfill explicitly with `set_mesh_identifier` during a later
+check/send; app polling never writes. Plugin instruction policy is separate.
+
+Legacy moment creation uses the SDK's `create_annotation` and
+`POST /user/v1alpha1/annotation`. The setter uses authenticated SDK `fulcra_api`
+GET and PUT on that same resource family: `/user/v1alpha1/annotation/{uuid}`.
+It does not use `update_data_type`: the input-service endpoint updates a different
+`data_types` table, not the legacy annotation behind this Mesh Outbox.
+The annotation GET/PUT protocol was verified against the authoritative backend
+routes and models. PUT replaces metadata and requires name, description, tags,
+and annotation type; sending a description-only body is not safe or valid.
+
+After the existing exact-owner catalog check, the setter checks the raw annotation
+ID, `fulcra_userid`, and `annotation_type="moment"`. It requires complete valid
+metadata, then sends only `name`, `description`, `annotation_type`, `spec`,
+`measurement_spec`, and `tags`, preserving every non-description field from GET.
+Row IDs, source IDs, and timestamps are never echoed into PUT. Missing or malformed
+metadata fails closed; there are no fabricated defaults. Only a canonical supplied
+`MomentAnnotation/<uuid>` is accepted, without path escaping or label inference.
+
+The SDK follows the PUT's 303 redirect with GET. Independently of that response,
+the setter performs another GET and verifies exact owner, ID, type, label, full
+description, and unchanged non-description writable fields. No-op calls also read
+back. A final exact-owner catalog lookup verifies the displayed marker.
+The success JSON contains `data_type`, `fulcra_userid`, `identifier`, `changed`
+and `verified: true`. Failures never return that success shape. There is no
+compare-and-swap API: concurrent external edits can still be overwritten between
+GET and PUT; readback is not an atomic concurrency guarantee.
+
+Transport regressions exercise real SDK authentication, catalog resolution,
+JSON request serialization, and 303 handling with synthetic HTTP responses,
+including independent readback and preservation failures. Deployed/live behavior
+remains untested; no live-account writes are part of verification.
+
+All shared list/detail presentations display `label (peerUUID)` when a valid
+marker exists, otherwise the existing peer UUID behavior. Prefer valid outgoing
+labels owned by the current user over incoming ones. With multiple candidates in
+the preferred direction, the lexically smallest exact data-type ID wins,
+independent of catalog order or label text. Account-owner names remain separately
+marked `Account:` and are not verified mesh/agent labels. Labels are untrusted
+plain text, never HTML, grouping keys, routing values, or authorization evidence.
+Rename polling updates existing keyed rows and headings, not identities. Message
+block catalog names and owner/type provenance in attached context stay unchanged;
+display identifiers are excluded from message source context. Static `Meshes`
+mention-search behavior is unchanged; the three base resources and direct-start
+variant now use v22.
 
 ## Native composer at-mentions (PLAT-658)
 
@@ -21,7 +98,7 @@ For **every string query**, including empty or unrelated text, search now return
 exactly one item (no dynamic peer suggestions):
 
 ```json
-{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v21.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
+{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v22.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
 ```
 
 This deliberately removes discovery latency from search. Search performs no
@@ -33,7 +110,7 @@ to remain a permanent item; this experiment only supplies the single static item
 
 The link targets an explicitly registered direct-resource variant of the existing
 inline list, not an invented tool-call field on ResourceLink. All three base UI
-URIs advance to v21; the `?startup=resource` variant adds only the server-owned
+URIs advance to v22; the `?startup=resource` variant adds only the server-owned
 `<meta name="mesh-startup" content="resource">` marker to the threads HTML.
 After the SDK handshake, that marker starts the shared authenticated discovery
 scheduler without waiting for an initial tool result. No timer guesses whether a
@@ -295,7 +372,7 @@ Refresh threads retries. Invite remains independent.
 The host decides whether app-originated calls appear in its conversation UI;
 the app does not depend on those traces for first-load or failure feedback.
 
-## Global presentation: Continue conversation in chat (resource v21)
+## Global presentation: Continue conversation in chat (resource v22)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -350,7 +427,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v21)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v22)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -363,7 +440,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v21.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v22.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -431,11 +508,11 @@ These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screensh
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
 
-## Inline Mesh threads (PLAT-666, resource v21)
+## Inline Mesh threads (PLAT-666, resource v22)
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v21.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v22.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -556,7 +633,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v21.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v22.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

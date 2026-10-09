@@ -17,6 +17,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
+from .mesh_identifier import normalize_catalog_description, parse_mesh_identifier, validate_identifier, write_mesh_identifier
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
@@ -342,6 +343,95 @@ async def create_data_type(
     return f"Created data type {catalog_id}: " + json.dumps(ann)
 
 
+def _own_mesh_outbox(fulcra, data_type: str, own: str) -> dict:
+    entries = fulcra.resolve_data_type(data_type, fulcra_userid=own)
+    if len(entries) != 1:
+        raise ValueError("Missing or ambiguous own Mesh Outbox catalog entry")
+    entry = entries[0]
+    if (entry.get("id") != data_type or entry.get("fulcra_userid") != own
+            or not isinstance(entry.get("name"), str)
+            or not re.search(r"\bmesh outbox\b", entry["name"], re.IGNORECASE)
+            or entry.get("deprecated")):
+        raise ValueError("Only the authenticated user's active MomentAnnotation Mesh Outbox can be labeled")
+    return entry
+
+
+def _mesh_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
+    """Read the legacy resource; never invent missing replacement metadata."""
+    row = json.loads(fulcra.fulcra_api(path, method="GET", authenticated=True))
+    fields = ("name", "description", "annotation_type", "spec", "measurement_spec", "tags")
+    if (not isinstance(row, dict) or any(key not in row for key in fields)
+            or row.get("id") != type_id or row.get("fulcra_userid") != own
+            or row.get("annotation_type") != "moment" or row.get("deleted_at") is not None):
+        raise ValueError("Missing or invalid own moment annotation metadata")
+    if (not isinstance(row["name"], str) or not isinstance(row["description"], str)
+            or not isinstance(row["tags"], list) or row["measurement_spec"] is not None
+            or (row["spec"] is not None and not isinstance(row["spec"], dict))):
+        raise ValueError("Malformed annotation metadata; refusing replacement")
+    for tag in row["tags"]:
+        if not isinstance(tag, str) or str(UUID(tag)) != tag:
+            raise ValueError("Malformed annotation tags; refusing replacement")
+    spec = row["spec"]
+    if spec is not None and (set(spec) - {"default_note"}
+                            or (spec.get("default_note") is not None
+                                and not isinstance(spec["default_note"], str))):
+        raise ValueError("Malformed or unsupported moment spec; refusing replacement")
+    return {key: row[key] for key in fields}
+
+
+@tools_mcp.tool(annotations={"title": "Set Mesh Identifier", "readOnlyHint": False,
+                            "destructiveHint": False, "idempotentHint": True})
+@_friendly_http_errors
+async def set_mesh_identifier(data_type: str, identifier: str) -> str:
+    """Set a display-only label on your own outgoing MomentAnnotation Mesh Outbox.
+
+    Changes only its description marker, preserving prose, type name, records
+    and shares. Requires an unambiguous own catalog entry; reads back before
+    success. Labels are untrusted, not routing identities or verified names.
+
+    Args:
+        data_type: Exact MomentAnnotation/<uuid> catalog ID you own.
+        identifier: 1..80 characters, trimmed, single-line, no control characters.
+    """
+    try:
+        validate_identifier(identifier)
+        base, sep, type_id = data_type.partition("/")
+        if (base != "MomentAnnotation" or not sep
+                or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", type_id)):
+            raise ValueError("data_type must be an exact MomentAnnotation/<uuid> catalog ID")
+    except ValueError as exc:
+        return str(exc)
+    fulcra = get_fulcra_object()
+    own = fulcra.get_fulcra_userid()
+    if not isinstance(own, str) or not own:
+        return "Could not establish the authenticated user's identity"
+    path = f"/user/v1alpha1/annotation/{type_id}"
+    try:
+        _own_mesh_outbox(fulcra, data_type, own)
+        original = _mesh_annotation_body(fulcra, path, type_id, own)
+        description = write_mesh_identifier(original["description"], identifier)
+    except (ValueError, TypeError, KeyError) as exc:
+        return str(exc)
+    changed = description != original["description"]
+    body = {**original, "description": description}
+    if changed:
+        # Legacy annotation PUT replaces metadata, unlike input-service types.
+        # Whitelist the full writable body; never echo row IDs or timestamps.
+        fulcra.fulcra_api(path, method="PUT", data=body, authenticated=True)
+    try:
+        # The SDK follows the PUT's 303; that response is NOT this readback.
+        current = _mesh_annotation_body(fulcra, path, type_id, own)
+        if current != body or parse_mesh_identifier(current["description"]) != identifier:
+            raise ValueError("annotation metadata readback mismatch")
+        catalog = _own_mesh_outbox(fulcra, data_type, own)
+        if parse_mesh_identifier(catalog.get("description")) != identifier:
+            raise ValueError("catalog identifier readback mismatch")
+    except (ValueError, TypeError, KeyError) as exc:
+        return f"Could not verify mesh identifier after readback: {exc}. Check the catalog before retrying."
+    return json.dumps({"data_type": data_type, "fulcra_userid": own,
+                       "identifier": identifier, "changed": changed, "verified": True})
+
+
 def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | str:
     """(v1 base type or None for an annotation, the type's UUID) from a
     user-defined type ID, or an error message if it isn't one."""
@@ -617,7 +707,7 @@ def _slim_entry(entry: dict) -> dict:
     if entry.get("name") and entry["name"] != entry["id"]:
         slim["name"] = entry["name"]
     if entry.get("description"):
-        slim["description"] = re.sub(r"\s+", " ", entry["description"]).strip()
+        slim["description"] = normalize_catalog_description(entry["description"])
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):

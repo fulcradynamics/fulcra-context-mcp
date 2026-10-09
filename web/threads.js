@@ -1,4 +1,5 @@
 import { discoverThreads } from './meshes.js';
+import { threadTitle } from './mesh-identifier.js';
 import { setupMessages } from './messages.js';
 import { createRefreshScheduler } from './refresh.js';
 
@@ -69,12 +70,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const button = doc.createElement('button');
             const account = doc.createElement('p');
             button.type = 'button'; button.id = `thread-${++nextRow}`;
-            button.textContent = thread.peer;
+
             entry = { row, button, account, thread };
             button.addEventListener('click', () => choose(entry));
             row.append(button, account); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
+          entry.button.textContent = threadTitle(thread);
           entry.account.textContent = thread.accountName ? `Account: ${thread.accountName}` : '';
           entry.account.hidden = !thread.accountName;
         }

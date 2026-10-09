@@ -1,4 +1,5 @@
 import { createThreadComposer } from './thread-composer.js';
+import { threadTitle } from './mesh-identifier.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { createContextLifecycle } from './native-context.js';
@@ -64,7 +65,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const body = messageText(record);
       if (item.lastChild.textContent !== body) item.lastChild.textContent = body;
     });
-  const setTitle = thread => { title.textContent = `Thread with ${thread.peer}${thread.accountName ? ` — Account: ${thread.accountName}` : ''}`; };
+  const setTitle = thread => { title.textContent = `Thread with ${threadTitle(thread)}${thread.accountName ? ` — Account: ${thread.accountName}` : ''}`; };
 
   function render(result, canSend = true) {
     ready = canSend;
