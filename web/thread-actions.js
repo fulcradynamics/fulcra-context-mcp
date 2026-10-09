@@ -75,7 +75,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
-    const peer = peerId(), mid = messageId();
+    const peer = peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { v: 1, mid, to: agent.value, to_user: peer, kind: 'directive', pri: 'P2', slug: 'mesh-message', body: input.value };
     const { identifier: _identifier, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
@@ -102,8 +102,15 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       // Polling may prove the exact write even while its response is lost.
       if (post.state === 'posted') report('Posted to your outbox; not confirmed delivered or read by the peer.');
       else {
-        post.state = 'uncertain';
-        report('Posting unconfirmed. Draft retained; Send is paused for this peer. Check the outbox for this message ID before retrying.');
+        report('Sending… Waiting for confirmation.');
+        const waitingStatus = status.textContent;
+        // Allow ingestion/polling to confirm the write before showing uncertainty.
+        setTimeout(() => {
+          if (post.state !== 'sending') return;
+          post.state = 'uncertain';
+          if (status.textContent === waitingStatus) report('Posting unconfirmed. Draft retained; Send is paused for this peer. Check the outbox for this message ID before retrying.');
+          changed(); lifecycle.onChange();
+        }, Math.max(0, 60000 - (Date.now() - startedAt)));
       }
     } finally { lifecycle.pending = false; changed(); lifecycle.onChange(); }
   });

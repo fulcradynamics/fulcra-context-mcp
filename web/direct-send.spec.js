@@ -80,10 +80,36 @@ for (const outcome of ['rejected', 'uncertain']) test(`${outcome}: draft preserv
   const ui = await open(page, 'global', { outcome });
   await ui.locator('textarea').fill('keep this');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  if (outcome === 'uncertain') {
+    await page.clock.runFor(59999);
+    await expect(ui.locator('.send-badge')).toHaveText('sending…');
+    await expect(ui.locator('#send-status')).not.toContainText('unconfirmed');
+    await page.clock.runFor(1);
+    await expect(ui.locator('.send-badge')).toHaveText('unconfirmed');
+  }
   await expect(ui.locator('#send-status')).toContainText(outcome === 'rejected' ? 'not posted' : 'unconfirmed');
   await expect(ui.locator('textarea')).toHaveValue('keep this');
   if (outcome === 'uncertain') await expect(ui.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await page.clock.runFor(10000);
+  expect(await page.evaluate(() => window.calls.filter(r => r.params.name === 'mesh_send').length)).toBe(1);
+});
+test('delayed uncertainty uses click-time deadline without overwriting another peer handoff', async ({ page }) => {
+  const ui = await open(page, 'global', { hold: true });
+  await ui.locator('textarea').fill('keep this');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.clock.runFor(20000);
+  await page.evaluate(() => window.finish('uncertain'));
+  await expect(ui.locator('#send-status')).toContainText('Waiting for confirmation');
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await ui.getByRole('button', { name: other, exact: true }).click();
+  await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
+  await expect(ui.locator('#send-status')).toContainText('Request accepted');
+  await page.clock.runFor(40000);
+  await expect(ui.locator('#send-status')).toContainText('Request accepted');
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await ui.getByRole('button', { name: `Treecle (${peer})`, exact: true }).click();
+  await expect(ui.locator('.send-badge')).toHaveText('unconfirmed');
+  await expect(ui.locator('textarea')).toHaveValue('keep this');
   expect(await page.evaluate(() => window.calls.filter(r => r.params.name === 'mesh_send').length)).toBe(1);
 });
 test('late direct completion preserves other peer and newer draft', async ({ page }) => {
@@ -131,17 +157,20 @@ test('revoked peer removes optimistic content, even after late write response', 
   await expect(ui.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
 });
 
-test('uncertain write recovered by exact poll clears only original draft and updates feedback', async ({ page }) => {
+test('readback during the grace period confirms immediately and stays confirmed past the deadline', async ({ page }) => {
   const ui = await open(page, 'global', { outcome: 'uncertain' });
   await ui.locator('textarea').fill('recover me');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(ui.locator('#send-status')).toContainText('unconfirmed');
+  await expect(ui.locator('.send-badge')).toHaveText('sending…');
   await page.evaluate(() => window.finish('posted'));
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages li')).toHaveCount(2);
   await expect(ui.locator('textarea')).toHaveValue('');
   await expect(ui.locator('#send-status')).toContainText('Posted');
   await expect(ui.locator('#send-status')).not.toContainText('unconfirmed');
+  await page.clock.runFor(60000);
+  await expect(ui.locator('#send-status')).toContainText('Posted');
+  await expect(ui.locator('#messages')).not.toContainText('unconfirmed');
 });
 
 for (const text of ['', '  Help with this message  ']) test(`secondary handoff attaches bounded context with optional composition: ${text}`, async ({ page }) => {
