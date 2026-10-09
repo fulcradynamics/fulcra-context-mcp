@@ -17,6 +17,7 @@ from starlette.middleware.cors import CORSMiddleware
 from . import server_info
 from .apps import app_mcp
 from .logging_config import configure_logging
+from .mentions import mentions_mcp
 from .provider import oauth_provider
 from .settings import settings
 from .tools import tools_mcp
@@ -43,6 +44,7 @@ mcp = FastMCP(
 )
 mcp.mount(tools_mcp)
 mcp.mount(app_mcp)
+mcp.mount(mentions_mcp)
 
 
 # Add CORS middleware for browser-based clients

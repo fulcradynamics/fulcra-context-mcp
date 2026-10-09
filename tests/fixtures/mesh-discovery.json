@@ -1,0 +1,19 @@
+[
+  {"name":"narrow multichannel and duplicate grants", "catalog":[{"id":"MomentAnnotation/a","name":"Mesh Outbox"},{"id":"MomentAnnotation/b","name":"Mesh Outbox"},{"id":"MomentAnnotation/a","name":"Mesh Outbox","fulcra_userid":"peer"}], "outgoing":[{"data_types":["MomentAnnotation/a"],"with_user_ids":["peer"],"share_all_data":false},{"data_types":["MomentAnnotation/a"],"with_user_ids":["peer"],"share_all_data":false},{"data_types":["MomentAnnotation/b"],"with_user_ids":["peer"],"share_all_data":false}], "expected":["peer"]},
+  {"name":"outgoing only", "expected":["peer"]},
+  {"name":"share all alongside narrow", "extra":{"share_all_data":true}, "expected":[]},
+  {"name":"multiple recipients", "extra":{"with_user_ids":["peer","other"]}, "expected":[]},
+  {"name":"conflicting recipient", "extra":{"with_user_ids":["other"]}, "expected":[]},
+  {"name":"multiple types", "extra":{"data_types":["MomentAnnotation/a","StepCount"]}, "expected":[]},
+  {"name":"group recipients", "extra":{"with_group_ids":["group"]}, "expected":[]},
+  {"name":"group grant", "extra":{"group_id":"group"}, "expected":[]},
+  {"name":"file grant", "extra":{"file_paths":["/"]}, "expected":[]},
+  {"name":"file history grant", "extra":{"file_history_paths":["/"]}, "expected":[]},
+  {"name":"missing explicit narrow flag", "extra":{"share_all_data":null}, "expected":[]},
+  {"name":"self grant", "outgoing":[{"data_types":["MomentAnnotation/a"],"with_user_ids":["me"],"share_all_data":false}], "expected":[]},
+  {"name":"orphan", "outgoing":[], "expected":[]},
+  {"name":"incoming owners never inferred from names", "catalog":[{"id":"MomentAnnotation/a","name":"Mesh Outbox same","fulcra_userid":"peer"},{"id":"MomentAnnotation/a","name":"Mesh Outbox same","fulcra_userid":"other"},{"id":"MomentAnnotation/b","name":"Mesh Outbox same","fulcra_userid":"peer"}], "incoming":[{"sharing_fulcra_userid":"peer","sharing_fulcra_user_name":"Alex"},{"sharing_fulcra_userid":"other","sharing_fulcra_user_name":"Alex"}], "expected":["other","peer"]},
+  {"name":"explicit own owner", "catalog":[{"id":"MomentAnnotation/a","name":"Mesh Outbox","fulcra_userid":"me"}], "expected":["peer"]},
+  {"name":"only mesh moment outboxes", "catalog":[{"id":"Event/a","name":"Mesh Outbox","fulcra_userid":"event"},{"id":"MomentAnnotation/b","name":"Mesh Outboxes","fulcra_userid":"plural"},{"id":"MomentAnnotation/c","name":"Other","fulcra_userid":"other"},{"id":"MomentAnnotation/d","name":"mesh OUTBOX","fulcra_userid":"valid"}], "expected":["valid"]},
+  {"name":"not queryable", "group":"data types that cannot be queried (used only when recording data)", "catalog":[{"id":"MomentAnnotation/a","name":"Mesh Outbox","fulcra_userid":"peer"}], "expected":[]}
+]

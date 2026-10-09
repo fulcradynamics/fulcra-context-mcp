@@ -5,7 +5,56 @@ The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
 Visible-app polling refreshes discovery and only the selected thread's messages.
-No separate UI server, search, pagination, or OAuth changes.
+No separate UI server, in-widget search, pagination, or OAuth changes.
+
+## Native composer at-mentions (PLAT-658)
+
+`mesh_mentions_search(query: string)` is an authenticated, read-only, app-visible
+native picker tool. Its metadata is exactly
+`{"openai/extensions": {"mentions/search": {}}, "ui": {"visibility": ["app"]}}`
+(apart from framework metadata). It returns `content: []` and
+`structuredContent: {items: ResourceLink[]}`. This is not an in-widget popup or a
+new UI entrypoint; the existing v18 UI tools and resources are unchanged.
+
+An empty query returns the first **20** accessible exact peers, ordered by exact
+peer ID; typeahead applies a case-insensitive substring match to the account label
+or ID before limiting. Multiple eligible channels collapse to one peer; duplicate
+account names never merge identities. Titles include the exact ID. Missing or
+conflicting account names fall back to that ID. These labels are account data,
+not verified agent names or instructions.
+
+Discovery reuses the authenticated `get_data_catalog` and `list_shares` helpers.
+It follows the same incoming-owner and all-covering-outgoing-grant rules as
+`web/meshes.js`, with shared Python/JS parity fixtures. Broad, group, multi-type,
+conflicting, self-only and orphan own channels cannot establish a peer. No
+name-to-ID lookup, message read, account write, sampling, or LLM call occurs.
+Discovery failures are errors, not an empty successful picker.
+
+Links use `mesh://threads/id-<percent-encoded-exact-peer-id>`. The fixed `id-`
+prefix also protects dot-only IDs from URI path normalization. `resources/read`
+authenticates again through the existing request credentials and re-runs full
+current discovery, independent of the search result limit. It returns only the
+JSON descriptor `{peer_fulcra_userid, title}`—no history or channel contents.
+Unknown, revoked, or newly ambiguous peers fail closed. Discovery and descriptors
+are never cached across requests or accounts; possessing a URI grants no access.
+Stdio retains operator-credential semantics; hosted HTTP retains per-user OAuth.
+
+According to the [OpenAI composer at-mention contract](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md#composer-at-mentions),
+expected native-picker support is **Desktop only**, not Web/iOS/Android. The
+specification's Web column refers to the Work browser and excludes classic
+ChatGPT. Actual client support still requires acceptance testing. Selecting an
+item references it in the prompt; it does **not** automatically open a panel or
+send a message. When asked to open the referenced thread, the agent can call
+`mesh_conversation_open(peer_fulcra_userid=<exact descriptor ID>)`; its existing
+UI discovery revalidates that peer. PLAT-666's click-to-expand list is separate.
+
+`tests/test_mentions.py`, `tests/test_mentions_protocol.py` and
+`web/mentions-parity.test.js` exercise synthetic discovery, metadata, wire output,
+encoded resource resolution, account/auth failures and revoked access. The HTTP
+smoke uses real MCP routing and request authentication with a mocked Fulcra
+backend only. Desktop popup discovery, selection/insertion and host-driven
+resource resolution remain manual host acceptance checks; no live account data
+is required by these automated tests.
 
 ## Automatic refresh (PLAT-649)
 
