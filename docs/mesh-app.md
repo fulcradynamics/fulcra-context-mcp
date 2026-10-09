@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v22.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v23.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -98,7 +98,7 @@ For **every string query**, including empty or unrelated text, search now return
 exactly one item (no dynamic peer suggestions):
 
 ```json
-{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v22.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
+{"type":"resource_link","uri":"ui://fulcra/mesh/threads/v23.html?startup=resource","name":"Meshes","title":"Meshes","mimeType":"text/html;profile=mcp-app"}
 ```
 
 This deliberately removes discovery latency from search. Search performs no
@@ -440,7 +440,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v22.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v23.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -512,7 +512,7 @@ autoResize or overlay behavior.
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v22.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v23.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -587,7 +587,16 @@ Outputs are `layout-list-1120.png`, `layout-list-320.png`,
 `layout-thread-1120.png` and `layout-thread-320.png` in that directory.
 
 **Invite someone** sends one user-role `ui/message` through the host, asking the
-agent to use `fulcra-mesh` and ask who to invite before creating/sharing anything.
+agent to use `fulcra-mesh` to show a copyable invitation first, using the connected
+user's verified ID and the mesh skill URL—not to ask for the other user's ID.
+It then offers optional recipient/purpose context to personalize the invitation,
+prepare an authorized unshared outbox and draft a first message. No sharing or
+posting until peer identity is verified and the user authorizes it. The plugin's
+0.2.5 mesh skill owns this workflow; the button does not create data or invites.
+For PLAT-671 testing, pull/restart this server branch (UI v23), refresh the connection,
+and rebuild/reinstall plugin PR #2. Test the actual model response in a fresh chat:
+copyable prompt before optional questions, no recipient-ID prerequisite, no writes
+on a generic invite request. Synthetic SDK tests verify only the button payload.
 It does not call data tools, create shares, or send an invitation to another user.
 Install the companion Fulcra plugin so the agent has the mesh skill; the UI does
 not install or deterministically execute skills. The host owns the follow-up turn.
@@ -633,7 +642,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v22.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v23.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

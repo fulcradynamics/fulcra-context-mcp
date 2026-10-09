@@ -52,6 +52,9 @@ test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`,
   expect(messages).toHaveLength(1);
   expect(messages[0].params.role).toBe('user');
   expect(messages[0].params.content[0].text).toContain('fulcra-mesh');
+  expect(messages[0].params.content[0].text).toContain('First show me a copyable invitation prompt');
+  expect(messages[0].params.content[0].text).toContain("Do not ask for the other user's ID");
+  expect(messages[0].params.content[0].text).toContain('optional context');
   expect(await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call'))).toHaveLength(2);
   await page.evaluate(() => { window.rejectMessage = true; });
   await button.click();

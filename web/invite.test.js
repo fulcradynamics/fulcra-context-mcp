@@ -20,7 +20,12 @@ test('click sends only a user message requesting the mesh skill', async () => {
   assert.equal(calls[0].role, 'user');
   assert.match(calls[0].content[0].text, /fulcra-mesh/);
   assert.match(calls[0].content[0].text, /invite another user/);
-  assert.match(calls[0].content[0].text, /Ask me who/);
+  assert.match(calls[0].content[0].text, /First show me a copyable invitation prompt/);
+  assert.match(calls[0].content[0].text, /my own verified Fulcra user ID/);
+  assert.match(calls[0].content[0].text, /Do not ask for the other user's ID/);
+  assert.match(calls[0].content[0].text, /optional context/);
+  assert.match(calls[0].content[0].text, /draft an outgoing message/);
+  assert.match(calls[0].content[0].text, /Get my go-ahead before creating/);
   assert.match(status.textContent, /Request sent/);
 });
 

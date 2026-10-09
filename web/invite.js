@@ -1,6 +1,10 @@
 const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the fulcra-mesh skill to help me prepare the invitation. '
-  + 'Ask me who I want to invite and for any missing details before creating or sharing anything.';
+  + 'First show me a copyable invitation prompt for the other person to give their agent, '
+  + 'using my own verified Fulcra user ID and the mesh skill URL. Do not ask for the other user\'s ID. '
+  + 'Then ask whether I want to add optional context about who or what the invite is for, '
+  + 'so you can personalize the prompt, prepare a dedicated outbox, and draft an outgoing message. '
+  + 'Get my go-ahead before creating data or sharing anything; do not share or post a message until the peer ID is verified.';
 
 export async function setupInvite(app, button, status) {
   button.addEventListener('click', async () => {
