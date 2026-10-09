@@ -10,6 +10,7 @@ from fastmcp.resources.resource import ResourceContent, ResourceResult
 from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
+from .mesh_identifier import parse_mesh_identifier
 
 mentions_mcp = FastMCP("Fulcra Mesh mentions")
 
@@ -44,7 +45,7 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
     own = shares["own_fulcra_userid"]
     if not isinstance(own, str) or not own:
         raise ValueError("Missing own identity")
-    peers = set()
+    peers = {}
     for group, entries in catalog.items():
         if not group.startswith("data types usable with: ") or "get_records" not in group.removeprefix("data types usable with: ").split(" | "):
             continue
@@ -55,21 +56,26 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
             if not entry["id"].startswith("MomentAnnotation/") or not re.search(r"\bmesh outbox\b", entry["name"], re.I | re.ASCII):
                 continue
             peer = entry.get("fulcra_userid") or own
-            if peer == own:
+            outgoing = peer == own
+            if outgoing:
                 covering = [s for s in shares["outgoing"] if s.get("share_all_data") is True
                             or entry["id"] in s.get("data_types", [])]
                 recipients = [_direct_recipient(s) for s in covering]
                 if not recipients or any(not p or p == own or p != recipients[0] for p in recipients):
                     continue
                 peer = recipients[0]
-            peers.add(peer)
+            candidates = peers.setdefault(peer, [])
+            try:
+                identifier = parse_mesh_identifier(entry.get("description"))
+            except ValueError:
+                identifier = None  # Like the UI, ignore malformed display metadata.
+            if identifier:
+                candidates.append((0 if outgoing else 1, entry["id"], identifier))
     threads = {}
     for peer in sorted(peers):
-        names = {s["sharing_fulcra_user_name"] for s in shares["incoming"]
-                 if s.get("sharing_fulcra_userid") == peer
-                 and isinstance(s.get("sharing_fulcra_user_name"), str)
-                 and s["sharing_fulcra_user_name"].strip()}
-        threads[peer] = f"{next(iter(names))} ({peer})" if len(names) == 1 else peer
+        # Match web/mesh-identifier.js: own/outgoing first, then exact type ID.
+        identifier = min(peers[peer], key=lambda candidate: candidate[:2])[2] if peers[peer] else None
+        threads[peer] = f"{identifier} ({peer})" if identifier else peer
     return threads
 
 

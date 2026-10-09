@@ -35,7 +35,8 @@ async def search(client, query=""):
 @pytest.mark.parametrize("query,expected", [("", ["other", "peer"]), ("aLeX", ["other", "peer"]),
                                                ("PEER", ["peer"]), ("unmatched", [])])
 async def test_search_includes_list_and_exact_peer_actions(query, expected, fake_fulcra):
-    backend(fake_fulcra, [entry("a", "peer"), entry("b", "peer"), entry("c", "other")],
+    backend(fake_fulcra, [entry(id, peer) | {"description": '[mesh_identifier: "Alex"]'}
+                          for id, peer in [("a", "peer"), ("b", "peer"), ("c", "other")]],
             incoming=[{"sharing_fulcra_userid": p, "sharing_fulcra_user_name": "Alex"}
                       for p in ["peer", "other"]])
     async with Client(mcp) as client:
@@ -52,6 +53,46 @@ async def test_search_includes_list_and_exact_peer_actions(query, expected, fake
             assert ResourceLink.model_validate(item).mimeType == "application/json"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+
+
+@pytest.mark.parametrize("description,title", [
+    ('Peer outbox. [mesh_identifier: "Treecle"]', "Treecle (peer)"),
+    (None, "peer"),
+    ('[mesh_identifier: bad]', "peer"),
+])
+async def test_mesh_identifier_labels_and_search(description, title, fake_fulcra):
+    backend(fake_fulcra, [entry("a", "peer") | {"description": description}], incoming=[
+        {"sharing_fulcra_userid": "peer", "sharing_fulcra_user_name": "peer"}])
+    async with Client(mcp) as client:
+        items = await search(client)
+        assert items[0] == LIST_ITEM
+        assert items[1]["name"] == items[1]["title"] == "Open Mesh: " + title
+        descriptor = json.loads((await client.read_resource(items[1]["uri"]))[0].text)
+        assert descriptor["title"] == title
+        assert descriptor["open_tool"]["arguments"] == {"peer_fulcra_userid": "peer"}
+        assert await search(client, "tReEcLe") == (items if description and "Treecle" in description else items[:1])
+    assert {c[0] for c in fake_fulcra.mock_calls} == {
+        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+
+
+@pytest.mark.parametrize("sources,expected", [
+    ([("a", "peer", "Incoming"), ("z", None, "Treecle")], "Treecle (peer)"),
+    ([("z", None, "Z first"), ("a", None, "A wins")], "A wins (peer)"),
+    ([("z", "peer", "Z first"), ("a", "peer", "A wins")], "A wins (peer)"),
+    ([("a", None, None), ("z", "peer", "Incoming")], "Incoming (peer)"),
+])
+async def test_identifier_selection_matches_list_precedence(sources, expected, fake_fulcra):
+    catalog = [entry(id, owner) | {"description": '[mesh_identifier: ' + json.dumps(label) + ']'}
+               for id, owner, label in sources]
+    grants = [{"fulcra_data_types": [e["id"]], "share_all_data": False,
+               "permissions": [{"allowed_fulcra_userid": "peer"}]}
+              for e in catalog if "fulcra_userid" not in e]
+    async with Client(mcp) as client:
+        for ordered in [catalog, list(reversed(catalog))]:
+            backend(fake_fulcra, ordered, outgoing=grants)
+            items = await search(client)
+            assert [i["title"] for i in items] == ["List Meshes", "Open Mesh: " + expected]
+            assert json.loads((await client.read_resource(items[1]["uri"]))[0].text)["title"] == expected
 
 
 async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
@@ -84,7 +125,7 @@ async def test_search_is_bounded_but_exact_peer_remains_searchable(fake_fulcra):
         assert (await search(client, "peer-24"))[1]["uri"] == "mesh://threads/id-peer-24"
 
 
-async def test_old_descriptors_keep_exact_peers_and_label_rules(fake_fulcra):
+async def test_unlabelled_descriptors_use_peer_not_account_names(fake_fulcra):
     backend(fake_fulcra, [entry("a", p) for p in ["peer", "other", "conflicting", "unnamed"]]
             + [entry("b", "peer")], incoming=[
         {"sharing_fulcra_userid": p, "sharing_fulcra_user_name": "Alex"} for p in ["peer", "other", "conflicting"]
@@ -92,10 +133,9 @@ async def test_old_descriptors_keep_exact_peers_and_label_rules(fake_fulcra):
     async with Client(mcp) as client:
         for peer in ["peer", "other", "conflicting", "unnamed"]:
             resource = (await client.read_resource("mesh://threads/id-" + peer))[0]
-            title = f"Alex ({peer})" if peer in ["peer", "other"] else peer
             descriptor = json.loads(resource.text)
             assert descriptor["peer_fulcra_userid"] == peer
-            assert descriptor["title"] == title
+            assert descriptor["title"] == peer
 
 
 CASES = json.loads((Path(__file__).parent / "fixtures/mesh-discovery.json").read_text())
@@ -123,7 +163,7 @@ async def test_discovery_parity(case, fake_fulcra):
 
 @pytest.mark.parametrize("peer", ["peer", "a/b ?#%雪", "%2F", "..", "a@b:c", " spaced "])
 async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_fulcra):
-    backend(fake_fulcra, [entry("a", peer)], incoming=[
+    backend(fake_fulcra, [entry("a", peer) | {"description": '[mesh_identifier: "Alex"]'}], incoming=[
         {"sharing_fulcra_userid": peer, "sharing_fulcra_user_name": "Alex"}])
     uri = "mesh://threads/id-" + quote(peer, safe="")
     async with Client(mcp) as client:

@@ -84,7 +84,7 @@ plain text, never HTML, grouping keys, routing values, or authorization evidence
 Rename polling updates existing keyed rows and headings, not identities. Message
 block catalog names and owner/type provenance in attached context stay unchanged;
 display identifiers are excluded from message source context. Mention search uses
-account labels and exact peer IDs; the three base resources and direct-start
+mesh identifiers and exact peer IDs; the three base resources and direct-start
 variant use v25.
 
 ## Native composer at-mentions
@@ -103,9 +103,12 @@ Search returns `content: []` and `structuredContent: {items: ResourceLink[]}`:
 
 - **List Meshes**, always first after successful discovery, references
   `mesh://threads`. Its JSON descriptor names `mesh_threads_open` with `{}`.
-- Up to **20 peer suggestions**, named **Open Mesh: <account label> (<peer ID>)**
-  or **Open Mesh: <peer ID>** when the account label is unavailable/ambiguous.
-  Search is case-insensitive over account labels and exact IDs, with surrounding
+- Up to **20 peer suggestions**, named **Open Mesh: <mesh identifier> (<peer ID>)**
+  or **Open Mesh: <peer ID>** when no valid identifier exists. Identifier selection
+  matches the list: prefer valid own/outgoing description markers, then incoming;
+  within a direction the lexically smallest exact data-type ID wins. Account-owner
+  names are not used as mesh identifiers. Malformed markers are ignored.
+  Search is case-insensitive over the selected identifier and exact IDs, with surrounding
   query whitespace ignored. Empty queries return the first peers, ordered by
   exact ID. Same-name peers stay distinct; same-peer channels are deduplicated.
 - Peer links use `mesh://threads/id-<percent-encoded-exact-peer-id>`. The resolver
