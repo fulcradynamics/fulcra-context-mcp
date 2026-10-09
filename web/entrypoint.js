@@ -2,7 +2,8 @@
 // or from account/message content. SDK 1.7.5 tool-result carries structuredContent;
 // hostContext.toolInfo is optional and is not an initial tool result.
 export function receiveEntrypoint(app, doc) {
-  const presentation = doc.querySelector('meta[name="mesh-presentation"]')?.content === 'thread' ? 'thread' : 'global';
+  const marker = doc.querySelector('meta[name="mesh-presentation"]')?.content;
+  const presentation = ['thread', 'threads'].includes(marker) ? marker : 'global';
   let deliver, first, received = false;
   app.ontoolresult = result => {
     if (received) return;
@@ -11,7 +12,17 @@ export function receiveEntrypoint(app, doc) {
     deliver?.(result);
   };
   app.ontoolcancelled = () => app.ontoolresult({ isError: true });
-  return { presentation, consume(callback) {
+  let hostChanges = {}, hostListener;
+  const onHost = context => {
+    hostChanges = { ...hostChanges, ...context };
+    hostListener?.(context);
+  };
+  app.addEventListener('hostcontextchanged', onHost);
+  return { presentation, observeHost(callback) {
+    hostListener = callback;
+    callback({ ...app.getHostContext(), ...hostChanges });
+    return () => { hostListener = undefined; app.removeEventListener('hostcontextchanged', onHost); };
+  }, consume(callback) {
     deliver = callback;
     if (received) callback(first);
   } };

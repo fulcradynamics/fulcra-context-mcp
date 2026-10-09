@@ -3,7 +3,9 @@ import { setupInvite } from './invite.js';
 import { setupThreads } from './threads.js';
 import { receiveEntrypoint } from './entrypoint.js';
 
-const app = new App({ name: 'Fulcra Mesh', version: '0.1.0' }, { availableDisplayModes: ['fullscreen', 'pip'] });
+const inlineList = document.querySelector('meta[name="mesh-presentation"]')?.content === 'threads';
+const app = new App({ name: 'Fulcra Mesh', version: '0.1.0' }, { availableDisplayModes: inlineList ? ['inline', 'fullscreen'] : ['fullscreen', 'pip'] });
+if (inlineList) document.documentElement.classList.add('compact-threads');
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
 function applySafeArea(context) {
   if (!context?.safeAreaInsets) return;

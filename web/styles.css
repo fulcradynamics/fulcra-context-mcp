@@ -95,6 +95,13 @@ details[open] > summary { color: var(--violet); }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 
+/* Inline launch has no floating host composer to clear until a panel opens. */
+.compact-threads { --footer-clearance: calc(16px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px)); }
+.compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
+.compact-threads .invite-section > p:not([role='status']) { display: none; }
+.compact-threads #meshes > li { padding: 8px 0; }
+.compact-threads #mesh-list > p.meta { margin-block: 6px; }
+
 @media (max-width: 520px) {
   body { padding-left: calc(16px + var(--host-safe-left, 0px)); padding-right: calc(16px + var(--host-safe-right, 0px)); }
   .invite-section { margin-bottom: 24px; }

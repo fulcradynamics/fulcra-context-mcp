@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v17.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v18.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -200,7 +200,7 @@ Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
-## Global presentation: Continue conversation in chat (resource v17)
+## Global presentation: Continue conversation in chat (resource v18)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
@@ -249,7 +249,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v17)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v18)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -262,7 +262,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v17.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v18.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -329,6 +329,44 @@ Outputs are `mesh-thread-1120.png` and `mesh-thread-320.png` in that directory.
 These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screenshots;
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
+
+## Inline Mesh threads (PLAT-666, resource v18)
+
+`mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
+and app. It returns `{presentation: "threads"}` without accessing an account. Its
+resource `ui://fulcra/mesh/threads/v18.html` serves the same compiled HTML with a
+fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
+and advertises `["inline", "fullscreen"]`, matching this presentation's app
+capabilities. Inline is a display mode, not an invented entrypoint type. Existing
+global/thread entrypoint metadata and controls are unchanged.
+
+The compact list uses the existing authorized exact-peer discovery and keyed rows.
+Initial-result and host-context handlers are registered before connection; initial
+results arriving before or after initialization are consumed without recalling the
+opener. Refresh/polling and the in-flight spinner remain shared. No messages or
+composer are mounted until an explicit row selection has host panel acceptance.
+
+A row click requests fullscreen once only if the host advertises it, or directly
+selects when already fullscreen. The returned mode is authoritative, not the
+request. Denial, unsupported mode and errors retain the list with honest status;
+there is no message-send fallback, model turn, sampling or write on opening.
+Pending requests are serialized. Late responses after teardown, host inline return,
+or removal/replacement of the exact authorized peer row cannot select a thread.
+The accepted panel reuses the PLAT-657 message view, exact-text composer and
+capability-gated suggestions, not the global context-only presentation. Back may
+stay fullscreen. Host inline return clears selection and invalidates attached or
+pending context through the existing shared lifecycle before any pending send.
+Timeouts cannot retract a host display transition; late responses never select an
+old peer, and opening a peer still requires an explicit click.
+
+`web/inline-threads.spec.js` tests the real SDK in a synthetic sandbox host,
+including 320/1120px lists and panels, early/late initialization, denial/error,
+revocation, teardown, duplicate clicks and context cleanup. Capture previews with
+`INLINE_PREVIEW_DIR=/home/fulcra/.hermes/cache/scratch npm run test:browser` from
+`web/`: `mesh-inline-320.png`, `mesh-inline-1120.png`, and corresponding
+`mesh-inline-panel-320.png` / `mesh-inline-panel-1120.png`. These are synthetic
+Chromium previews, not live ChatGPT acceptance. Host preferences remain hints;
+actual host rendering and autoResize require operator acceptance.
 
 ## Implementation
 
@@ -417,7 +455,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v17.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v18.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

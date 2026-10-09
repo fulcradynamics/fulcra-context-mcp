@@ -5,8 +5,33 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v17.html"
-THREAD_UI_URI = "ui://fulcra/mesh/thread/v17.html"
+UI_URI = "ui://fulcra/mesh/v18.html"
+THREAD_UI_URI = "ui://fulcra/mesh/thread/v18.html"
+THREADS_UI_URI = "ui://fulcra/mesh/threads/v18.html"
+
+
+@app_mcp.tool(
+    title="Mesh threads",
+    app={"resourceUri": THREADS_UI_URI, "visibility": ["model", "app"]},
+    annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+)
+def mesh_threads_open() -> dict[str, str]:
+    """Show clickable Mesh threads in chat. Select a peer to request a conversation panel.
+
+    Does not write account data or send messages.
+    """
+    return {"presentation": "threads"}
+
+
+@app_mcp.resource(
+    THREADS_UI_URI,
+    mime_type="text/html;profile=mcp-app",
+    meta={"openai/ui": {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}},
+)
+def threads_html() -> str:
+    """Same compiled app, initially a compact thread list."""
+    return mesh_html().replace('<meta name="mesh-presentation" content="global">',
+                               '<meta name="mesh-presentation" content="threads">', 1)
 
 
 @app_mcp.tool(

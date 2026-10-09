@@ -152,7 +152,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     status.textContent = 'Loading messages…';
     requestRefresh();
   }
-  return { select, refresh: read, failed, dispose() {
+  return { select, back: onBack, refresh: read, failed, dispose() {
     generation++; selected = undefined;
     messageList.dispose();
     load.removeEventListener('click', onLoad);
