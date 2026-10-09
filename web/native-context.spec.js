@@ -59,7 +59,8 @@ for (const noMessage of [true, false]) test(`context-only handoff is the sole ac
   await expect(ui.locator('textarea')).toHaveCount(0);
   await expect(ui.getByRole('button', { name: 'Tell my agent', exact: true })).toHaveCount(0);
   await expect(action(ui)).toBeEnabled();
-  await expect(ui.locator('#thread-composer')).toContainText('Attaches only the displayed thread context');
+  await expect(ui.locator('#thread-help')).toContainText('Attaches only the displayed thread context');
+  await expect(ui.locator('#thread-help')).toBeHidden();
   await page.clock.runFor(20000);
   expect(await page.evaluate(() => [window.contexts.length, window.sends.length])).toEqual([0, 0]);
   await action(ui).click();

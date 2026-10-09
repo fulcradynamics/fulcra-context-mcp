@@ -24,14 +24,21 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   let queryVersion = 0;
   let returnFocus;
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
-    (item, { record, source, direction, stale, last_success_at }) => {
-      if (!item.firstChild) item.append(doc.createElement('p'), doc.createElement('pre'));
+    (item, { record, source, direction }) => {
+      if (!item.firstChild) {
+        const date = doc.createElement('p');
+        date.className = 'message-date';
+        item.append(doc.createElement('p'), date, doc.createElement('pre'));
+      }
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
-      const text = `${direction} — ${source.fulcra_userid} / ${source.id} — ` + (timestamp && Number.isFinite(+timestamp)
-        ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable')
-        + (stale ? ` — Stale; access not verified. Last success: ${last_success_at ?? 'unknown'}` : '');
+      const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
+      const text = `${direction} (${name})`;
       if (item.firstChild.textContent !== text) item.firstChild.textContent = text;
+      const dateText = timestamp && Number.isFinite(+timestamp)
+        ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
+      const date = item.children[1];
+      if (date.textContent !== dateText) date.textContent = dateText;
       const body = messageText(record);
       if (item.lastChild.textContent !== body) item.lastChild.textContent = body;
     });
@@ -167,10 +174,7 @@ export function messageText(record) {
   try {
     const message = JSON.parse(record.note);
     if (message?.v === 1 && typeof message.body === 'string') {
-      const metadata = ['kind', 'to', 'to_user', 'slug', 'mid']
-        .filter(key => typeof message[key] === 'string')
-        .map(key => `${key}: ${message[key]}`).join(' · ');
-      return `${metadata}\n\n${message.body}`;
+      return message.body;
     }
   } catch { /* Non-envelope notes remain readable, not silently discarded. */ }
   return `Unrecognized mesh envelope — raw note:\n${record.note}`;

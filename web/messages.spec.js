@@ -48,7 +48,56 @@ async function respond(page, index, rows, truncated = false) {
     window.reply(request.id, { content: [{ type: 'text', text: `Records for ${request.params.arguments.data_type} from start to end${truncated ? ' (showing the first 1 of 2; narrow the time range for the rest)' : ''}: ${JSON.stringify(rows)}` }] });
   }, { index, rows, truncated });
 }
+for (const width of [1120, 320]) test(`simplified message headers and muted separate dates at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 1100 });
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
+  const ui = await open(page);
+  await page.addStyleTag({ content: 'body { margin: 0; background: black; } iframe { display: block; width: 100%; height: 100vh; border: 0; }' });
+  await choose(ui);
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
+  await respond(page, 0, [{ id: 'out', recorded_at: '2026-01-10T10:00:00Z', note: JSON.stringify({ v: 1, kind: 'message', mid: 'out', body: 'The route is ready. Shall we meet by the river?' }) }]);
+  await respond(page, 1, [{ id: 'in', recorded_at: '2026-01-10T11:00:00Z', note: JSON.stringify({ v: 1, kind: 'reply', mid: 'in', body: 'Yes, the riverside meeting point works for me.' }) }]);
+  const row = ui.locator('#messages > li').first();
+  await expect(row.locator('p').first()).toHaveText(`Incoming (${peer.name})`);
+  const date = row.locator('.message-date');
+  await expect(date).toHaveText(await row.evaluate(() => `${new Date('2026-01-10T11:00:00Z').toLocaleString()} (your local time)`));
+  await expect(date).toHaveCSS('color', 'rgb(166, 166, 173)');
+  const headingBox = await row.locator('p').first().boundingBox(), dateBox = await date.boundingBox();
+  expect(dateBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height);
+  expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
+  if (process.env.SIMPLIFY_PREVIEW_DIR) {
+    await page.screenshot({ path: `${process.env.SIMPLIFY_PREVIEW_DIR}/thread-${width}.png` });
+    await row.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${process.env.SIMPLIFY_PREVIEW_DIR}/messages-${width}.png` });
+    await ui.locator('.reading-details summary').click();
+    await expect(ui.locator('#thread-help')).toBeVisible();
+    await page.screenshot({ path: `${process.env.SIMPLIFY_PREVIEW_DIR}/about-${width}.png` });
+  }
+});
+
 // Synthetic fixtures only: the real bundled SDK talks to this local host harness.
+test('global handoff help lives in About this thread and obsolete date copy is absent', async ({ page }) => {
+  const ui = await open(page);
+  await choose(ui);
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
+  await respond(page, 0, []); await respond(page, 1, []);
+  const about = ui.locator('.reading-details');
+  const help = about.getByText(/Attaches only the displayed thread context/);
+  await expect(help).toHaveCount(1);
+  await expect(help).toBeHidden();
+  await expect(ui.locator('#thread-composer > p')).toHaveCount(0);
+  await expect(ui.locator('body')).not.toContainText('Initially today and yesterday, in UTC. Dates are inclusive. Load messages applies edited dates.');
+  await about.locator('summary').click();
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('0 of 0 displayed records');
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await choose(ui);
+  await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
+  await respond(page, 2, []); await respond(page, 3, []);
+  await expect(help).toHaveCount(1);
+  await expect(tell(ui)).toBeEnabled();
+});
 test('Refresh threads is hidden in detail and restored by Back', async ({ page }) => {
   const ui = await open(page);
   const refresh = ui.getByRole('button', { name: 'Refresh threads', exact: true });
@@ -198,10 +247,11 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   await respond(page, 2, [{ recorded_at: '2026-01-03T12:00:00Z', note: 'second channel' }]);
   const rows = ui.locator('#messages > li');
   await expect(rows).toHaveCount(3);
-  await expect(rows.last()).toContainText('Incoming');
-  await expect(rows.last()).toContainText(`peer-user / ${peer.id}`);
-  await expect(rows.nth(1)).toContainText(`Outgoing — me / ${own.id}`);
-  await expect(rows.first()).toContainText(second.id);
+  await expect(rows.last().locator('p').first()).toHaveText(`Incoming (${peer.name})`);
+  await expect(rows.nth(1).locator('p').first()).toHaveText(`Outgoing (${own.name})`);
+  await expect(rows.first().locator('p').first()).toHaveText(`Outgoing (${second.name})`);
+  await expect(ui.locator('#messages')).not.toContainText('MomentAnnotation/');
+  await expect(rows.last().locator('pre')).toHaveText('<img src=x onerror=alert(1)>unacked reply');
   await expect(ui.locator('#messages img')).toHaveCount(0);
   await expect(tell(ui)).toHaveCount(1);
   await expect(ui.locator('#messages textarea')).toHaveCount(0);
@@ -223,7 +273,7 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   expect(context.peer_fulcra_userid).toBe('peer-user');
   expect(context.range).toEqual({ start_time: args[0].start_time, end_time: args[0].end_time });
   expect(context.messages.map(m => m.source)).toEqual([
-    { id: second.id, fulcra_userid: 'me' }, { id: own.id, fulcra_userid: 'me' }, { id: peer.id, fulcra_userid: 'peer-user' },
+    { id: second.id, name: second.name, fulcra_userid: 'me' }, { id: own.id, name: own.name, fulcra_userid: 'me' }, { id: peer.id, name: peer.name, fulcra_userid: 'peer-user' },
   ]);
   await expect(ui.locator('#context-status')).toContainText('Context attached');
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
@@ -363,7 +413,9 @@ test('oversized displayed record is omitted whole, clipping disclosed in preview
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, [{ note: 'small' }, { note: 'x'.repeat(30000) }]);
   await expect(ui.locator('#messages > li')).toHaveCount(2);
-  await expect(ui.locator('#thread-composer')).toContainText('Context clipped — 1 displayed records omitted');
+  await ui.locator('.reading-details summary').click();
+  await expect(ui.locator('#thread-help')).toBeVisible();
+  await expect(ui.locator('#thread-help')).toContainText('Context clipped — 1 displayed records omitted');
   await tell(ui).click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
   const payload = await page.evaluate(() => window.contexts[0].params.content[0].text);

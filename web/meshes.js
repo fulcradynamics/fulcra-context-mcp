@@ -69,7 +69,7 @@ export async function discoverThreads(app) {
       [peer] = recipients;
     }
     if (!threads.has(peer)) threads.set(peer, { peer, sources: [], warnings: [] });
-    threads.get(peer).sources.push({ id: entry.id, fulcra_userid: owner, direction });
+    threads.get(peer).sources.push({ id: entry.id, name: entry.name, fulcra_userid: owner, direction });
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {

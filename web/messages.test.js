@@ -18,8 +18,15 @@ test('errors and malformed results are not empty history', () => {
   }
 });
 
-test('mesh envelope body and metadata are readable; invalid notes remain visible', () => {
-  assert.match(messageText({ note: JSON.stringify({ v: 1, mid: 'm', to: 'chatgpt', to_user: 'peer', kind: 'directive', slug: 'hello', body: '<b>Hello</b>' }) }), /<b>Hello<\/b>/);
-  assert.match(messageText({ note: 'not JSON' }), /Unrecognized.*not JSON/s);
+test('recognized v1 notes display only the existing body, without generated metadata', () => {
+  const body = '  <b>Hello</b>\nkind: literal body text\n';
+  assert.equal(messageText({ note: JSON.stringify({ v: 1, mid: 'm', to: 'chatgpt', to_user: 'peer', kind: 'directive', slug: 'hello', body }) }), body);
+  assert.equal(messageText({ note: JSON.stringify({ v: 1, body: '' }) }), '');
+});
+
+test('unknown raw notes stay intact without new parsing or normalization', () => {
+  for (const note of ['not JSON', '  kind: note\n\nraw body  ', '{"v":2,"body":"future"}', '{"v":1,"body":42}', 'null']) {
+    assert.equal(messageText({ note }), `Unrecognized mesh envelope — raw note:\n${note}`);
+  }
   assert.match(messageText({}), /no note/i);
 });

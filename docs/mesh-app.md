@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v18.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v19.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -14,7 +14,7 @@ native picker tool. Its metadata is exactly
 `{"openai/extensions": {"mentions/search": {}}, "ui": {"visibility": ["app"]}}`
 (apart from framework metadata). It returns `content: []` and
 `structuredContent: {items: ResourceLink[]}`. This is not an in-widget popup or a
-new UI entrypoint; the existing v18 UI tools and resources are unchanged.
+new UI entrypoint; mention search does not change the UI tools or resources.
 
 An empty query returns the first **20** accessible exact peers, ordered by exact
 peer ID; typeahead applies a case-insensitive substring match to the account label
@@ -103,7 +103,7 @@ decorative animations, hero/bento layouts or stock imagery. The refresh spinner 
 a functional exception for request observability. The identity image is the existing
 `fulcra_mcp/static/icon.png`, embedded unchanged, alongside a plain text wordmark;
 no new logo was invented. Metadata uses a lighter gray for readability on dark
-surfaces. Message bodies, source UUIDs and expanded context wrap at narrow widths.
+surfaces. Message bodies, catalog labels and expanded context wrap at narrow widths.
 
 Editable styles live in `web/styles.css`. `web/build.mjs` embeds them, the existing
 brand image, the bundled Rubik Latin variable WOFF2 and its complete OFL license
@@ -181,7 +181,7 @@ agents sharing one account are not distinguishable through these APIs.
 - Incoming: the catalog's `fulcra_userid` identifies the channel owner and peer.
   Accessible incoming channels remain usable without a reciprocal/direct incoming
   grant or acknowledgement. A shared owner's stream is not proof that every record
-  is exclusively addressed to this user; source identity is always visible.
+  is exclusively addressed to this user; exact source identity remains in the context preview.
 - Outgoing: all grants covering an own channel must be narrow exact-channel grants
   to the same single other `with_user_ids` recipient. Explicit
   `share_all_data=false`, one data type, and no groups/files are required.
@@ -214,11 +214,16 @@ retries continue to request the submitted range, never the unsubmitted inputs.
 
 ## Messages and completeness
 
-Messages have Incoming/Outgoing labels and exact source owner/type IDs. **Latest
+Message headers show `Incoming (catalog item name)` or `Outgoing (catalog item name)`.
+Names come from the source catalog entry, not the account label or envelope;
+missing/blank names use `Catalog name unavailable`. Names are display-only:
+keyed row identity and authorization still use exact owner/type IDs, which remain
+in the bounded context and its preview rather than message headers. **Latest
 first** is the default; **Oldest first** reverses valid timestamps. Browser-local
-timestamps are shown; invalid/missing timestamps are
-labeled unavailable and placed last. Mesh envelopes show body and available
-routing/kind/slug/message-ID fields. Unrecognized notes remain visible as raw text.
+timestamps appear on a separate muted, smaller line; invalid/missing timestamps
+are labeled unavailable and placed last. Recognized v1 mesh envelopes show only
+the existing parsed body, without the generated routing/kind/slug/message-ID line.
+No new parsing or normalization is applied; unrecognized notes remain intact as raw text.
 All content is rendered as text, never HTML. Reading does not send, acknowledge,
 write records, or update model context automatically.
 
@@ -242,19 +247,28 @@ a successfully loaded empty thread; the preview and sent payload include stale a
 incomplete warnings. Discovery failure reads no cached channels. A message-source
 failure retains only that source's last-good
 records from the same range, marked stale with source identity and last-success
-time in the UI and bounded context. Other successful sources refresh normally.
+time in bounded context. Thread-level failure warnings and last-success status
+remain visible; the repeated per-message stale/access/last-success line is omitted.
+This is a presentation change, not a claim that retained records are current.
+Other successful sources refresh normally.
 Successful discovery removes revoked sources immediately, even if subsequent
 reads fail; a disappeared peer has no sendable cached context. Load messages or
 Refresh threads retries. Invite remains independent.
 The call indicator is in Fulcra Mesh; the host decides whether app-originated calls also
 appear in the conversation UI.
 
-## Global presentation: Continue conversation in chat (resource v18)
+## Global presentation: Continue conversation in chat (resource v19)
 
 Within the global entrypoint, the sole thread action is **Continue conversation in chat**, directly below the
 date pickers and above messages in both orders. There is no instruction textarea,
 Tell my agent fallback, or combined request relay. The user types and sends their
 request in the host's native chat.
+
+The explanatory handoff text and displayed/omitted record notice live in the
+expandable **About this thread**, collapsed by default, rather than below the
+button. The separate exact-context preview remains available. The redundant date
+instruction paragraph is removed; date behavior and applied-range status are unchanged.
+The conversation-panel composer, help and sampling controls remain distinct.
 
 Only an explicit click calls
 `app.updateModelContext({content: [{type: 'text', text}]})` with the exact current
@@ -298,7 +312,7 @@ context-only attachment for the global presentation. The separate thread-entrypo
 tests below cover its explicit message-send path. These verify local protocol
 behavior with synthetic data, not live ChatGPT acceptance.
 
-## Thread entrypoint: Mesh conversation (PLAT-657, resource v18)
+## Thread entrypoint: Mesh conversation (PLAT-657, resource v19)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -311,7 +325,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v18.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v19.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -379,11 +393,11 @@ These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screensh
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
 
-## Inline Mesh threads (PLAT-666, resource v18)
+## Inline Mesh threads (PLAT-666, resource v19)
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v18.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v19.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -504,7 +518,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v18.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v19.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

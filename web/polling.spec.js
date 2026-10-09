@@ -38,6 +38,26 @@ async function open(page, entries = []) {
   await expect(ui.locator('#mesh-status')).toContainText('threads returned');
   return ui;
 }
+test('catalog label changes do not replace keyed rows or merge identically named sources', async ({ page }) => {
+  const ui = await open(page, [channel('peer', 'a'), channel('peer', 'b')]);
+  await page.evaluate(() => {
+    window.rows['peer/MomentAnnotation/a'] = [{ id: 'same', note: 'first channel' }];
+    window.rows['peer/MomentAnnotation/b'] = [{ id: 'same', note: 'second channel' }];
+  });
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  await ui.locator('#messages li').evaluateAll(rows => rows.forEach((row, index) => { row.identityMarker = index; }));
+  await page.evaluate(() => { window.entries[0].name = 'Mesh Outbox <b>renamed</b>'; });
+  await page.clock.runFor(10000);
+  const renamed = ui.locator('#messages li').filter({ hasText: 'first channel' });
+  const unchanged = ui.locator('#messages li').filter({ hasText: 'second channel' });
+  await expect(renamed.locator('p').first()).toHaveText('Incoming (Mesh Outbox <b>renamed</b>)');
+  expect(await renamed.evaluate(row => row.identityMarker)).toBe(0);
+  expect(await unchanged.evaluate(row => row.identityMarker)).toBe(1);
+  await expect(ui.locator('#messages b')).toHaveCount(0);
+  await expect(unchanged.locator('p').first()).toHaveText('Incoming (Mesh Outbox)');
+});
+
 test('refresh preserves focus, disclosures, pending attachment and last-good records with explicit stale state', async ({ page }) => {
   const ui = await open(page, [channel()]);
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'first', note: 'last good' }]; });
@@ -68,6 +88,7 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages')).toContainText('last good');
   await expect(ui.locator('#message-status')).toContainText('Stale');
+  await expect(ui.locator('#messages')).not.toContainText('Stale; access not verified. Last success:');
   await expect(ui.locator('#message-status')).toContainText('Last success:');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
   await page.evaluate(() => { window.fail = ['get_data_catalog']; });

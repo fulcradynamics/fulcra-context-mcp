@@ -7,7 +7,8 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   const doc = container.ownerDocument;
   const button = doc.createElement('button');
   button.type = 'button'; button.textContent = 'Continue conversation in chat';
-  const help = doc.createElement('p');
+  const help = presentation === 'thread' ? doc.createElement('p') : doc.querySelector('#thread-help');
+  help.textContent = '';
   const details = doc.createElement('details');
   const summary = doc.createElement('summary');
   summary.textContent = 'Context attached to chat';
@@ -20,7 +21,8 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
     ? setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId)
     : setupNativeContext(app, lifecycle, currentContext, button, doc.querySelector('#context-status'), isCurrent);
   if (presentation !== 'thread') container.append(button);
-  container.append(help, details);
+  if (presentation === 'thread') container.append(help);
+  container.append(details);
   return (peer, range, result, ready, loaded) => {
     peerId = peer;
     usable = loaded;
