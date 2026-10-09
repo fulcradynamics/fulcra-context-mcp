@@ -5,6 +5,7 @@ import io
 import json
 
 import pytest
+from uuid import UUID
 from fastmcp.exceptions import ToolError
 
 from conftest import FAKE_USER_ID, http_error
@@ -287,10 +288,14 @@ def _v1_type(fake_fulcra, type_id: str, schema: dict) -> None:
 
 
 def _recorded(fake_fulcra) -> tuple[str, dict, str]:
-    """(target type, the record, api version) of the one upload"""
+    """(target type, the record, api version) of the one upload. A v1 record's
+    generated id is checked to be a UUID and left out of the returned record."""
     (target, records, version), _ = fake_fulcra.record_data_type.call_args
     assert len(records) == 1
-    return target, records[0], version
+    record = dict(records[0])
+    if version == "v1":
+        UUID(record.pop("id"))
+    return target, record, version
 
 
 @pytest.mark.parametrize("base_type", ["Event", "Metric"])
@@ -314,7 +319,9 @@ async def test_record_data_sends_v1_user_defined_types_to_their_own_id(
     target, record, version = _recorded(fake_fulcra)
     # not the base type, which would store it as a plain Event/Metric record
     assert (target, version) == (type_id, "v1")
-    fake_fulcra.validate_records.assert_called_once_with(type_id, [record], "v1")
+    (validated_type, [validated], validated_version), _ = fake_fulcra.validate_records.call_args
+    assert (validated_type, validated_version) == (type_id, "v1")
+    assert {k: v for k, v in validated.items() if k != "id"} == record
     fake_fulcra.v1_catalog_schema.assert_called_once_with(type_id, "v1")
     assert record == {
         # v1 records aren't linked to their type by an annotation source
@@ -860,6 +867,10 @@ def _scoped_catalog(fake_fulcra):
 
     fake_fulcra.v1_catalog.side_effect = v1_catalog
     fake_fulcra.v1_catalog_schema.return_value = CHECK_IN_SCHEMA
+    fake_fulcra.get_shared_datasets.return_value = [
+        {"grant_type": "user", "sharing_fulcra_userid": SHARER_ID, "fulcra_data_types": ["Event"]},
+        {"grant_type": "user", "sharing_fulcra_userid": OTHER_SHARER_ID, "fulcra_data_types": ["Metric"]},
+    ]
 
 
 async def test_catalog_can_be_scoped_to_one_sharer(call, fake_fulcra):
@@ -918,7 +929,8 @@ async def test_catalog_lookup_of_a_type_outside_the_scope(call, fake_fulcra):
         "get_data_catalog", {"data_type": "Metric", "fulcra_userid": SHARER_ID}
     )
 
-    assert text.startswith(f"No data type found with ID 'Metric' for user {SHARER_ID}.")
+    # they share with this user, just not this type
+    assert text.startswith(f"User {SHARER_ID} shares data with this user, but not 'Metric'")
 
 
 async def test_catalog_scoped_to_a_user_who_shares_nothing(call, fake_fulcra):
@@ -927,9 +939,8 @@ async def test_catalog_scoped_to_a_user_who_shares_nothing(call, fake_fulcra):
 
     text = await call("get_data_catalog", {"fulcra_userid": stranger})
 
-    assert text == (
-        f"No data types for user {stranger} match. If this is another user, they "
-        "share nothing matching with you; list_shares shows who shares what."
+    assert text.startswith(
+        f"User {stranger} doesn't share any data with this user, or no longer does"
     )
 
 
