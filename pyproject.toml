@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.12",
     "fastmcp>=3.0.0,<4",
-    "fulcra-api>=0.1.44",
+    "fulcra-api>=0.1.49",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.3",
     "structlog>=25.4.0",
@@ -20,9 +20,6 @@ dependencies = [
 [tool.uv]
 exclude-newer = "2 weeks"
 exclude-newer-package = { fulcra = false, fulcra-api = false, fulcra-data-types = false }
-# fulcra-api mis-declares pytest<8 as a runtime dependency but never imports it;
-# override so the dev group can track current pytest.
-override-dependencies = ["pytest>=8"]
 
 [dependency-groups]
 dev = [

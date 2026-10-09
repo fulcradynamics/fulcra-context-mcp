@@ -297,14 +297,12 @@ async def test_data_updates_and_workouts_pass_user_id(call, fake_fulcra):
 
 
 async def test_time_series_passes_user_id_only_when_given(call, fake_fulcra):
-    import pandas as pd
-
-    fake_fulcra.metric_time_series.return_value = pd.DataFrame()
+    fake_fulcra.metric_time_series_rows.return_value = []
     await call(
         "get_time_series",
         {"data_type": "HeartRate", "start_time": START, "end_time": END, "sample_rate": 3600},
     )
-    assert "fulcra_userid" not in fake_fulcra.metric_time_series.call_args.kwargs
+    assert "fulcra_userid" not in fake_fulcra.metric_time_series_rows.call_args.kwargs
     await call(
         "get_time_series",
         {
@@ -315,7 +313,7 @@ async def test_time_series_passes_user_id_only_when_given(call, fake_fulcra):
             "fulcra_userid": PARTNER,
         },
     )
-    assert fake_fulcra.metric_time_series.call_args.kwargs["fulcra_userid"] == PARTNER
+    assert fake_fulcra.metric_time_series_rows.call_args.kwargs["fulcra_userid"] == PARTNER
 
 
 # --- get_data_updates(include_shared=True) ---------------------------------
