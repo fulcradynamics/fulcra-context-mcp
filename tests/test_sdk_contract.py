@@ -9,7 +9,6 @@ only pin the tool -> SDK wiring.
 
 import json
 
-import pandas as pd
 import pytest
 from conftest import FAKE_USER_ID
 
@@ -204,13 +203,13 @@ async def test_get_data_catalog(call, fake_fulcra):
 @pytest.mark.parametrize(
     "level,method",
     [
-        ("cycles", "sleep_cycles"),
-        ("stages", "sleep_stages"),
-        ("aggregate", "sleep_agg"),
+        ("cycles", "sleep_cycles_rows"),
+        ("stages", "sleep_stages_rows"),
+        ("aggregate", "sleep_agg_rows"),
     ],
 )
 async def test_get_sleep_levels(call, fake_fulcra, level, method):
-    getattr(fake_fulcra, method).return_value = pd.DataFrame([{"minutes": 420}])
+    getattr(fake_fulcra, method).return_value = [{"minutes": 420}]
     text = await call(
         "get_sleep", {"start_time": START, "end_time": END, "level": level}
     )

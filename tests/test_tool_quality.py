@@ -55,11 +55,26 @@ async def test_time_series_sample_guard(call, fake_fulcra):
         },
     )
     assert "sample_rate" in text
-    fake_fulcra.metric_time_series.assert_not_called()
+    fake_fulcra.metric_time_series_rows.assert_not_called()
+
+
+async def test_time_series_keeps_each_samples_time(call, fake_fulcra):
+    # The DataFrame these came from was indexed by time, and to_json(orient=
+    # "records") dropped the index: agents got values with no timestamps.
+    samples = [
+        {"time": "2026-08-01T07:00:00+00:00", "heart_rate": 61.0},
+        {"time": "2026-08-01T08:00:00+00:00", "heart_rate": None},
+    ]
+    fake_fulcra.metric_time_series_rows.return_value = samples
+    text = await call(
+        "get_time_series",
+        {"data_type": "HeartRate", "start_time": START, "end_time": END, "sample_rate": 3600},
+    )
+    assert json.loads(text[text.index("["):]) == samples
 
 
 async def test_time_series_unsupported_type_points_to_get_records(call, fake_fulcra):
-    fake_fulcra.metric_time_series.side_effect = http_error(422)
+    fake_fulcra.metric_time_series_rows.side_effect = http_error(422)
     text = await call(
         "get_time_series",
         {"data_type": "not_a_metric", "start_time": START, "end_time": END},

@@ -910,7 +910,7 @@ async def get_time_series(
         kwargs["fulcra_userid"] = fulcra_userid
 
     try:
-        time_series_df = fulcra.metric_time_series(
+        rows = fulcra.metric_time_series_rows(
             metric=data_type,
             start_time=start_time,
             end_time=end_time,
@@ -926,9 +926,7 @@ async def get_time_series(
         raise
     return (
         f"Time series data for {data_type} from {start_time} to {end_time}: "
-        + time_series_df.to_json(
-            orient="records", date_format="iso", default_handler=str
-        )
+        + json.dumps(rows, default=str)
     )
 
 
@@ -1166,7 +1164,7 @@ async def get_sleep(
             kwargs["merge_overlapping"] = merge_overlapping
         if merge_contiguous is not None:
             kwargs["merge_contiguous"] = merge_contiguous
-        query_func = fulcra.sleep_stages
+        query_func = fulcra.sleep_stages_rows
     elif level == "aggregate":
         if mode is not None:
             kwargs["mode"] = mode
@@ -1176,18 +1174,16 @@ async def get_sleep(
             kwargs["agg_functions"] = agg_functions
         if time_zone is not None:
             kwargs["tz"] = time_zone
-        query_func = fulcra.sleep_agg
+        query_func = fulcra.sleep_agg_rows
     else:
-        query_func = fulcra.sleep_cycles
+        query_func = fulcra.sleep_cycles_rows
 
-    sleep_df = query_func(
+    rows = query_func(
         start_time=start_time,
         end_time=end_time,
         **kwargs,
     )
-    return f"Sleep {level} from {start_time} to {end_time}: " + sleep_df.to_json(
-        orient="records", date_format="iso", default_handler=str
-    )
+    return f"Sleep {level} from {start_time} to {end_time}: " + json.dumps(rows, default=str)
 
 
 @tools_mcp.tool(annotations={"title": "Get Location at Time", "readOnlyHint": True})
