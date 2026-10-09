@@ -2,14 +2,17 @@ import { discoverThreads } from './meshes.js';
 import { threadTitle } from './mesh-identifier.js';
 import { setupMessages } from './messages.js';
 import { createRefreshScheduler } from './refresh.js';
+import { icon, MessagesSquare, RefreshCw } from './icons.js';
 
 export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) {
   const status = doc.querySelector('#mesh-status');
   const list = doc.querySelector('#meshes');
+  const count = doc.querySelector('#mesh-count');
 
   let disposed = false, disposal, lastSuccess, nextRow = 0;
   const rows = new Map();
   const refreshButton = doc.querySelector('#refresh-threads');
+  refreshButton.prepend(icon(RefreshCw, 'btn-icon'));
   status.textContent = 'Loading threads…';
   const inlineList = entrypoint.presentation === 'threads';
   const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
@@ -67,16 +70,22 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           let entry = rows.get(thread.peer);
           if (!entry) {
             const row = doc.createElement('li');
+            row.className = 'thread-row animate-rise';
+            row.style.animationDelay = `${Math.min(nextRow, 12) * 40}ms`;
             const button = doc.createElement('button');
-            const account = doc.createElement('p');
+            const account = doc.createElement('p'); account.className = 'thread-account';
             button.type = 'button'; button.id = `thread-${++nextRow}`;
-
-            entry = { row, button, account, thread };
+            button.className = 'thread-button';
+            const tile = doc.createElement('span'); tile.className = 'row-tile';
+            tile.append(icon(MessagesSquare, 'row-icon'));
+            const peer = doc.createElement('span'); peer.className = 'thread-peer';
+            button.append(tile, peer);
+            entry = { row, button, peer, account, thread };
             button.addEventListener('click', () => choose(entry));
             row.append(button, account); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          entry.button.textContent = threadTitle(thread);
+          entry.peer.textContent = threadTitle(thread);
           entry.account.textContent = thread.accountName ? `Account: ${thread.accountName}` : '';
           entry.account.hidden = !thread.accountName;
         }
@@ -89,6 +98,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible threads. Choose a thread below; no other peer was selected.';
         }
         lastSuccess = new Date().toISOString();
+        count.textContent = String(discovery.threads.length);
         status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} threads returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
         if (doc.visibilityState !== 'visible') return true;
         return await detail.refresh(discovery);

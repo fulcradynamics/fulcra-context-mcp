@@ -42,12 +42,24 @@ test('mesh identifier renames list/detail without identity, routing or context c
   const ui = await open(page, [{ ...channel(), description: '[mesh_identifier: "Travel"]' }]);
   const button = ui.getByRole('button', { name: 'Travel (peer)', exact: true });
   await expect(button).toBeVisible();
-  await button.evaluate(el => { el.identityMarker = true; });
+  await expect(button.locator(':scope > .row-tile > svg')).toHaveCount(1);
+  await expect(button.locator(':scope > .thread-peer')).toHaveText('Travel (peer)');
+  await button.evaluate(el => {
+    el.identityMarker = true;
+    el.originalTile = el.querySelector('.row-tile');
+    el.originalIcon = el.querySelector('svg');
+    el.originalPeer = el.querySelector('.thread-peer');
+  });
   await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'record', note: 'body' }]; });
   await button.click();
   await expect(ui.locator('#message-title')).toHaveText('Thread with Travel (peer)');
   await expect(ui.locator('#messages li')).toHaveCount(1);
   await ui.locator('#messages li').evaluate(el => { el.identityMarker = true; });
+  const contextBefore = await ui.locator('#thread-context').textContent();
+  await ui.getByRole('button', { name: 'Continue conversation in chat', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
+  await expect(ui.locator('#context-status')).toContainText('attached');
+  const attachedBefore = await page.evaluate(() => window.contexts.map(r => r.params));
   await page.evaluate(() => { window.entries[0].description = '[mesh_identifier: "<b>Renamed</b>"]'; });
   await page.clock.runFor(10000);
   await expect(ui.locator('#message-title')).toHaveText('Thread with <b>Renamed</b> (peer)');
@@ -58,9 +70,23 @@ test('mesh identifier renames list/detail without identity, routing or context c
   expect(context).toContain('MomentAnnotation/in');
   expect(context).toContain('peer');
   expect(context).not.toContain('Renamed');
+  // A successful read advances freshness, but labels must not enter context.
+  const withoutFreshness = text => JSON.parse(text.slice(text.indexOf('\n') + 1),
+    (key, value) => key === 'last_success_at' ? undefined : value);
+  expect(withoutFreshness(context)).toEqual(withoutFreshness(contextBefore));
+  expect(await page.evaluate(() => window.contexts.map(r => r.params))).toEqual(attachedBefore);
+  expect(await page.evaluate(() => window.sends)).toEqual([]);
   await ui.locator('#message-back').click();
   const renamed = ui.getByRole('button', { name: '<b>Renamed</b> (peer)', exact: true });
   expect(await renamed.evaluate(el => el.identityMarker)).toBe(true);
+  await expect(renamed).toBeFocused();
+  await expect(renamed.locator(':scope > .row-tile > svg')).toHaveCount(1);
+  await expect(renamed.locator(':scope > .thread-peer')).toHaveText('<b>Renamed</b> (peer)');
+  await expect(renamed.locator('b')).toHaveCount(0);
+  expect(await renamed.evaluate(el =>
+    el.originalTile === el.querySelector('.row-tile') &&
+    el.originalIcon === el.querySelector('svg') &&
+    el.originalPeer === el.querySelector('.thread-peer'))).toBe(true);
   const calls = await page.evaluate(() => window.calls.map(r => r.params));
   expect(calls.every(c => ['get_data_catalog', 'list_shares', 'get_records'].includes(c.name))).toBe(true);
   expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'MomentAnnotation/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
@@ -448,9 +474,9 @@ test('new keyed rows animate once without moving layout; reorder preserves selec
   expect(await row.evaluate(el => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
   expect(await row.evaluate(el => getComputedStyle(el).transform)).toBe('none');
   const hierarchy = await row.evaluate(el => ({
-    heading: +getComputedStyle(el.firstChild).fontWeight, body: +getComputedStyle(el.lastChild).fontWeight,
-    dateMargin: parseFloat(getComputedStyle(el.children[1]).marginBottom),
-    dateLine: parseFloat(getComputedStyle(el.children[1]).lineHeight),
+    heading: +getComputedStyle(el.querySelector('.message-header')).fontWeight, body: +getComputedStyle(el.lastChild).fontWeight,
+    dateMargin: parseFloat(getComputedStyle(el.querySelector('.message-date')).marginBottom),
+    dateLine: parseFloat(getComputedStyle(el.querySelector('.message-date')).lineHeight),
   }));
   expect(hierarchy.heading).toBeGreaterThan(hierarchy.body);
   expect(hierarchy.dateMargin).toBeLessThanOrEqual(4);

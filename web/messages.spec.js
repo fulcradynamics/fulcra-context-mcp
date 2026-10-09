@@ -62,7 +62,7 @@ for (const width of [1120, 320]) test(`simplified message headers and muted sepa
   await expect(row.locator('p').first()).toHaveText(`Incoming (${peer.name})`);
   const date = row.locator('.message-date');
   await expect(date).toHaveText(await row.evaluate(() => `${new Date('2026-01-10T11:00:00Z').toLocaleString()} (your local time)`));
-  await expect(date).toHaveCSS('color', 'rgb(166, 166, 173)');
+  await expect(date).toHaveCSS('color', 'rgb(138, 138, 142)');
   const headingBox = await row.locator('p').first().boundingBox(), dateBox = await date.boundingBox();
   expect(dateBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height);
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);

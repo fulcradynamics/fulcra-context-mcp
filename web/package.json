@@ -8,7 +8,8 @@
     "test:browser": "playwright test *.spec.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "1.7.5"
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "lucide": "^1.54.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

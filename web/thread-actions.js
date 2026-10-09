@@ -1,20 +1,25 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
+import { icon, Send } from './icons.js';
 const options = { timeout: 15000 };
 
 // Thread-only controls; the shared composer still owns the bounded context and
 // its lifecycle. Draft state belongs to the peer, pending state to the app.
-export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId) {
+export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, orderField) {
   const doc = container.ownerDocument;
   const label = doc.createElement('label'); label.textContent = 'Tell your agent';
   const input = doc.createElement('textarea'); input.rows = 2;
   input.value = draft.value; label.append(input);
-  const send = doc.createElement('button'); send.type = 'button'; send.textContent = 'Tell my agent';
+  const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary';
+  send.append(icon(Send, 'btn-icon'), doc.createTextNode('Tell my agent'));
   let status = doc.querySelector('#send-status');
   if (!status) {
     status = doc.createElement('p'); status.id = 'send-status'; status.setAttribute('role', 'status');
     doc.querySelector('#context-status').before(status);
   }
-  container.append(label, send);
+  const actions = doc.createElement('div'); actions.className = 'composer-actions';
+  actions.append(send);
+  if (orderField) actions.append(orderField);
+  container.append(label, actions);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Use the native chat.';
   let updateSuggestions = () => {};
