@@ -8,7 +8,7 @@ import urllib.error
 from enum import Enum
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from fastmcp import FastMCP
@@ -466,12 +466,15 @@ async def record_data(
     end_time: AwareDatetime | None = None,
     tags: list[str] | None = None,
     fields: dict[str, Any] | None = None,
+    record_id: str | None = None,
 ) -> str:
     """Record a single record for a recordable data type.
 
     Use get_data_catalog to find data types; user-defined ones use the
     "<BaseType>/<uuid>" ID form (create new ones with create_data_type).
-    Recorded data can be read back with get_records.
+    Recorded data can be read back with get_records. For v1 types (including
+    user-defined Event and Metric types), the response gives the new record's
+    id, which get_records returns as the record's `id` and delete_records takes.
 
     Args:
         data_type: The ID of the data type to record to.
@@ -486,6 +489,10 @@ async def record_data(
         fields: Values for the data type's own fields, e.g.
             {"mood": "calm", "energy": 7}. get_data_catalog with data_type
             set lists a user-defined type's fields.
+        record_id: v1 types only. The id (a UUID) to give the record. Leave it
+            out and one is generated. To retry a send whose outcome is
+            unknown, pass the id from the first attempt: a record sent again
+            with the same id is stored as the same record, not a second one.
     Returns:
         Confirmation including the upload ID and the recorded fields.
     """
@@ -519,11 +526,18 @@ async def record_data(
         return "end_time must not be before start_time."
 
     api_version = entry["api_version"]
+    if record_id is not None:
+        if api_version != "v1":
+            return f"record_id applies only to v1 data types; {data_type!r} is {api_version}."
+        try:
+            record_id = str(UUID(record_id)).lower()
+        except ValueError:
+            return f"record_id must be a UUID, got {record_id!r}."
     fields = fields or {}
     if reserved := sorted(_fields_set_by_tool(api_version) & fields.keys()):
         return (
-            f"fields can't set {', '.join(reserved)}; use the start_time, end_time "
-            "and tags parameters instead."
+            f"fields can't set {', '.join(reserved)}; use the start_time, end_time, "
+            "tags and record_id parameters instead."
         )
     for name, given in (("value", value), ("note", note)):
         if given is not None and name in fields:
@@ -569,6 +583,14 @@ async def record_data(
                 f"fields are: {', '.join(_recordable_fields(declared))}."
             )
 
+    # Give v1 records an id up front (the server keeps one the client sends),
+    # so the caller learns its record's id without reading it back, and a
+    # retry with the same id is stored as the same record.
+    if is_v1 and (not isinstance(declared, dict) or "id" in declared):
+        record = {"id": record_id or str(uuid4()), **record}
+    elif record_id is not None:
+        return f"{data_type} doesn't take a record_id."
+
     if tags:
         try:
             record["tags"] = [t["id"] for t in fulcra.create_tags(tags)]
@@ -585,10 +607,77 @@ async def record_data(
         return f"Record is not valid for {data_type}: {error_msg}.{hint}"
 
     resp = fulcra.record_data_type(target_type, [record], api_version)
+    with_id = f" with id {record['id']}" if "id" in record else ""
     return (
-        f"Recorded 1 {data_type} record (upload ID {resp.get('upload_id')}): "
+        f"Recorded 1 {data_type} record{with_id} (upload ID {resp.get('upload_id')}): "
         + json.dumps(record)
         + ". It can be read back with get_records."
+    )
+
+
+# The most records one delete_records call deletes.
+MAX_DELETE_RECORDS = 500
+
+
+@tools_mcp.tool(annotations={"title": "Delete Records", "destructiveHint": True})
+@_friendly_http_errors
+async def delete_records(data_type: str, record_ids: list[str]) -> str:
+    """Delete records from one of the user's own v1 data types.
+
+    Takes the records' ids, as get_records returns them in each record's `id`
+    (record_data also returns the id of each record it creates). Deleted
+    records stop appearing in get_records within about a minute, for the user
+    and for anyone the type is shared with; anyone who already read them may
+    still have a copy.
+
+    Args:
+        data_type: The ID of a v1 data type the user owns, e.g. "Event/<uuid>".
+        record_ids: The ids of the records to delete, at most 500.
+    """
+    if not record_ids:
+        return "record_ids is empty; give the ids of the records to delete (get_records lists them)."
+    if len(record_ids) > MAX_DELETE_RECORDS:
+        return f"At most {MAX_DELETE_RECORDS} records can be deleted per call; split the list."
+    ids = []
+    for record_id in record_ids:
+        try:
+            ids.append(str(UUID(record_id)).lower())
+        except ValueError:
+            return f"Record ids are UUIDs, and {record_id!r} isn't one. get_records lists each record's id."
+    ids = list(dict.fromkeys(ids))
+
+    fulcra = get_fulcra_object()
+    try:
+        entries = fulcra.v1_catalog(data_type=data_type)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
+        raise
+    # Only the user's own types: a type someone shares is in their account.
+    own = _own_userid(fulcra)
+    entries = [e for e in entries if own is None or e.get("fulcra_userid") in (None, own)]
+    if not entries:
+        return f"{data_type!r} isn't one of this user's data types; records can only be deleted from your own types."
+    if len(entries) != 1:
+        return f"Data type {data_type!r} matches {len(entries)} catalog entries; use an exact ID from get_data_catalog."
+    entry = entries[0]
+    if entry.get("api_version") != "v1" or not entry.get("recordable"):
+        return f"delete_records works on recordable v1 data types (such as user-defined Event and Metric types); {data_type!r} isn't one."
+
+    # A deletion is itself a record: a DeletedRecord naming the record's id
+    # and its base type, as the CLI's `fulcra delete` sends.
+    base_type = entry["id"].partition("/")[0]
+    deletions = [{"record_id": record_id, "data_type": base_type} for record_id in ids]
+    validation_errors = fulcra.validate_records("DeletedRecord", deletions, "v1")
+    if validation_errors:
+        error_msg = "; ".join(dict.fromkeys(msg for _, msg, _ in validation_errors))
+        return f"Could not delete from {data_type}: {error_msg}."
+    resp = fulcra.record_data_type("DeletedRecord", deletions, "v1")
+    noun = "record" if len(ids) == 1 else "records"
+    return (
+        f"Deleting {len(ids)} {noun} from {data_type} (upload ID {resp.get('upload_id')}). "
+        "They stop appearing in get_records within about a minute; an id that "
+        "doesn't exist in this type is ignored."
     )
 
 
@@ -729,11 +818,15 @@ async def get_data_catalog(
         )
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return f"No data type found with ID {data_type!r}{owner}. Call get_data_catalog without arguments to list all available types."
+            return _data_type_not_shared_message(fulcra, data_type, fulcra_userid) or (
+                f"No data type found with ID {data_type!r}{owner}. Call get_data_catalog without arguments to list all available types."
+            )
         raise
     if name:
         catalog = [e for e in catalog if name.lower() in (e.get("name") or "").lower()]
     if fulcra_userid and not catalog:
+        if message := _data_type_not_shared_message(fulcra, data_type, fulcra_userid):
+            return message
         return (
             f"No data types{owner} match. If this is another user, they share "
             "nothing matching with you; list_shares shows who shares what."
@@ -889,7 +982,9 @@ async def get_records(
             data_type, fulcra_userid=fulcra_userid
         )
     except ValueError:
-        return f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
+        return _data_type_not_shared_message(fulcra, data_type, fulcra_userid) or (
+            f"No data type found with ID {data_type!r}. Use get_data_catalog to list available types."
+        )
 
     results = []
     for entry in catalog_entries:
@@ -1639,6 +1734,48 @@ def _own_userid(fulcra) -> str | None:
         return None
 
 
+def _share_covers(shared_types: list[str], data_type: str) -> bool:
+    """Whether a share listing `shared_types` covers `data_type`: by its exact
+    ID, or, for a user-defined type, through its base type (as data-service's
+    access check does)."""
+    if data_type in shared_types:
+        return True
+    base_type, sep, _ = data_type.partition("/")
+    return bool(sep) and base_type in shared_types
+
+
+def _data_type_not_shared_message(
+    fulcra, data_type: str | None, fulcra_userid: str | None
+) -> str | None:
+    """Why another user's data type wasn't found, when the answer is that they
+    don't (or no longer) share it; None when it's something else, such as a
+    wrong ID. Lets an agent tell an ended share from a typo."""
+    if not fulcra_userid or fulcra_userid == _own_userid(fulcra):
+        return None
+    try:
+        grants = fulcra.get_shared_datasets()
+    except Exception:
+        return None
+    theirs = [
+        g for g in grants
+        if g.get("sharing_fulcra_userid") == fulcra_userid and g.get("grant_type") != "self"
+    ]
+    if not theirs:
+        return (
+            f"User {fulcra_userid} doesn't share any data with this user, or no longer "
+            "does: if they shared it before, they've stopped. list_shares shows who "
+            "shares what with this user."
+        )
+    if data_type is None or any(g.get("share_all_data") for g in theirs):
+        return None
+    if any(_share_covers(g.get("fulcra_data_types") or [], data_type) for g in theirs):
+        return None
+    return (
+        f"User {fulcra_userid} shares data with this user, but not {data_type!r} "
+        "(or no longer). list_shares(direction=\"incoming\") shows what they share."
+    )
+
+
 @tools_mcp.tool(annotations={"title": "Create Share", "destructiveHint": False})
 @_friendly_http_errors
 async def create_share(
@@ -1757,6 +1894,46 @@ async def delete_share(share_id: str) -> str:
             return f"No share of this user found with ID {share_id!r}. Use list_shares to find share IDs."
         raise
     return f"Deleted share {share_id}; its recipients no longer have access."
+
+
+@tools_mcp.tool(annotations={"title": "Leave Share", "destructiveHint": True})
+@_friendly_http_errors
+async def leave_share(grant_id: str) -> str:
+    """Give up access to something another user shares with this user, to
+    decline it or to stop receiving it.
+
+    Takes the "grant_id" of an incoming entry from
+    list_shares(direction="incoming"). Works for shares addressed to this user
+    directly; one that arrives through a group can't be left on its own, so
+    leave the group instead (leave_group). The other user can share again later.
+
+    Args:
+        grant_id: The "grant_id" of an incoming share, from list_shares.
+    """
+    try:
+        grant_id = str(UUID(grant_id)).lower()
+    except ValueError:
+        return f"grant_id must be a UUID, got {grant_id!r}. list_shares(direction=\"incoming\") lists them."
+    fulcra = get_fulcra_object()
+    grant = next(
+        (g for g in fulcra.get_shared_datasets() if str(g.get("grant_id") or "").lower() == grant_id),
+        None,
+    )
+    if grant is None:
+        return f"No incoming share with grant_id {grant_id!r}. list_shares(direction=\"incoming\") lists them."
+    if grant.get("grant_type") == "group":
+        return (
+            f"That share reaches this user through group {grant.get('group_id')}, so it "
+            "can't be left on its own. Leaving the group (leave_group) gives up access."
+        )
+    if grant.get("grant_type") != "user":
+        return f"Grant {grant_id!r} isn't a share from another user, so there's nothing to leave."
+    fulcra.delete_dataset_permission(grant_id)
+    who = grant.get("sharing_fulcra_user_name") or grant.get("sharing_fulcra_userid")
+    return (
+        f"Left the share {grant.get('datashare_name')!r} from {who}; this user no longer "
+        "has access to it. They can share with this user again later."
+    )
 
 
 #
