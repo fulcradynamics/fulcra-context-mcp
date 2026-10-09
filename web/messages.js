@@ -84,7 +84,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
-      const text = `${direction} (${name})`;
+      const text = direction === 'Outgoing' ? 'Outgoing' : `${direction} (${name})`;
       if (title.textContent !== text) title.textContent = text;
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; title.after(badge); }
@@ -96,7 +96,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => renderIdentity(title, thread.identifier, thread.peer, 'Thread with ',
-    thread.accountName ? ` — Account: ${thread.accountName}` : '');
+    thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
 
   function render(result, canSend = true) {
     ready = canSend;

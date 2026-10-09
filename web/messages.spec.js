@@ -283,8 +283,8 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   const rows = ui.locator('#messages > li');
   await expect(rows).toHaveCount(3);
   await expect(rows.last().locator('p').first()).toHaveText(`Incoming (${peer.name})`);
-  await expect(rows.nth(1).locator('p').first()).toHaveText(`Outgoing (${own.name})`);
-  await expect(rows.first().locator('p').first()).toHaveText(`Outgoing (${second.name})`);
+  await expect(rows.nth(1).locator('p').first()).toHaveText('Outgoing');
+  await expect(rows.first().locator('p').first()).toHaveText('Outgoing');
   await expect(ui.locator('#messages')).not.toContainText('MomentAnnotation/');
   await expect(rows.last().locator('pre')).toHaveText('<img src=x onerror=alert(1)>unacked reply');
   await expect(ui.locator('#messages img')).toHaveCount(0);

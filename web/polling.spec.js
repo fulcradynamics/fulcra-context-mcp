@@ -92,6 +92,16 @@ test('mesh identifier renames list/detail without identity, routing or context c
   expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'MomentAnnotation/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
 });
 
+test('account UUID fallback is not repeated in the thread title', async ({ page }) => {
+  const peer = '00000000-0000-0000-0000-000000000002';
+  const ui = await open(page, [{ ...channel(peer), description: '[mesh_identifier: "Travel"]' }]);
+  await page.evaluate(peer => { window.shares.incoming = [{ sharing_fulcra_userid: peer, sharing_fulcra_user_name: peer }]; }, peer);
+  await ui.getByRole('button', { name: `Travel (${peer})`, exact: true }).click();
+  await expect(ui.locator('#message-status')).toContainText('No messages');
+  await expect(ui.locator('#message-title')).toHaveText(`Thread with Travel (${peer})`);
+  await expect(ui.locator('#message-title .identity-secondary')).toHaveText(` (${peer})`);
+});
+
 test('outbox names remain distinguishable and selected exact IDs stay secondary', async ({ page }) => {
   const ui = await open(page, [channel('me', 'a'), channel('me', 'b')]);
   await page.evaluate(() => { window.shares.outgoing = ['a', 'b'].map(id => ({
