@@ -86,8 +86,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           }
           entry.thread = thread;
           renderIdentity(entry.peer, thread.identifier, thread.peer);
-          entry.account.textContent = thread.accountName ? `Account: ${thread.accountName}` : '';
-          entry.account.hidden = !thread.accountName;
+          const accountName = thread.accountName !== thread.peer ? thread.accountName : '';
+          entry.account.textContent = accountName ? `Account: ${accountName}` : '';
+          entry.account.hidden = !accountName;
         }
         if (launchPending) {
           launchPending = false;

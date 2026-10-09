@@ -4,14 +4,14 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
-### Direct mesh messaging (1.2.0 / UI v26)
+### Direct mesh messaging (1.2.0 / UI v27)
 
 Adds model/app-visible `mesh_send` with authenticated own-outbox/peer grant checks,
 unchanged v1 envelopes and independent readback. Global and conversation panels
 share direct Send, optimistic reconciliation and a separate optional-message chat
 handoff. Pair with Fulcra plugin 0.2.6, refresh the server connection and reinstall
 the plugin. No deployment or live-account acceptance is implied by local tests;
-see [the app contract and limitations](docs/mesh-app.md#shared-composer-and-direct-sending-resource-v26).
+see [the app contract and limitations](docs/mesh-app.md#shared-composer-and-direct-sending-resource-v27).
 
 ### Version bump
 
