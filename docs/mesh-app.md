@@ -1,6 +1,6 @@
 # Fulcra Mesh MCP App
 
-`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v24.html`.
+`aicq_open({})` returns a readiness message and advertises `ui://fulcra/mesh/v25.html`.
 The existing server serves the self-contained resource. After connecting, the UI
 calls `get_data_catalog(name="Mesh Outbox")` and `list_shares(direction="both")`
 through the standard MCP Apps SDK's `app.callServerTool`. Both are read-only.
@@ -71,8 +71,11 @@ JSON request serialization, and 303 handling with synthetic HTTP responses,
 including independent readback and preservation failures. Deployed/live behavior
 remains untested; no live-account writes are part of verification.
 
-All shared list/detail presentations display `label (peerUUID)` when a valid
-marker exists, otherwise the existing peer UUID behavior. Prefer valid outgoing
+All shared list/detail presentations and composer captions put the readable label
+first, with the exact peer UUID on a smaller, muted line. Without a valid marker,
+the UUID remains the primary identifier. Named outboxes show their data-type ID
+as secondary text below the delivery selector; duplicate names retain exact IDs
+in option labels so channels can still be distinguished. Prefer valid outgoing
 labels owned by the current user over incoming ones. With multiple candidates in
 the preferred direction, the lexically smallest exact data-type ID wins,
 independent of catalog order or label text. Account-owner names remain separately
@@ -82,7 +85,7 @@ Rename polling updates existing keyed rows and headings, not identities. Message
 block catalog names and owner/type provenance in attached context stay unchanged;
 display identifiers are excluded from message source context. Mention search uses
 account labels and exact peer IDs; the three base resources and direct-start
-variant use v24.
+variant use v25.
 
 ## Native composer at-mentions
 
@@ -365,7 +368,7 @@ Refresh threads retries. Invite remains independent.
 The host decides whether app-originated calls appear in its conversation UI;
 the app does not depend on those traces for first-load or failure feedback.
 
-## Shared composer and direct sending (resource v24)
+## Shared composer and direct sending (resource v25)
 
 Both the global app and conversation panel use a two-row composer labeled
 `Talk to <thread identifier>` and a primary **Send** button. Send calls the
@@ -442,7 +445,7 @@ suites cover bounded context, capability gates, stale/revoked sources and host r
 Python tests cover authorization, all covering grants, exact readback and per-user
 HTTP OAuth isolation. Live ChatGPT and backend ingestion latency remain unverified.
 
-## Thread entrypoint: Mesh conversation (resource v24)
+## Thread entrypoint: Mesh conversation (resource v25)
 
 `mesh_conversation_open` is titled **Mesh conversation**, visible to both model and
 app, read-only, and registered with `openai/ui.entrypoints: [{type: "thread"}]`.
@@ -455,7 +458,7 @@ unknown, unavailable or ambiguous peer stays on the picker with an explanation;
 no different peer is substituted. Multiple eligible channels for one exact peer
 are still one thread, not ambiguity.
 
-The tool advertises `ui://fulcra/mesh/thread/v24.html`. Its resource serves the
+The tool advertises `ui://fulcra/mesh/thread/v25.html`. Its resource serves the
 same compiled `mesh.html` as the global entrypoint, replacing only the fixed
 `mesh-presentation` meta tag. Presentation is never inferred from `displayMode`:
 both entrypoints may be fullscreen. Initial tool-result/cancellation handlers are
@@ -509,11 +512,11 @@ These are scrolled, fixed-height synthetic iframe previews, not ChatGPT screensh
 they check the small textarea, suggestion controls and horizontal fit, not real-host
 autoResize or overlay behavior.
 
-## Inline Mesh threads (resource v24)
+## Inline Mesh threads (resource v25)
 
 `mesh_threads_open({})`, titled **Mesh threads**, is read-only and visible to model
 and app. It returns `{presentation: "threads"}` without accessing an account. Its
-resource `ui://fulcra/mesh/threads/v24.html` serves the same compiled HTML with a
+resource `ui://fulcra/mesh/threads/v25.html` serves the same compiled HTML with a
 fixed `mesh-presentation="threads"` meta marker. Resource metadata prefers `inline`
 and advertises `["inline", "fullscreen"]`, matching this presentation's app
 capabilities. Inline is a display mode, not an invented entrypoint type. Existing
@@ -644,7 +647,7 @@ For a transport smoke test, use MCP Inspector and configure that same command:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v24.html`.
+List tools, call `aicq_open` with `{}`, and read `ui://fulcra/mesh/v25.html`.
 The tool is app-visible, so a host may hide it from model-facing tool selectors.
 
 ## Reach the local branch from ChatGPT

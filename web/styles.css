@@ -140,6 +140,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 }
 .thread-button:hover:not(:disabled) { background: transparent; }
 .thread-peer { min-width: 0; overflow-wrap: anywhere; }
+.identity-secondary { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
 .thread-account { margin: 4px 0 0; padding-left: 48px; }
 
 /* Message rows: direction tile in column 1, stacked header / date / body in

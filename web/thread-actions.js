@@ -1,5 +1,5 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
-import { threadTitle } from './mesh-identifier.js';
+import { renderIdentity } from './identity.js';
 import { clearPostedDraft, matchesPost, messageId, recipientAgent } from './mesh-send.js';
 import { icon, Send } from './icons.js';
 const options = { timeout: 15000 };
@@ -19,11 +19,12 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   addressTitle.textContent = 'Delivery address';
   const outboxLabel = doc.createElement('label'); outboxLabel.textContent = 'Your outbox';
   const outbox = doc.createElement('select'); outboxLabel.append(outbox);
+  const outboxId = doc.createElement('p'); outboxId.className = 'outbox-id identity-secondary';
   const agentLabel = doc.createElement('label'); agentLabel.textContent = 'Recipient agent (exact name)';
   const agent = doc.createElement('input'); agent.type = 'text'; agent.maxLength = 200; agentLabel.append(agent);
   const addressHelp = doc.createElement('p');
   addressHelp.textContent = 'Uses an existing outgoing channel only. Confirm the exact recipient agent if no unique address is available from displayed outgoing messages. No sharing is created.';
-  address.append(addressTitle, outboxLabel, agentLabel, addressHelp);
+  address.append(addressTitle, outboxLabel, outboxId, agentLabel, addressHelp);
   let status = doc.querySelector('#send-status');
   if (!status) {
     status = doc.createElement('p'); status.id = 'send-status'; status.setAttribute('role', 'status');
@@ -39,18 +40,25 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   draft.posts ??= []; draft.agents ??= {};
   const update = () => {
     const current = view();
-    caption.textContent = `Talk to ${current.thread ? threadTitle(current.thread) : peerId() ?? 'this thread'}`;
+    renderIdentity(caption, current.thread?.identifier, current.thread?.peer ?? peerId() ?? 'this thread', 'Talk to ');
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
       sourceIdentity = identity;
       outbox.replaceChildren();
       const placeholder = doc.createElement('option'); placeholder.value = ''; placeholder.textContent = outgoing.length ? 'Choose an outbox' : 'No outgoing outbox'; outbox.append(placeholder);
-      for (const s of outgoing) { const option = doc.createElement('option'); option.value = s.id; option.textContent = `${s.name} (${s.id})`; outbox.append(option); }
+      for (const s of outgoing) {
+        const option = doc.createElement('option'); option.value = s.id;
+        const duplicate = outgoing.some(other => other.id !== s.id && other.name === s.name);
+        option.textContent = s.name ? `${s.name}${duplicate ? ` (${s.id})` : ''}` : s.id;
+        outbox.append(option);
+      }
       draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox : outgoing.length === 1 ? outgoing[0].id : '';
       outbox.value = draft.outbox;
     }
     source = outgoing.find(s => s.id === outbox.value);
+    outboxId.textContent = source?.name ? source.id : '';
+    outboxId.hidden = !source?.name;
     const inferred = source ? recipientAgent(current.result?.messages ?? [], source, peerId()) : '';
     const agentValue = draft.agents[outbox.value] ?? inferred;
     if (agent.value !== agentValue) agent.value = agentValue;

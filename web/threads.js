@@ -1,5 +1,5 @@
 import { discoverThreads } from './meshes.js';
-import { threadTitle } from './mesh-identifier.js';
+import { renderIdentity } from './identity.js';
 import { setupMessages } from './messages.js';
 import { createRefreshScheduler } from './refresh.js';
 import { icon, MessagesSquare, RefreshCw } from './icons.js';
@@ -85,7 +85,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             row.append(button, account); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          entry.peer.textContent = threadTitle(thread);
+          renderIdentity(entry.peer, thread.identifier, thread.peer);
           entry.account.textContent = thread.accountName ? `Account: ${thread.accountName}` : '';
           entry.account.hidden = !thread.accountName;
         }

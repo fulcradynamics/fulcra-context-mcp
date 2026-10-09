@@ -92,6 +92,25 @@ test('mesh identifier renames list/detail without identity, routing or context c
   expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'MomentAnnotation/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
 });
 
+test('outbox names remain distinguishable and selected exact IDs stay secondary', async ({ page }) => {
+  const ui = await open(page, [channel('me', 'a'), channel('me', 'b')]);
+  await page.evaluate(() => { window.shares.outgoing = ['a', 'b'].map(id => ({
+    share_all_data: false, data_types: [`MomentAnnotation/${id}`], with_user_ids: ['peer'],
+  })); });
+  await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
+  await ui.getByRole('button', { name: 'peer', exact: true }).click();
+  await ui.getByText('Delivery address', { exact: true }).click();
+  const select = ui.locator('#thread-composer details select');
+  await expect(select.locator('option')).toHaveText(['Choose an outbox', 'Mesh Outbox (MomentAnnotation/a)', 'Mesh Outbox (MomentAnnotation/b)']);
+  await select.selectOption('MomentAnnotation/b');
+  await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/b');
+  await page.evaluate(() => { window.entries[1].name = 'Mesh Outbox: renamed'; });
+  await page.clock.runFor(10000);
+  await expect(select).toHaveValue('MomentAnnotation/b');
+  await expect(select.locator('option:checked')).toHaveText('Mesh Outbox: renamed');
+  await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/b');
+});
+
 test('catalog label changes do not replace keyed rows or merge identically named sources', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'a'), channel('peer', 'b')]);
   await page.evaluate(() => {

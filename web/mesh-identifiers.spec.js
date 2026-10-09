@@ -40,15 +40,38 @@ for (const presentation of ['global', 'thread', 'threads', 'direct']) for (const
       if (screenshots) { await mkdir(screenshots, { recursive: true }); await page.screenshot({ path: `${screenshots}/${presentation}-${width}-${stage}.png`, fullPage: true }); }
       expect(await ui.locator('html').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     };
+    const named = ui.getByRole('button', { name: `Summer travel (${peer})`, exact: true });
+    await expect(named.locator('.identity-secondary')).toHaveText(` (${peer})`);
+    const style = await named.locator('.identity-secondary').evaluate(el => ({
+      size: parseFloat(getComputedStyle(el).fontSize),
+      parentSize: parseFloat(getComputedStyle(el.parentElement).fontSize),
+      color: getComputedStyle(el).color,
+      parentColor: getComputedStyle(el.parentElement).color,
+    }));
+    expect(style.size).toBeLessThan(style.parentSize);
+    expect(style.color).not.toBe(style.parentColor);
+    await expect(ui.getByRole('button', { name: 'c1234567-1234-4234-8234-123456789abc', exact: true }).locator('.identity-secondary')).toBeHidden();
     await shot('list');
     await ui.getByRole('button', { name: `Summer travel (${peer})`, exact: true }).click();
     await expect(ui.locator('#message-title')).toHaveText(`Thread with Summer travel (${peer}) — Account: Alex (account owner)`);
     await expect(ui.locator('#messages li')).toHaveCount(2);
     await expect(ui.locator('#messages')).toContainText('Mesh Outbox — unchanged catalog name');
+    await expect(ui.locator('#message-title .identity-secondary')).toHaveText(` (${peer})`);
+    await expect(ui.locator('#thread-composer > label .identity-secondary')).toHaveText(` (${peer})`);
+    await ui.getByText('Delivery address', { exact: true }).click();
+    await expect(ui.locator('#thread-composer details select option:checked')).toHaveText('Mesh Outbox — unchanged catalog name');
+    await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/own');
     await shot('detail');
+    await ui.locator('#message-back').click();
+    const fallback = 'c1234567-1234-4234-8234-123456789abc';
+    await ui.getByRole('button', { name: fallback, exact: true }).click();
+    await expect(ui.locator('#message-title')).toHaveText(`Thread with ${fallback}`);
+    await expect(ui.locator('#message-title .identity-secondary')).toBeHidden();
+    await expect(ui.locator('#thread-composer > label .identity-secondary')).toBeHidden();
+    await shot('fallback');
     const calls = await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').map(r => r.params));
     expect(calls.every(c => ['get_data_catalog', 'list_shares', 'get_records'].includes(c.name))).toBe(true);
-    expect(calls.filter(c => c.name === 'get_records').every(c => ['MomentAnnotation/own', 'MomentAnnotation/in'].includes(c.arguments.data_type))).toBe(true);
+    expect(calls.filter(c => c.name === 'get_records').every(c => ['MomentAnnotation/own', 'MomentAnnotation/in', 'MomentAnnotation/fallback'].includes(c.arguments.data_type))).toBe(true);
     expect(await page.evaluate(() => window.requests.filter(r => ['ui/message', 'sampling/createMessage'].includes(r.method)))).toEqual([]);
   });
 }
