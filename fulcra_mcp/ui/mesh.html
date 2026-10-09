@@ -263,8 +263,11 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* Collapsible body: animate the grid row between content height (1fr) and 0fr
    while the clipped <pre> hides. Spacing/divider collapse together. */
 .message-body { margin-top: 10px; display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease, margin-top .2s ease; }
-.message-body > pre { overflow: hidden; min-height: 0; margin: 0; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.message-body > pre { overflow: hidden; min-height: 0; margin: 0; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); transition: opacity .2s ease; }
 .message-row.collapsed .message-body { grid-template-rows: 0fr; margin-top: 0; }
+/* Fade the body (and its divider) rather than removing it, so nothing in the
+   header shifts when collapsing. */
+.message-row.collapsed .message-body > pre { opacity: 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
 
 /* Primary action and the message-order control share one row; the order control
@@ -298,7 +301,7 @@ html { overflow-anchor: none; }
   .refresh-spinner { animation: none; }
   .animate-rise { animation: none; opacity: 1; }
   .message-chevron { transition: none; }
-  .message-body { transition: none; }
+  .message-body, .message-body > pre { transition: none; }
 }
 
 /* Inline launch has no floating host composer to clear until a panel opens. */
