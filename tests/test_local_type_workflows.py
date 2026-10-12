@@ -301,3 +301,113 @@ async def test_nullable_schema_catalog_matches_sdk_validation(call, local_fulcra
         jsonschema.validate(None, entry["fields"]["state"])
     finally:
         await call("archive_data_type", {"data_type": type_id})
+
+
+async def wait_until(check, what, seconds=60):
+    deadline = time.monotonic() + seconds
+    while not await check():
+        if time.monotonic() >= deadline:
+            pytest.fail(f"timed out waiting for {what}")
+        await asyncio.sleep(1)
+
+
+async def test_connection_channel_lifecycle(call, local_fulcra):
+    """The tools a private agent-to-agent channel needs (PLAT-668): a record id
+    from record_data, resending it, delete_records, an ended share reported as
+    such, and declining someone's share with leave_share."""
+    peer_id = os.environ.get("FULCRA_LOCAL_AUDIT_PEER")
+    if not peer_id:
+        pytest.skip("requires FULCRA_LOCAL_AUDIT_PEER")
+    peer = LocalFulcra(peer_id)
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(minutes=5)).isoformat()
+    end = (now + timedelta(minutes=5)).isoformat()
+    fields = {"properties": {"sender": {"type": "string"}, "body": {"type": "string"}},
+              "required": ["sender", "body"]}
+    created = await call("create_data_type", {
+        "base_type": "event", "name": f"mcp-channel-audit-{uuid4()}",
+        "description": "Disposable connection channel audit", "fields": fields,
+    })
+    assert created.startswith("Created data type "), created
+    type_id = created.split(": ", 1)[0].removeprefix("Created data type ")
+    peer_type_id = None
+    share_id = peer_share_id = None
+    record_id = str(uuid4())
+    message = {"sender": "audit-agent", "body": f"hello {record_id}"}
+    try:
+        # The id comes back from record_data, and a resend with it is one record.
+        for _ in range(2):
+            written = await call("record_data", {
+                "data_type": type_id, "fields": message, "record_id": record_id,
+            })
+            assert f"with id {record_id}" in written, written
+        shared = payload(await call("create_share", {
+            "name": "Disposable channel audit", "data_types": [type_id], "with_user_ids": [peer_id],
+        }))
+        share_id = shared["datashare_id"]
+
+        async def peer_rows():
+            tools_module.get_fulcra_object = lambda: peer
+            try:
+                text = await call("get_records", {
+                    "data_type": type_id, "start_time": start, "end_time": end,
+                    "fulcra_userid": local_fulcra.user_id,
+                })
+            finally:
+                tools_module.get_fulcra_object = lambda: local_fulcra
+            return text, json.loads(text[text.index("["):]) if "[" in text else None
+
+        async def peer_sees_it():
+            _, rows = await peer_rows()
+            return rows is not None and any(r["id"] == record_id for r in rows)
+
+        await wait_until(peer_sees_it, "the peer to read the message")
+        _, rows = await peer_rows()
+        assert [r["id"] for r in rows].count(record_id) == 1
+
+        # delete_records takes it back, for the peer too.
+        deleted = await call("delete_records", {"data_type": type_id, "record_ids": [record_id]})
+        assert deleted.startswith("Deleting 1 record from"), deleted
+
+        async def gone():
+            return not await peer_sees_it()
+
+        await wait_until(gone, "the deleted message to disappear for the peer")
+
+        # Once the share is deleted, the peer is told the data isn't shared,
+        # not that the type doesn't exist.
+        await call("delete_share", {"share_id": share_id})
+        share_id = None
+        text, _ = await peer_rows()
+        assert text.startswith(f"User {local_fulcra.user_id} "), text
+        assert "No data type found" not in text
+
+        # The peer shares a channel of its own; this user declines it.
+        tools_module.get_fulcra_object = lambda: peer
+        peer_created = await call("create_data_type", {
+            "base_type": "event", "name": f"mcp-channel-audit-peer-{uuid4()}",
+            "description": "Disposable connection request audit", "fields": fields,
+        })
+        peer_type_id = peer_created.split(": ", 1)[0].removeprefix("Created data type ")
+        peer_share_id = payload(await call("create_share", {
+            "name": "Disposable connection request", "data_types": [peer_type_id],
+            "with_user_ids": [local_fulcra.user_id],
+        }))["datashare_id"]
+        tools_module.get_fulcra_object = lambda: local_fulcra
+        incoming = payload(await call("list_shares", {"direction": "incoming"}))["incoming"]
+        [grant] = [g for g in incoming if g.get("datashare_id") == peer_share_id]
+        left = await call("leave_share", {"grant_id": grant["grant_id"]})
+        assert "no longer has access" in left, left
+        incoming = payload(await call("list_shares", {"direction": "incoming"}))["incoming"]
+        assert not [g for g in incoming if g.get("datashare_id") == peer_share_id]
+    finally:
+        tools_module.get_fulcra_object = lambda: local_fulcra
+        if share_id:
+            await call("delete_share", {"share_id": share_id})
+        if peer_type_id:
+            tools_module.get_fulcra_object = lambda: peer
+            if peer_share_id:
+                await call("delete_share", {"share_id": peer_share_id})
+            await call("archive_data_type", {"data_type": peer_type_id})
+            tools_module.get_fulcra_object = lambda: local_fulcra
+        await call("archive_data_type", {"data_type": type_id})
