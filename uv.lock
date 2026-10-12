@@ -522,7 +522,7 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.49"
+version = "0.1.51"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -531,14 +531,14 @@ dependencies = [
     { name = "jsonschema" },
     { name = "puremagic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/91/4ffe90c1058f6aa3e02b8ab28668bbddd73f79d46f76597cad09bf76aeab/fulcra_api-0.1.49.tar.gz", hash = "sha256:f118ba9e1face3c6e4305a0bb2f98d179e8cb80dabf37301abd45176dd473140", size = 70844, upload-time = "2026-10-08T20:48:58.472Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/f5/10c42bdb53f619bdfc8f6ea506834754307e1ea988f8045604eccb0c7030/fulcra_api-0.1.51.tar.gz", hash = "sha256:7e8da4f41c7552d73fee99a688c8f16039d34448ec772b66f6fa67183e9802b3", size = 78936, upload-time = "2026-10-12T21:02:16.222Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/c8/425dda2393a9d64374a87a83ab82b213a3bcd5c43c744b84b5baa57eac8b/fulcra_api-0.1.49-py3-none-any.whl", hash = "sha256:27760f9e8df867137d7cef64b8b3b645ea154837d5c35d3714b50da4c4e976ef", size = 80327, upload-time = "2026-10-08T20:48:57.467Z" },
+    { url = "https://files.pythonhosted.org/packages/15/19/f5daf5adb134f18e39221f8d65b1d49e5e6fc9e68ff9aa669cdbf5b04816/fulcra_api-0.1.51-py3-none-any.whl", hash = "sha256:8c431e4302a79f1eb4e11928d1577bc77bbf48ee7182b2892d20571882131a76", size = 88042, upload-time = "2026-10-12T21:02:15.084Z" },
 ]
 
 [[package]]
 name = "fulcra-context-mcp"
-version = "1.2.1"
+version = "1.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
@@ -559,7 +559,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.0.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.49" },
+    { name = "fulcra-api", specifier = ">=0.1.51" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },
     { name = "structlog", specifier = ">=25.4.0" },
