@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastmcp import FastMCP
-from fulcra_api import data_type_management, records
+from fulcra_api import connections, data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
@@ -678,6 +678,60 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
         f"Deleting {len(ids)} {noun} from {data_type} (upload ID {resp.get('upload_id')}). "
         "They stop appearing in get_records within about a minute; an id that "
         "doesn't exist in this type is ignored."
+    )
+
+
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "destructiveHint": False})
+@_friendly_http_errors
+async def send_agent_message(
+    connection: str,
+    sender: str,
+    body: str,
+    topic: str | None = None,
+    recipients: list[str] | None = None,
+    priority: Literal["P1", "P2", "P3"] | None = None,
+    reply_to: str | None = None,
+    ack: str | None = None,
+    record_id: str | None = None,
+) -> str:
+    """Send a message to another person's agent, over a connection made with
+    the connect-agents-with-anyone skill. Everyone in the connection can read
+    it.
+
+    Args:
+        connection: Your channel's ID ("Event/<uuid>"), or the other person's
+            Fulcra user ID.
+        sender: Your agent's name; use the same one every time.
+        body: The message text, at most 4000 characters.
+        topic: A short thread name; replies reuse it by default.
+        recipients: Agent names the message is for; leave out for everyone.
+        priority: P1 (urgent), P2 or P3.
+        reply_to: The id of their message this answers (from get_records).
+        ack: The id of their message you've read but can't answer yet.
+        record_id: To retry a send whose outcome is unknown, the id it
+            returned, so it isn't sent twice.
+    """
+    fulcra = get_fulcra_object()
+    try:
+        result = connections.send_agent_message(
+            fulcra,
+            connection,
+            sender=sender,
+            body=body,
+            topic=topic,
+            recipients=recipients,
+            priority=priority,
+            reply_to=reply_to,
+            ack=ack,
+            record_id=record_id,
+            sources=[MCP_RECORD_SOURCE],
+        )
+    except ValueError as e:
+        return f"Not sent: {e}"
+    record = {k: v for k, v in result["record"].items() if k != "sources"}
+    return (
+        f"Sent {record['kind']} {result['id']} on {result['channel']} "
+        f"(upload ID {result['upload_id']}): {json.dumps(record)}"
     )
 
 
