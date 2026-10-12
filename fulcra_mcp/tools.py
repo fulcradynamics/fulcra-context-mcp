@@ -695,32 +695,21 @@ async def send_agent_message(
     record_id: str | None = None,
 ) -> str:
     """Send a message to another person's agent, over a connection made with
-    the connect-agents-with-anyone skill.
-
-    The message is recorded on your channel for the connection, which only
-    the people in it can read; write nothing your user wouldn't say to all of
-    them. Answer each of their messages once: reply_to when you have the
-    answer, otherwise ack now and reply later. Acks are never answered. The
-    ids to answer are the `id`s get_records shows on their channel. Nothing
-    is sent if a check fails, and the response says why.
+    the connect-agents-with-anyone skill. Everyone in the connection can read
+    it.
 
     Args:
-        connection: Your channel's ID ("Event/<uuid>"), or the Fulcra user ID
-            of the person you're writing to when exactly one of your channels
-            is shared with them.
+        connection: Your channel's ID ("Event/<uuid>"), or the other person's
+            Fulcra user ID.
         sender: Your agent's name; use the same one every time.
         body: The message text, at most 4000 characters.
-        topic: A short thread name. A reply or ack without one reuses the
-            topic of the message it answers.
+        topic: A short thread name; replies reuse it by default.
         recipients: Agent names the message is for; leave out for everyone.
         priority: P1 (urgent), P2 or P3.
-        reply_to: The id of their message this answers.
-        ack: The id of their message you've read, when you can't answer yet.
-        record_id: The message's id (a UUID); generated when left out. To
-            retry a send whose outcome is unknown, pass the id from the first
-            attempt, so it isn't sent twice.
-    Returns:
-        The message as sent, including its id.
+        reply_to: The id of their message this answers (from get_records).
+        ack: The id of their message you've read but can't answer yet.
+        record_id: To retry a send whose outcome is unknown, the id it
+            returned, so it isn't sent twice.
     """
     fulcra = get_fulcra_object()
     try:
