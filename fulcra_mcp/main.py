@@ -18,6 +18,7 @@ from . import server_info
 from .apps import app_mcp
 from .logging_config import configure_logging
 from .mentions import mentions_mcp
+from .mesh_settings import settings_mcp
 from .provider import oauth_provider
 from .settings import settings
 from .tools import tools_mcp
@@ -49,11 +50,15 @@ mcp = FastMCP(
     """,
     auth=oauth_provider,
     # MCP 2025-11-25 advertises named extensions during initialize.
-    experimental_capabilities={"openai/mentions": {"searchTool": "mesh_mentions_search"}},
+    experimental_capabilities={
+        "openai/mentions": {"searchTool": "mesh_mentions_search"},
+        "openai/settings": {"readTool": "aicq_settings_read", "updateTool": "aicq_settings_update"},
+    },
 )
 mcp.mount(tools_mcp)
 mcp.mount(app_mcp)
 mcp.mount(mentions_mcp)
+mcp.mount(settings_mcp)
 
 
 # Add CORS middleware for browser-based clients

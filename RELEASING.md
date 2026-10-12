@@ -4,6 +4,13 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Mesh check settings (1.3.0 / settings UI v1)
+
+Adds native read-only mesh-check settings and an explicit schedule-management
+chat handoff. Pair with Fulcra plugin 0.2.10, refresh server discovery and reinstall
+the plugin. Existing mesh UI v28 is unchanged. See [settings acceptance](docs/mesh-settings.md)
+for host gates; this does not deploy a scheduler or verify notification delivery.
+
 ### Direct mesh messaging (1.2.0 / UI v28)
 
 Adds model/app-visible `mesh_send` with authenticated own-outbox/peer grant checks,

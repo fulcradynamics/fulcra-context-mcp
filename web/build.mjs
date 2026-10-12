@@ -19,3 +19,14 @@ await writeFile(new URL('../fulcra_mcp/ui/mesh.html', root),
     .replace('/* APP_STYLES */', () => `/* Rubik license:\n${license} */\n` + styles.replace('./assets/rubik-latin-wght-normal.woff2', `data:font/woff2;base64,${font.toString('base64')}`))
     .replace('/* BRAND_ICON */', () => `data:image/png;base64,${icon.toString('base64')}`)
     .replace('/* APP_SCRIPT */', () => script));
+
+const settings = await build({
+  absWorkingDir: fileURLToPath(root),
+  entryPoints: ['settings.js'], bundle: true, write: false,
+  format: 'iife', platform: 'browser', target: 'es2022', minify: true,
+});
+const settingsTemplate = await readFile(new URL('settings.html', root), 'utf8');
+await writeFile(new URL('../fulcra_mcp/ui/mesh-settings.html', root),
+  settingsTemplate
+    .replace('/* APP_STYLES */', () => `/* Rubik license:\n${license} */\n` + styles.replace('./assets/rubik-latin-wght-normal.woff2', `data:font/woff2;base64,${font.toString('base64')}`))
+    .replace('/* APP_SCRIPT */', () => settings.outputFiles[0].text.replaceAll('</script', '<\\/script')));
