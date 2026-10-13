@@ -629,6 +629,38 @@ def test_a_file_sent_to_an_upload_link_is_saved_in_chunks(link_uploads, put_chun
     assert all(len(chunk) % ft.UPLOAD_GRANULE == 0 for _, chunk, _, _ in put_chunks[:-1])
 
 
+def test_a_link_upload_resends_what_storage_did_not_confirm(link_uploads, monkeypatch):
+    client, token, _ = link_uploads
+    data = bytes(range(256)) * (ft.LINK_UPLOAD_CHUNK_BYTES // 256 + 5) + b"tail"
+    stored = bytearray()
+    calls = []
+
+    def half_put(url, chunk, start, total):
+        # Like storage under load: confirm half of each of the first few
+        # requests, then everything.
+        calls.append((start, len(chunk)))
+        assert start == len(stored), "a request skipped bytes storage never confirmed"
+        stored.extend(chunk if len(calls) > 3 else chunk[: max(len(chunk) // 2, 1)])
+        return total if len(stored) == total else len(stored)
+
+    monkeypatch.setattr(ft, "_put_chunk", half_put)
+    response = client.put(f"/files/upload/{token}", content=data)
+
+    assert response.status_code == 200, response.text
+    assert bytes(stored) == data
+    assert len(calls) > 3
+
+
+def test_a_link_upload_that_storage_does_not_advance_fails_cleanly(link_uploads, monkeypatch):
+    client, token, _ = link_uploads
+    monkeypatch.setattr(ft, "_put_chunk", lambda url, chunk, start, total: start)
+
+    response = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert response.status_code == 502 and "Try again" in response.text
+    assert ft._load_record("upload_links", token)["state"] == "new"
+
+
 def test_resending_to_a_used_link_returns_the_same_result(link_uploads, put_chunks):
     client, token, sessions = link_uploads
 

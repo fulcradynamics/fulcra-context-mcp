@@ -603,6 +603,23 @@ class LinkUploadError(Exception):
         self.status = status
 
 
+async def _send_link_chunk(url: str, pending: bytearray, count: int, sent: int, total: int) -> int:
+    """Send the first ``count`` bytes of ``pending``, which starts at byte
+    ``sent``. Drops from ``pending`` only what storage confirms, and returns the
+    new confirmed offset."""
+    committed = await asyncio.to_thread(_put_chunk, url, bytes(pending[:count]), sent, total)
+    if committed >= total:
+        pending.clear()
+        return total
+    progress = committed - sent
+    if progress <= 0 or progress > count:
+        # No progress, or storage reports bytes it was never sent, or forgot
+        # some it had confirmed (already dropped here): start again.
+        raise LinkUploadError(502, "Storage didn't take the file. Try again.")
+    del pending[:progress]
+    return committed
+
+
 async def receive_link_upload(token: str, length: int | None, body, fulcra_for) -> dict:
     """Save the file PUT to an upload link. ``body`` yields the request's bytes;
     ``fulcra_for(grant_id)`` gives the client to act as.
@@ -635,21 +652,20 @@ async def receive_link_upload(token: str, length: int | None, body, fulcra_for) 
         session = await asyncio.to_thread(
             _create_upload_session, fulcra, path, length, guess_content_type(path)
         )
+        # `sent` is what storage has confirmed; `pending` holds every byte after
+        # it. Storage may confirm only part of a chunk, and the rest is resent.
         url, sent, pending = session["url"], 0, bytearray()
         async for piece in body:
             pending += piece
             if sent + len(pending) > length:
                 raise LinkUploadError(400, "The upload sent more bytes than its Content-Length.")
             while len(pending) >= LINK_UPLOAD_CHUNK_BYTES and sent + len(pending) < length:
-                chunk = bytes(pending[:LINK_UPLOAD_CHUNK_BYTES])
-                await asyncio.to_thread(_put_chunk, url, chunk, sent, length)
-                sent += len(chunk)
-                del pending[:LINK_UPLOAD_CHUNK_BYTES]
+                sent = await _send_link_chunk(url, pending, LINK_UPLOAD_CHUNK_BYTES, sent, length)
         if sent + len(pending) != length:
             raise LinkUploadError(400, "The upload ended before its Content-Length.")
-        committed = await asyncio.to_thread(_put_chunk, url, bytes(pending), sent, length)
-        if committed < length:
-            raise LinkUploadError(502, "Storage didn't take the whole file. Try again.")
+        sent = await _send_link_chunk(url, pending, len(pending), sent, length)
+        while sent < length:
+            sent = await _send_link_chunk(url, pending, len(pending), sent, length)
     except BaseException:
         # Let the sender try again with the same link.
         record.update(state="new")
