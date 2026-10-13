@@ -98,7 +98,7 @@ async def test_uncertainty_never_claims_posted_or_delivered(call, backend, monke
     assert result['status'] == 'uncertain'
     assert result['peer_acknowledged'] is False
     assert result['mid'] == MID
-    assert fake.record_data_type.call_count == (2 if failure == 'missing' else 1)
+    assert fake.record_data_type.call_count == 1
 
 
 async def test_registration_visible_to_model_and_app(client):

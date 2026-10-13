@@ -74,6 +74,14 @@ def test_retries_same_payload_and_never_auth_denial(api):
     assert denied['status'] == 'rejected' and denied['retryable'] is False
     assert len(api.writes) == 1
 
+def test_successful_upload_is_not_repeated_while_ingestion_is_pending(api, monkeypatch):
+    monkeypatch.setattr(mesh.records, 'get_records', lambda *args, **kwargs: [])
+    result = send(api)
+    assert result['status'] == 'uncertain'
+    assert result['retryable'] is False
+    assert len(api.writes) == 1
+
+
 def test_broad_grant_blocks_even_if_not_named_connection(api):
     api.shares.append(dict(id=TARGET, share_all_data=True, fulcra_data_types=[], permissions=[]))
     assert send(api)['status'] == 'rejected'

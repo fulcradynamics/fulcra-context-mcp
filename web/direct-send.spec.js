@@ -178,6 +178,7 @@ for (const text of ['', '  Help with this message  ']) test(`secondary handoff a
   await ui.locator('textarea').fill(text);
   await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  await expect(ui.locator('textarea')).toHaveValue('');
   const actual = await page.evaluate(() => window.sends[0].params.content[0].text);
   expect(actual).toBe(text || 'Let’s talk about this mesh thread.');
   const context = await page.evaluate(() => window.contexts[0].params.content[0].text);

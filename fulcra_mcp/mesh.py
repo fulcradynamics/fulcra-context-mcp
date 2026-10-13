@@ -133,8 +133,10 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
             if api.get_fulcra_userid() != own:
                 raise ValueError('Authenticated account changed.')
             attempted = True
+            uploaded = False
             try:
                 api.record_data_type(outbox, [record], 'v1')
+                uploaded = True
             except HTTPError as exc:
                 if exc.code < 500:
                     return {**result, 'status': 'uncertain' if attempt else 'rejected',
@@ -148,6 +150,10 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
                     return {**result, 'status': 'posted', 'record': observed}
                 if poll == 0:
                     time.sleep(RETRY_DELAY)
+            if uploaded:
+                # Acknowledged upload may precede query visibility. Poll, don't repost.
+                return {**result, 'status': 'uncertain', 'retryable': False,
+                        'reason': 'Upload accepted; exact record not yet visible. Poll for this ID; do not submit it again.'}
         return {**result, 'status': 'uncertain', 'reason': 'Exact record not observed. Retry only with the same ID and content; never bypass host denial.'}
     except Exception as exc:
         if attempted:
