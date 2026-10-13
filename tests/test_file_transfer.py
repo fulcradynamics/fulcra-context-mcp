@@ -95,6 +95,12 @@ async def test_the_panel_is_an_mcp_app_resource(client, fake_fulcra):
     [content] = await client.read_resource(ft.FILE_MANAGER_URI)
 
     assert content.mimeType == "text/html;profile=mcp-app"
+    # Rubik from Google Fonts, allowed by the panel's CSP
+    [resource] = [r for r in await client.list_resources() if str(r.uri) == ft.FILE_MANAGER_URI]
+    assert resource.meta["ui"]["csp"]["resourceDomains"] == [
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com",
+    ]
     for method in ("ui/initialize", "resources/read", "ui/download-file", "upload_file_chunk"):
         assert method in content.text
 

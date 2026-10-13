@@ -19,43 +19,128 @@ FILE_MANAGER_HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fulcra files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap">
 <style>
+  /* Fulcra's portal palette (portal tailwind.config.cjs): dark by default, as in
+     the portal, with a light variant when the host is in light mode. */
   :root {
-    color-scheme: light dark;
-    --bg: var(--color-background-primary, light-dark(#ffffff, #1b1b1b));
-    --fg: var(--color-text-primary, light-dark(#1b1b1b, #f2f2f2));
-    --muted: var(--color-text-secondary, light-dark(#666666, #a3a3a3));
-    --line: var(--color-border-primary, light-dark(#e2e2e2, #3a3a3a));
-    --accent: light-dark(#2f5bd3, #8aa8ff);
-    --danger: light-dark(#b42318, #ff8a80);
+    color-scheme: dark;
+    --page: #16161d;          /* fulcra-black */
+    --card: #222227;          /* fulcra-black-50 */
+    --line: #38383a;          /* fulcra-black-20 */
+    --text: #ffffff;
+    --muted: #8a8a8e;         /* fulcra-gray */
+    --teal: #56d6b7;
+    --purple: #7b61ff;
+    --error: #ff3b30;
+    --tile: #16161d;
+    --hover: rgba(22, 22, 29, 0.4);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #ffffff;
+    --card: #ffffff;
+    --line: #e4e4e7;
+    --text: #16161d;
+    --muted: #6b6b70;
+    --teal: #1f9e80;
+    --tile: #f4f4f5;
+    --hover: rgba(22, 22, 29, 0.03);
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 12px; background: var(--bg); color: var(--fg);
-    font: 14px/1.4 var(--font-sans, system-ui, sans-serif);
+    margin: 0; padding: 16px; background: var(--page); color: var(--text);
+    font: 14px/1.4 Rubik, var(--font-sans, system-ui), sans-serif;
   }
-  header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .crumbs button { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 2px; font: inherit; }
-  .crumbs span { color: var(--muted); }
+  button { font: inherit; }
+  svg { width: 1em; height: 1em; fill: currentColor; flex: none; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  header strong { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .crumbs { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; font-size: 13px; }
+  .crumbs button {
+    background: none; border: 0; color: var(--teal); cursor: pointer; padding: 2px 4px; border-radius: 6px;
+  }
+  .crumbs button:hover { background: color-mix(in srgb, var(--teal) 10%, transparent); }
+  .crumbs span { color: var(--muted); opacity: 0.5; }
+
+  /* Cards: rounded, bordered rows, as in the portal's files and data-types lists. */
+  .card { border: 1px solid var(--line); background: var(--card); border-radius: 12px; overflow: hidden; }
+  .card + .card, #drop + .status { margin-top: 12px; }
+
   #drop {
-    border: 1.5px dashed var(--line); border-radius: 8px; padding: 14px;
-    text-align: center; color: var(--muted); margin-bottom: 10px; cursor: pointer;
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer;
+    border: 1px dashed var(--line); border-radius: 12px; background: var(--card);
+    color: var(--muted); font-size: 13px; transition: border-color 0.15s, background 0.15s;
   }
-  #drop.over { border-color: var(--accent); color: var(--fg); }
+  #drop:hover, #drop.over { border-color: var(--teal); }
+  #drop.over { background: color-mix(in srgb, var(--teal) 6%, var(--card)); }
+
+  /* Icon tiles: teal for folders and uploads, neutral for files. */
+  .tile {
+    display: flex; align-items: center; justify-content: center; flex: none;
+    width: 36px; height: 36px; border-radius: 8px; font-size: 14px;
+    background: var(--tile); color: var(--muted);
+  }
+  .tile.teal { background: color-mix(in srgb, var(--teal) 10%, transparent); color: var(--teal); }
+  .tile.error { background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); }
+
   ul { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-top: 1px solid var(--line); }
-  li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  li .size { color: var(--muted); font-variant-numeric: tabular-nums; }
-  button.link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
-  button.action {
-    border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--fg);
-    padding: 3px 8px; cursor: pointer; font: inherit;
+  ul:empty { display: none; }
+  li {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
   }
-  progress { width: 120px; }
-  .status { color: var(--muted); margin: 6px 0; min-height: 1.2em; }
-  .error { color: var(--danger); }
-  .empty { color: var(--muted); padding: 8px 2px; }
-  a { color: var(--accent); word-break: break-all; }
+  li:last-child { border-bottom: 0; }
+  li:hover { background: var(--hover); }
+  .rise { animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+
+  .main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .name {
+    font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  button.name {
+    background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: var(--teal);
+  }
+  li:hover button.name { text-decoration: underline; }
+  .sub { font-size: 12px; color: color-mix(in srgb, var(--muted) 60%, transparent); }
+  .sub.error { color: var(--error); }
+
+  /* The stacked stat on the right: small uppercase label over the value. */
+  .stat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; flex: none; }
+  .stat .label {
+    font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    color: color-mix(in srgb, var(--muted) 50%, transparent);
+  }
+  .stat .value { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Small square action buttons and pill buttons, tinted with the accent. */
+  .icon-button, .pill {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none;
+    border: 0; border-radius: 6px; cursor: pointer; transition: background 0.15s;
+    background: color-mix(in srgb, var(--teal) 10%, transparent); color: var(--teal);
+  }
+  .icon-button { width: 28px; height: 28px; font-size: 12px; }
+  .pill { padding: 6px 12px; font-size: 13px; font-weight: 500; }
+  .icon-button:hover, .pill:hover { background: color-mix(in srgb, var(--teal) 20%, transparent); }
+
+  .bar { width: 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; flex: none; }
+  .bar > div { height: 100%; width: 0; background: var(--teal); transition: width 0.2s; }
+  .done { font-size: 12px; font-weight: 500; color: var(--teal); flex: none; }
+
+  .state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 24px; text-align: center; }
+  .state .tile { width: 48px; height: 48px; border-radius: 12px; font-size: 18px; }
+  .state p { margin: 0; max-width: 28rem; font-size: 13px; color: var(--muted); }
+
+  .status { font-size: 13px; color: var(--muted); min-height: 1.2em; margin-bottom: 12px; }
+  .status.error { color: var(--error); }
+  .status:empty { display: none; }
+  a { color: var(--teal); word-break: break-all; }
 </style>
 </head>
 <body>
@@ -63,11 +148,14 @@ FILE_MANAGER_HTML = r"""<!doctype html>
   <strong>Fulcra files</strong>
   <nav class="crumbs" id="crumbs"></nav>
 </header>
-<div id="drop">Drop files here to upload them to this folder, or click to choose files.</div>
+<div id="drop" role="button" tabindex="0">
+  <div class="tile teal" id="drop-icon"></div>
+  <div>Drop files here to upload them to this folder, or click to choose files.</div>
+</div>
 <input id="picker" type="file" multiple hidden>
 <div class="status" id="status"></div>
-<ul id="uploads"></ul>
-<ul id="listing"></ul>
+<ul id="uploads" class="card"></ul>
+<ul id="listing" class="card"></ul>
 <script>
 "use strict";
 const MAX_INLINE_DOWNLOAD = 20 * 1024 * 1024;  // file_transfer.MAX_RESOURCE_BYTES
@@ -75,6 +163,46 @@ let nextId = 1;
 const pending = new Map();
 let host = {};
 let currentPath = "/";
+
+// Simple inline icons, so the panel loads nothing but its font.
+const ICONS = {
+  folder: '<svg viewBox="0 0 16 16"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.4l1.6 1.6H13a1.5 1.5 0 0 1 1.5 1.5v7.4A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5z"/></svg>',
+  file: '<svg viewBox="0 0 16 16"><path d="M3.5 1.5A1.5 1.5 0 0 1 5 0h5l4 4v10.5A1.5 1.5 0 0 1 12.5 16h-8A1.5 1.5 0 0 1 3 14.5zM10 1v3.5h3.5z" transform="translate(-0.5 0)"/></svg>',
+  download: '<svg viewBox="0 0 16 16"><path d="M7 1h2v7.2l2.6-2.6 1.4 1.4L8 12 3 7l1.4-1.4L7 8.2zM2 13h12v2H2z"/></svg>',
+  upload: '<svg viewBox="0 0 16 16"><path d="M4.5 13A3.5 3.5 0 0 1 4 6.03 4.5 4.5 0 0 1 12.7 5 3.5 3.5 0 0 1 12 13H9V9.8l1.3 1.3 1.4-1.4L8 6 4.3 9.7l1.4 1.4L7 9.8V13z"/></svg>',
+  warning: '<svg viewBox="0 0 16 16"><path d="M8 1 15.5 14.5h-15zM7.2 6v4.2h1.6V6zm0 5.4V13h1.6v-1.6z"/></svg>',
+};
+
+// An element with a class, optional text, and children.
+function el(tag, className, text, ...children) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  node.append(...children);
+  return node;
+}
+
+function tile(icon, tone) {
+  const node = el("div", "tile" + (tone ? " " + tone : ""));
+  node.innerHTML = ICONS[icon];
+  return node;
+}
+
+function stat(label, value) {
+  return el("div", "stat", null, el("span", "label", label), el("span", "value", value || "—"));
+}
+
+// The portal's staggered entrance, capped so a long list doesn't crawl in.
+function rise(node, index) {
+  node.classList.add("rise");
+  node.style.animationDelay = Math.min(index, 12) * 40 + "ms";
+  return node;
+}
+
+function formatDate(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
 
 // --- MCP Apps messaging -----------------------------------------------------
 function request(method, params) {
@@ -105,11 +233,9 @@ window.addEventListener("message", (event) => {
 });
 
 function applyStyles(context) {
-  const vars = context && context.styles && context.styles.variables;
-  if (!vars) return;
-  for (const [name, value] of Object.entries(vars)) {
-    if (value) document.documentElement.style.setProperty(name, value);
-  }
+  // The panel keeps Fulcra's own colors and font; it only follows the host's light or dark theme.
+  const theme = context && context.theme;
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
 }
 
 // A tool's result: its structured content, or the JSON in its text.
@@ -172,40 +298,37 @@ async function refresh() {
   try {
     const listing = await callTool("list_files", { path: currentPath });
     list.replaceChildren();
+    let index = 0;
     for (const folder of listing.folders || []) {
-      const name = typeof folder === "string" ? folder : (folder.name || folder.path);
-      const li = document.createElement("li");
-      const b = document.createElement("button");
-      b.className = "link name";
-      b.textContent = name.split("/").filter(Boolean).pop() + "/";
-      b.onclick = () => { currentPath = join(currentPath, b.textContent); refresh(); };
-      li.append(b);
-      list.append(li);
+      const name = (typeof folder === "string" ? folder : (folder.name || folder.path)).split("/").filter(Boolean).pop();
+      const open = el("button", "name", name);
+      open.onclick = () => { currentPath = join(currentPath, name); refresh(); };
+      const li = el("li", null, null, tile("folder", "teal"), el("div", "main", null, open, el("div", "sub", "Folder")));
+      li.onclick = (e) => { if (e.target === li) open.click(); };
+      list.append(rise(li, index++));
     }
     for (const file of listing.files || []) {
-      const li = document.createElement("li");
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = file.name;
-      const size = document.createElement("span");
-      size.className = "size";
-      size.textContent = formatSize(file.size);
-      const download = document.createElement("button");
-      download.className = "action";
-      download.textContent = "Download";
+      const download = el("button", "icon-button");
+      download.innerHTML = ICONS.download;
+      download.title = "Download";
+      download.setAttribute("aria-label", "Download " + file.name);
       download.onclick = () => downloadFile(join(currentPath, file.name), file);
-      li.append(name, size, download);
-      list.append(li);
+      const when = file.uploaded_at || file.created_at;
+      const main = el("div", "main", null, el("div", "name", file.name));
+      if (when) main.append(el("div", "sub", "Uploaded " + formatDate(when)));
+      list.append(rise(el("li", null, null, tile("file"), main, stat("Size", formatSize(file.size)), download), index++));
     }
     if (!list.children.length) {
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "This folder is empty.";
-      list.append(li);
+      const upload = el("button", "pill");
+      upload.innerHTML = ICONS.upload;
+      upload.append(" Upload");
+      upload.onclick = () => picker.click();
+      list.append(el("li", "state", null, tile("upload", "teal"),
+        el("p", null, "This folder is empty. Upload files to keep them in Fulcra, where your agents can read them and you can share them."),
+        upload));
     }
   } catch (e) {
-    list.replaceChildren();
-    setStatus(e.message, true);
+    list.replaceChildren(el("li", "state", null, tile("warning", "error"), el("p", null, e.message)));
   }
 }
 
@@ -289,14 +412,11 @@ function toBase64(buffer) {
 }
 
 async function uploadFile(file) {
-  const li = document.createElement("li");
-  const name = document.createElement("span");
-  name.className = "name";
-  name.textContent = file.name;
-  const bar = document.createElement("progress");
-  bar.max = Math.max(file.size, 1); bar.value = 0;
-  li.append(name, bar);
-  document.getElementById("uploads").append(li);
+  const fill = el("div");
+  const bar = el("div", "bar", null, fill);
+  const sub = el("div", "sub", "Uploading…");
+  const li = el("li", null, null, tile("upload", "teal"), el("div", "main", null, el("div", "name", file.name), sub), stat("Size", formatSize(file.size)), bar);
+  document.getElementById("uploads").append(rise(li, 0));
   try {
     const started = await callTool("start_file_upload", {
       path: join(currentPath, file.name),
@@ -309,12 +429,15 @@ async function uploadFile(file) {
       const data = toBase64(await file.slice(offset, end).arrayBuffer());
       const sent = await callTool("upload_file_chunk", { upload_id: started.upload_id, offset, data });
       offset = sent.received;
-      bar.value = offset;
+      fill.style.width = (100 * offset / Math.max(file.size, 1)) + "%";
       if (sent.done) break;
     } while (offset < file.size);
-    bar.replaceWith(Object.assign(document.createElement("span"), { className: "size", textContent: "Uploaded" }));
+    sub.textContent = "Saved to " + join(currentPath, file.name);
+    bar.replaceWith(el("span", "done", "Uploaded"));
   } catch (e) {
-    bar.replaceWith(Object.assign(document.createElement("span"), { className: "error", textContent: e.message }));
+    sub.textContent = e.message;
+    sub.className = "sub error";
+    bar.remove();
   }
 }
 
@@ -324,8 +447,10 @@ async function uploadAll(files) {
 }
 
 const drop = document.getElementById("drop");
+document.getElementById("drop-icon").innerHTML = ICONS.upload;
 const picker = document.getElementById("picker");
 drop.onclick = () => picker.click();
+drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); picker.click(); } };
 picker.onchange = () => { uploadAll([...picker.files]); picker.value = ""; };
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));

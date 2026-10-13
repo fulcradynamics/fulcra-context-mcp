@@ -34,7 +34,7 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 
 import structlog
-from fastmcp.apps.config import AppConfig
+from fastmcp.apps.config import AppConfig, ResourceCSP
 from fastmcp.exceptions import ResourceError, ToolError
 from fastmcp.resources import ResourceContent
 from fastmcp.utilities.mime import UI_MIME_TYPE
@@ -250,7 +250,14 @@ def shared_file_resource(fulcra_userid: str, path: str) -> list[ResourceContent]
     name="Fulcra file manager",
     description="The panel open_file_manager shows.",
     mime_type=UI_MIME_TYPE,
-    app=AppConfig(prefers_border=True),
+    app=AppConfig(
+        prefers_border=True,
+        # Rubik, Fulcra's typeface, from Google Fonts. Hosts that refuse these
+        # fall back to the system font.
+        csp=ResourceCSP(
+            resource_domains=["https://fonts.googleapis.com", "https://fonts.gstatic.com"]
+        ),
+    ),
 )
 def file_manager_ui() -> str:
     return FILE_MANAGER_HTML
