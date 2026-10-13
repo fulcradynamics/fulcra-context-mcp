@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v31.html`, `ui://fulcra/mesh/thread/v31.html`, and
-`ui://fulcra/mesh/threads/v31.html`. The direct-list resource adds
+`ui://fulcra/mesh/v32.html`, `ui://fulcra/mesh/thread/v32.html`, and
+`ui://fulcra/mesh/threads/v32.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 
@@ -112,7 +112,21 @@ must be recoverable even if the tool response is lost.
 
 `get_records` supports either both timezone-aware dates or `latest=true` with
 both dates omitted. The latter is supported by SDK v1 record transport; legacy
-queries still need a date range. The UI keeps explicit bounded date ranges.
+queries still need a date range.
+
+## Message window and previews
+
+Opening a thread reads the latest record of each channel (`latest=true`), then
+loads every message from one week before the earlier of the latest incoming and
+latest outgoing messages through now. With only one side, that side's latest
+message sets the window; with none, it starts one week ago. There is no date
+picker. **Load more**, at the earliest end of the list in either order, extends
+the window by two weeks; polling keeps the extended window. A failed wider read
+keeps the previously applied window in context and retries automatically.
+
+The thread list shows each contact's latest sent or received message, read with
+`latest=true` while the list is visible. Sent previews start with `You:`. A failed
+preview read keeps the previous preview.
 
 ## Legacy transition
 

@@ -101,7 +101,7 @@ test('Back during late attachment serializes cleanup before a new peer attach, n
   await expect(action(ui)).toBeDisabled();
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await ui.getByRole('button', { name: 'other', exact: true }).click();
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
   await expect(action(ui)).toBeDisabled();
   expect(await page.evaluate(() => window.contexts.length)).toBe(1);
   await page.evaluate(() => window.reply(window.contexts[0].id, {}));
@@ -120,15 +120,12 @@ test('Back during late attachment serializes cleanup before a new peer attach, n
   expect(await page.evaluate(() => window.modes.length)).toBe(0);
 });
 
-for (const invalidation of ['Back', 'range', 'revocation', 'teardown']) test(`attached context clears on ${invalidation} without auto reattachment`, async ({ page }) => {
+for (const invalidation of ['Back', 'Load more', 'revocation', 'teardown']) test(`attached context clears on ${invalidation} without auto reattachment`, async ({ page }) => {
   const ui = await open(page);
   await action(ui).click();
   await expect(ui.locator('#send-status')).toContainText('accepted');
   if (invalidation === 'Back') await ui.getByRole('button', { name: 'Back to threads' }).click();
-  if (invalidation === 'range') {
-    await ui.locator('#message-start').fill('2025-01-01');
-    await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  }
+  if (invalidation === 'Load more') await ui.getByRole('button', { name: 'Load more', exact: true }).click();
   if (invalidation === 'revocation') {
     await page.evaluate(() => { window.entries = window.entries.filter(e => e.fulcra_userid !== 'peer'); });
     await page.clock.runFor(10000);
@@ -178,7 +175,7 @@ test('stale clipped current context preserves source, applied range and warnings
   expect(data.omitted_records).toBe(1);
   expect(data.messages[0].source).toMatchObject({ fulcra_userid: 'peer', id: 'Event/in' });
   expect(data.messages[0].stale).toBe(true);
-  expect(data.range.start_time).toBe('2026-01-09T00:00:00.000Z');
+  expect(data.range.start_time).toBe('2026-01-03T12:00:01.000Z');
   expect(data.warnings.join(' ')).toContain('get_records failed');
   await page.clock.runFor(20000);
   expect(await page.evaluate(() => window.contexts.length)).toBe(1);
@@ -233,16 +230,15 @@ test('clear failure remains visible after Back and next explicit attachment repl
   expect(JSON.parse(last.split('\n')[1]).peer_fulcra_userid).toBe('other');
 });
 
-for (const change of ['poll', 'range', 'revocation']) test(`held attach invalidated by ${change} never sends or requests pip`, async ({ page }) => {
+for (const change of ['poll', 'Load more', 'revocation']) test(`held attach invalidated by ${change} never sends or requests pip`, async ({ page }) => {
   const ui = await open(page, { holdContext: true });
   await action(ui).click();
   if (change === 'poll') {
     await page.evaluate(() => window.rows['peer/Event/in'].push({ id: 'new', note: 'new history' }));
     await page.clock.runFor(10000);
     await expect(ui.locator('#messages')).toContainText('new history');
-  } else if (change === 'range') {
-    await ui.locator('#message-start').fill('2025-01-01');
-    await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  } else if (change === 'Load more') {
+    await ui.getByRole('button', { name: 'Load more', exact: true }).click();
   } else {
     await page.evaluate(() => { window.entries = window.entries.filter(e => e.fulcra_userid !== 'peer'); });
     await page.clock.runFor(10000);

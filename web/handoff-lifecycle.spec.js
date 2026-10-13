@@ -46,13 +46,13 @@ async function host(page,{legacyOnly=false,hold=false}={}) {
 }
 async function open(ui,peer) {
   await ui.getByRole('button',{name:peer,exact:true}).click();
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
 }
 const history=ui=>ui.getByRole('button',{name:'chat about old messages',exact:true,includeHidden:true});
 test('known revocation cannot reattach history after refresh',async({page})=>{
   const ui=await host(page);await open(ui,a);
   await page.evaluate(a=>{window.entries=window.entries.filter(e=>e.fulcra_userid!==a);window.incoming=window.incoming.filter(s=>s.sharing_fulcra_userid!==a);},a);
-  await ui.getByRole('button',{name:'Load messages',exact:true}).click();
+  await page.clock.runFor(10000);
   await expect(ui.locator('#message-status')).toContainText('no longer available');
   // A programmatic click also exercises the handler guard when hidden/disabled.
   await history(ui).evaluate(button=>button.click());
@@ -66,7 +66,7 @@ test('history-only revocation invalidates an accepted but unacknowledged attachm
     window.entries=window.entries.filter(e=>e.id!=='MomentAnnotation/'+a);
     window.incoming=window.incoming.filter(s=>s.data_types[0]!=='MomentAnnotation/'+a);
   },a);
-  await ui.getByRole('button',{name:'Load messages',exact:true}).click();
+  await page.clock.runFor(10000);
   await expect(ui.getByText('Converted from mesh',{exact:true})).toBeHidden();
   await page.evaluate(()=>window.release());
   await expect.poll(()=>page.evaluate(()=>window.context.content.length)).toBe(0);

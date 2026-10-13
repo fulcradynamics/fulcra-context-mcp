@@ -1,12 +1,13 @@
 import { createThreadComposer } from './thread-composer.js';
 import { renderIdentity } from './identity.js';
-import { readConversation } from './conversation.js';
+import { readConversation, readLatest } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './mesh-send.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { icon, ArrowUpRight, ArrowDownLeft, CalendarRange, ArrowLeft, ChevronDown } from './icons.js';
+import { icon, ArrowUpRight, ArrowDownLeft, History, ArrowLeft, ChevronDown } from './icons.js';
 export { parseRecords } from './records.js';
+const DAY = 86400000;
 
 export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
   const panel = doc.querySelector('#mesh-detail');
@@ -16,17 +17,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
-  const start = doc.querySelector('#message-start');
-  const end = doc.querySelector('#message-end');
-  const load = doc.querySelector('#message-load');
+  const more = doc.querySelector('#message-more');
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
   const orderField = doc.querySelector('#message-order-field');
-  load.prepend(icon(CalendarRange, 'btn-icon'));
+  more.prepend(icon(History, 'btn-icon'));
   back.prepend(icon(ArrowLeft, 'btn-icon'));
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'), presentation);
   const drafts = new Map();
-  let selected, displayed, range, rangeLabel, requested, updateComposer, lastSuccess, ready = false;
+  // start is the applied window start; each read covers start through now.
+  let selected, displayed, start, requestedStart, updateComposer, lastSuccess, ready = false;
   const converted = doc.createElement('p'); converted.hidden = true;
   const convertedLabel = doc.createElement('span'); convertedLabel.textContent = 'Converted from mesh';
   const oldMessages = doc.createElement('button'); oldMessages.type = 'button'; oldMessages.textContent = 'chat about old messages';
@@ -37,16 +37,14 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     {lifecycle:contextLifecycle, isCurrent:()=>!!selected?.convertedFrom?.length && !unavailable});
 
   let generation = 0;
-  let queryVersion = 0;
   let returnFocus;
-  let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer, validation = '';
+  let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer;
   let refreshState = { running: false, paused: false, nextAt: null };
   function renderStatus() {
     clearTimeout(statusTimer);
     if (!selected) return;
     let text = '';
-    if (validation) text = validation;
-    else if (unavailable) text = 'This thread is no longer available.';
+    if (unavailable) text = 'This thread is no longer available.';
     else if (loadFailed) {
       const state = refreshState;
       text = 'Could not load messages. ';
@@ -57,7 +55,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         // Display-only tick. The scheduler alone owns retry requests/deadlines.
         statusTimer = setTimeout(renderStatus, 1000);
       } else text += 'Automatic retries are paused.';
-    } else if (displayed && !displayed.messages.length) text = 'No messages in this date range.';
+    } else if (displayed && !displayed.messages.length) text = 'No messages yet.';
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
@@ -130,7 +128,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     messageList.update(result.messages, () => {
       setTitle(selected);
       renderStatus();
-      updateComposer(selected.peer, range, result, ready, Boolean(lastSuccess || result.messages.length));
+      placeMore();
+      updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
     });
   }
 
@@ -139,7 +138,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     firstAttempt = false; loading.hidden = true;
     loadFailed = true; unavailable = revoked || unavailable;
     const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
-    const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Use Load messages to retry.`;
+    const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Retrying automatically.`;
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
     if (unavailable) {
       lastSuccess = undefined;
@@ -153,9 +152,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (!selected) return true;
     loading.hidden = !firstAttempt;
     const requestGeneration = generation;
-    const requestVersion = queryVersion;
-    const query = requested;
-    const current = () => generation === requestGeneration && queryVersion === requestVersion;
+    const current = () => generation === requestGeneration;
     try {
       const thread = discovery.threads.find(t => t.peer === selected.peer);
       const sourcesRemoved = selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid));
@@ -170,19 +167,23 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
           render(displayed, false);
         }
       }
-      const sameRange = JSON.stringify(range) === JSON.stringify(query.range);
-      const result = await readConversation(app, selected, query.range, current, { discovery, previous: sameRange ? displayed : undefined, now: new Date().toISOString() });
+      // Initial window: one week before the earlier of the latest incoming and latest outgoing messages.
+      if (!start && !requestedStart && thread) {
+        let latest;
+        try { latest = await readLatest(app, thread.sources); } catch { throw new Error('Could not find the latest messages.'); }
+        if (!current()) return true;
+        const edges = ['Incoming', 'Outgoing'].map(d => latest.find(m => m.direction === d)).filter(Boolean)
+          .map(m => Date.parse(m.record.recorded_at ?? m.record.start_time));
+        requestedStart = new Date(Math.min(Date.now(), ...edges) - 7 * DAY).toISOString();
+      }
+      const query = { start_time: requestedStart ?? start, end_time: new Date().toISOString() };
+      const result = await readConversation(app, selected, query, current, { discovery, previous: displayed, now: query.end_time });
       if (!current()) return true;
       const success = !result.warnings.some(w => w.startsWith('Could not load messages'));
-      if (!success && !sameRange && !result.messages.length && displayed) {
-        failed(new Error(`Could not load requested range ${query.label}. Showing previous applied range.`));
-        return false;
-      }
-      if (success) lastSuccess = new Date().toISOString();
-      else if (!sameRange) lastSuccess = undefined;
+      // A failed wider read keeps the applied window; the next refresh retries it.
+      if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; }
       loadFailed = !success; unavailable = false;
       loading.hidden = true;
-      range = query.range; rangeLabel = query.label;
       displayed = result;
       render(result);
       return success;
@@ -190,36 +191,26 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
     } finally {
-      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; }
+      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); }
     }
   }
-  function applyDates() {
-    const startDate = new Date(`${start.value}T00:00:00Z`);
-    const endDate = new Date(`${end.value}T00:00:00Z`);
-    if (!Number.isFinite(+startDate) || !Number.isFinite(+endDate) || startDate > endDate) {
-      validation = 'Choose a valid date range (start on or before end).';
-      renderStatus();
-      return false;
-    }
-    validation = '';
-    renderStatus();
-    endDate.setUTCDate(endDate.getUTCDate() + 1);
-    const next = { label: `${start.value} through ${end.value} UTC`, range: { start_time: startDate.toISOString(), end_time: endDate.toISOString() } };
-    if (JSON.stringify(next) !== JSON.stringify(requested)) {
-      requested = next; queryVersion++;
-      if (displayed) render(displayed, false);
-    }
-    return true;
+  // Load more sits at the earliest end of the list and extends the window by two weeks.
+  function placeMore() {
+    more.hidden = !displayed?.messages.length;
+    if (order.value === 'oldest') messages.before(more); else messages.after(more);
   }
-  const onLoad = () => {
-    if (start.reportValidity() && end.reportValidity() && applyDates()) requestRefresh();
+  const onMore = () => {
+    if (!start || requestedStart) return;
+    requestedStart = new Date(Date.parse(start) - 14 * DAY).toISOString();
+    more.disabled = true;
+    requestRefresh();
   };
   const onOrder = () => { if (displayed) render(displayed, ready); };
   const onBack = () => {
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
-    clearTimeout(statusTimer); loading.hidden = true;
+    clearTimeout(statusTimer); loading.hidden = true; more.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
@@ -239,7 +230,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     e.preventDefault();
     toggleMessage(e.target);
   };
-  load.addEventListener('click', onLoad);
+  more.addEventListener('click', onMore);
   order.addEventListener('change', onOrder);
   back.addEventListener('click', onBack);
   messages.addEventListener('click', onMessageClick);
@@ -248,8 +239,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
-    selected = thread; displayed = undefined; lastSuccess = undefined; range = undefined; rangeLabel = undefined; ready = false;
-    firstAttempt = true; loadFailed = false; unavailable = false; validation = '';
+    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; ready = false;
+    firstAttempt = true; loadFailed = false; unavailable = false;
     clearTimeout(statusTimer); loading.hidden = false;
     returnFocus = button;
     messageList.clear();
@@ -258,12 +249,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
       () => { if (selected && displayed) render(displayed, ready); });
     setTitle(thread);
-    const today = new Date();
-    end.value = today.toISOString().slice(0, 10);
-    today.setUTCDate(today.getUTCDate() - 1);
-    start.value = today.toISOString().slice(0, 10);
-    applyDates();
-    range = requested.range; rangeLabel = requested.label;
+    more.hidden = true; more.disabled = false;
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();
@@ -274,7 +260,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     generation++; selected = undefined;
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
-    load.removeEventListener('click', onLoad);
+    more.removeEventListener('click', onMore);
     order.removeEventListener('change', onOrder);
     back.removeEventListener('click', onBack);
     messages.removeEventListener('click', onMessageClick);

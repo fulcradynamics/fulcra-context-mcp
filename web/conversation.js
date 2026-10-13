@@ -7,6 +7,17 @@ const timestamp = record => {
   return Number.isFinite(time) ? time : Infinity;
 };
 
+// The latest record from each source, newest first; untimestamped records are ignored.
+export async function readLatest(app, sources) {
+  const latest = await Promise.all(sources.map(async ({ direction, identifier: _identifier, setupSession: _setupSession, ...source }) => {
+    const args = { data_type: source.id, latest: true };
+    if (direction === 'Incoming') args.fulcra_userid = source.fulcra_userid;
+    const { records } = parseRecords(await app.callServerTool({ name: 'get_records', arguments: args }, { timeout: 30000 }), source.id);
+    return records.map(record => ({ record, source, direction }));
+  }));
+  return latest.flat().filter(m => Number.isFinite(timestamp(m.record))).sort((a, b) => timestamp(b.record) - timestamp(a.record));
+}
+
 export async function readConversation(app, selected, range, isCurrent = () => true, { discovery: supplied, previous, now } = {}) {
   let discovery;
   try {
@@ -31,7 +42,7 @@ export async function readConversation(app, selected, range, isCurrent = () => t
     } catch {
       const retained = (previous?.messages ?? []).filter(m => m.source.id === source.id && m.source.fulcra_userid === source.fulcra_userid)
         .map(m => ({ ...m, stale: true }));
-      return { messages: retained, warning: `Could not load messages — ${label} (get_records failed or returned an invalid result). Conversation incomplete; retry Load messages.`
+      return { messages: retained, warning: `Could not load messages — ${label} (get_records failed or returned an invalid result). Conversation incomplete; retrying automatically.`
         + (retained.length ? ' Stale last-good records retained; access and content not verified current.' : '') };
     }
   }));

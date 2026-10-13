@@ -200,34 +200,67 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await expect(tell).toBeDisabled();
 });
 
-test('two UTC calendar dates, top composer and both orders; polling never applies unsubmitted edits', async ({ page }) => {
-  const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/Event/in'] = [
-    { id: 'older', recorded_at: '2026-01-09T12:00:00Z', note: 'older body' },
-    { id: 'newer', recorded_at: '2026-01-10T12:00:00Z', note: 'newer body' },
-  ]; });
+test('window starts a week before the earlier latest side; Load more adds two weeks at the earliest end in both orders', async ({ page }) => {
+  const ui = await open(page, [channel(), channel('me', 'out')]);
+  await page.evaluate(() => {
+    window.latestRows = {
+      'peer/Event/in': [{ id: 'newer', recorded_at: '2026-01-10T12:00:00Z', note: 'newer body' }],
+      'me/Event/out': [{ id: 'sent', recorded_at: '2025-12-20T12:00:00Z', note: 'sent body' }],
+    };
+    window.shares.outgoing = [{ data_types: ['Event/out'], with_user_ids: ['peer'], share_all_data: false }];
+    window.rows['peer/Event/in'] = [{ id: 'newer', recorded_at: '2026-01-10T12:00:00Z', note: 'newer body' }];
+    window.rows['me/Event/out'] = [{ id: 'sent', recorded_at: '2025-12-20T12:00:00Z', note: 'sent body' }];
+  });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
-  await expect(ui.locator('#message-start')).toHaveValue('2026-01-09');
-  await expect(ui.locator('#message-end')).toHaveValue('2026-01-10');
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  const ranges = () => page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').map(c => c.params.arguments.start_time));
+  // One week before the latest outgoing message, which is the earlier of the two.
+  expect(new Set(await ranges())).toEqual(new Set(['2025-12-13T12:00:00.000Z']));
+  await expect(ui.locator('#message-start, #message-end, #message-load')).toHaveCount(0);
+  const more = ui.getByRole('button', { name: 'Load more', exact: true });
+  await expect(more).toBeVisible();
+  expect(await more.evaluate(el => el.previousElementSibling?.id)).toBe('messages');
   await expect(ui.locator('#messages li').first()).toContainText('newer body');
-  expect(await ui.locator('#thread-composer').evaluate(el => Boolean(document.querySelector('#message-range').compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) && Boolean(el.compareDocumentPosition(document.querySelector('#messages')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await ui.getByLabel('Message order').selectOption('oldest');
-  await expect(ui.locator('#messages li').first()).toContainText('older body');
-  await ui.locator('#message-start').fill('2025-01-01'); await ui.locator('#message-end').fill('2025-01-02');
-  await page.clock.runFor(10000);
-  expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').at(-1).params.arguments.start_time)).toBe('2026-01-09T00:00:00.000Z');
-  await expect(ui.locator('#thread-context')).toContainText('2026-01-09T00:00:00.000Z');
-  await expect(ui.locator('#message-start')).toHaveValue('2025-01-01');
+  await expect(ui.locator('#messages li').first()).toContainText('sent body');
+  expect(await more.evaluate(el => el.nextElementSibling?.id)).toBe('messages');
   await page.evaluate(() => { window.hold = ['get_records']; });
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect.poll(() => reads(page)).toBe(3);
-  await ui.locator('#message-start').fill('2024-01-01');
+  await more.click();
+  await expect(more).toBeDisabled();
+  await expect.poll(async () => (await ranges()).slice(-2)).toEqual(['2025-11-29T12:00:00.000Z', '2025-11-29T12:00:00.000Z']);
   await release(page);
-  await expect(ui.locator('#message-status')).toBeEmpty();
-  await expect(ui.locator('#thread-context')).toContainText('2025-01-01T00:00:00.000Z');
+  await expect(more).toBeEnabled();
+  await expect(ui.locator('#thread-context')).toContainText('2025-11-29T12:00:00.000Z');
+  // Polling keeps the extended window.
   await page.clock.runFor(10000);
-  expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').at(-1).params.arguments.start_time)).toBe('2025-01-01T00:00:00.000Z');
+  await expect.poll(async () => (await ranges()).slice(-2)).toEqual(['2025-11-29T12:00:00.000Z', '2025-11-29T12:00:00.000Z']);
+  await more.click();
+  await expect.poll(async () => (await ranges()).slice(-1)[0]).toBe('2025-11-15T12:00:00.000Z');
+  expect(await page.evaluate(() => window.latestReads.filter(r => r.params.arguments.data_type === 'Event/in').length)).toBe(2);
   expect(await page.evaluate(() => window.sends.length)).toBe(0);
+});
+
+test('thread list previews the latest sent or received message and keeps it on read failure', async ({ page }) => {
+  const ui = await open(page, [channel(), channel('me', 'out'), channel('other')]);
+  await page.evaluate(() => {
+    window.shares.outgoing = [{ data_types: ['Event/out'], with_user_ids: ['peer'], share_all_data: false }];
+    window.latestRows = {
+      'peer/Event/in': [{ id: 'in', recorded_at: '2026-01-09T12:00:00Z', note: 'received earlier' }],
+      'me/Event/out': [{ id: 'out', recorded_at: '2026-01-10T11:00:00Z', note: 'sent later' }],
+    };
+  });
+  await page.clock.runFor(10000);
+  const peerRow = ui.locator('#meshes > li').filter({ has: ui.getByRole('button', { name: 'peer', exact: true }) });
+  const otherRow = ui.locator('#meshes > li').filter({ has: ui.getByRole('button', { name: 'other', exact: true }) });
+  await expect(peerRow.locator('.thread-preview')).toHaveText('You: sent later');
+  await expect(otherRow.locator('.thread-preview')).toBeHidden();
+  await page.evaluate(() => { window.latestRows['peer/Event/in'] = [{ id: 'in2', recorded_at: '2026-01-10T11:30:00Z', note: '<b>received newest</b>' }]; });
+  await page.clock.runFor(10000);
+  await expect(peerRow.locator('.thread-preview')).toHaveText('<b>received newest</b>');
+  await expect(peerRow.locator('.thread-preview b')).toHaveCount(0);
+  await page.evaluate(() => { window.latestRows = { 'peer/Event/in': 'invalid' }; });
+  await page.clock.runFor(10000);
+  await expect(peerRow.locator('.thread-preview')).toHaveText('<b>received newest</b>');
 });
 
 test('manual refresh coalesces, preserves keyed list focus and labels account names without a global spinner', async ({ page }) => {
@@ -339,7 +372,7 @@ for (const expanded of [false, true]) for (const order of ['latest', 'oldest']) 
   await expect(latest).toBeInViewport();
 });
 
-test('discovery and partial-message failures back off, reset on success, and manual retry bypasses delay', async ({ page }) => {
+test('discovery and partial-message failures back off and reset on success', async ({ page }) => {
   const ui = await open(page, [channel()]);
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => reads(page)).toBe(1);
@@ -353,7 +386,7 @@ test('discovery and partial-message failures back off, reset on success, and man
     await expect(busy(ui)).toBeHidden();
   }
   await page.evaluate(() => { window.fail = []; });
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await page.clock.runFor(80000);
   await expect.poll(() => reads(page)).toBe(++count);
   await expect(busy(ui)).toBeHidden();
   await page.clock.runFor(10000); await expect.poll(() => reads(page)).toBe(++count);
@@ -384,7 +417,7 @@ test('hidden discovery drains without message reads; SDK teardown stops queued r
   await page.evaluate(() => { window.hold = ['get_records']; });
   await visibility(page, 'visible');
   await expect.poll(() => reads(page)).toBe(2);
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await visibility(page, 'visible');
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: 'teardown', method: 'ui/resource-teardown', params: {} }, '*'));
   await expect.poll(() => page.evaluate(() => window.teardownReply)).toBe(true);
   await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'late', note: 'never render after teardown' }]; });
@@ -396,14 +429,14 @@ test('hidden discovery drains without message reads; SDK teardown stops queued r
   await expect(ui.locator('#messages')).not.toContainText('never render');
 });
 
-test('all message calls drain on partial failure before coalesced manual rerun; one discovery per batch', async ({ page }) => {
+test('all message calls drain on partial failure before a coalesced rerun; one discovery per batch', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two')]);
   await page.evaluate(() => { window.hold = ['get_records']; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.held.length)).toBe(2);
   await page.evaluate(() => window.reply(window.held.shift().id, { isError: true }));
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await visibility(page, 'visible');
+  await visibility(page, 'visible');
   const before = await page.evaluate(() => window.calls.length);
   await page.clock.runFor(10000);
   expect(await page.evaluate(() => window.calls.length)).toBe(before);
@@ -415,7 +448,7 @@ test('all message calls drain on partial failure before coalesced manual rerun; 
   expect(await reads(page)).toBe(4);
 });
 
-test('revoked source is removed even while a changed range fails; retained range and context remain honest', async ({ page }) => {
+test('revoked source is removed even while Load more fails; the applied window and context remain honest', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two')]);
   await page.evaluate(() => {
     window.rows['peer/Event/one'] = [{ id: 'one', note: 'revoked content' }];
@@ -424,16 +457,14 @@ test('revoked source is removed even while a changed range fails; retained range
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(2);
   await page.evaluate(entries => { window.entries = entries; window.hold = ['get_records']; window.fail = ['get_records']; }, [channel('peer', 'two')]);
-  await ui.locator('#message-start').fill('2025-01-01');
-  await ui.locator('#message-end').fill('2025-01-02');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load more', exact: true }).click();
   await expect(ui.locator('#messages')).not.toContainText('revoked content');
   await expect(ui.locator('#thread-context')).not.toContainText('revoked content');
+  expect(await page.evaluate(() => window.held.at(-1).params.arguments.start_time)).toBe('2025-12-20T12:00:01.000Z');
   await release(page);
   await expect(ui.locator('#messages')).toContainText('retained content');
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
-  await expect(ui.locator('#thread-context')).toContainText('Showing previous applied range');
-  await expect(ui.locator('#thread-context')).toContainText('2026-01-09T00:00:00.000Z');
+  await expect(ui.locator('#thread-context')).toContainText('"start_time":"2026-01-03T12:00:01.000Z"');
   await expect(ui.locator('#thread-context')).toContainText('"stale":true');
   const tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await expect(tell).toBeEnabled();
@@ -442,8 +473,11 @@ test('revoked source is removed even while a changed range fails; retained range
   const sent = await page.evaluate(() => window.contexts[0].params.content[0].text);
   expect(sent).toContain('retained content');
   expect(sent).not.toContain('revoked content');
-  expect(sent).toContain('2026-01-09T00:00:00.000Z');
-  expect(sent).toContain('Showing previous applied range');
+  expect(sent).toContain('2026-01-03T12:00:01.000Z');
+  // The retry still requests the wider window.
+  await page.evaluate(() => { window.fail = []; });
+  await page.clock.runFor(20000);
+  await expect(ui.locator('#thread-context')).toContainText('"start_time":"2025-12-20T12:00:01.000Z"');
 });
 
 test('discovery failure permits a previously loaded empty thread but not an unloaded thread', async ({ page }) => {
@@ -454,8 +488,8 @@ test('discovery failure permits a previously loaded empty thread but not an unlo
   const tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
   await expect(tell).toBeDisabled();
   await page.evaluate(() => { window.fail = []; });
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await page.clock.runFor(20000);
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
   await expect(tell).toBeEnabled();
   await page.evaluate(() => { window.fail = ['list_shares']; });
   await page.clock.runFor(10000);
@@ -578,13 +612,7 @@ test('first attempt alone has an in-area spinner; retry countdown uses the drain
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
   await expect(spinner).toBeHidden();
   await release(page);
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
-  await page.evaluate(() => { window.hold = ['get_records']; });
-  await ui.locator('#message-start').fill('2025-01-01');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect.poll(() => reads(page)).toBe(before + 6);
-  await expect(spinner).toBeHidden();
-  await release(page);
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   await page.evaluate(() => { window.hold = ['get_records']; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
@@ -596,7 +624,7 @@ for (const queued of [false, true]) test(`first-load feedback spans held discove
   const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two'), channel('other')]);
   if (queued) {
     await ui.getByRole('button', { name: 'other', exact: true }).click();
-    await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+    await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
     await page.evaluate(() => { window.hold = ['get_records']; });
     await page.clock.runFor(10000);
     await expect.poll(() => page.evaluate(() => window.held.length)).toBe(1);
@@ -653,39 +681,6 @@ for (const ending of ['failure', 'navigation', 'disposal']) test(`first-load dis
   expect(await busy(ui).evaluate(el => el.hidden)).toBe(true);
 });
 
-for (const priorFailure of [false, true]) test(`invalid range survives ticks and successful poll publication (prior failure ${priorFailure})`, async ({ page }) => {
-  const ui = await open(page, [channel()]);
-  await ui.getByRole('button', { name: 'peer', exact: true }).click();
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
-  if (priorFailure) {
-    await page.evaluate(() => { window.fail = ['get_records']; });
-    await page.clock.runFor(10000);
-    await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
-  }
-  const before = await reads(page);
-  await ui.locator('#message-start').fill('2026-01-11');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  const validation = 'Choose a valid date range (start on or before end).';
-  await expect(ui.locator('#message-status')).toHaveText(validation);
-  await page.clock.runFor(1000);
-  await expect(ui.locator('#message-status')).toHaveText(validation);
-  expect(await reads(page)).toBe(before);
-  await page.evaluate(() => { window.fail = []; window.hold = ['get_records']; });
-  await page.clock.runFor(priorFailure ? 19000 : 9000);
-  await expect.poll(() => reads(page)).toBe(before + 1);
-  await expect(ui.locator('#message-status')).toHaveText(validation);
-  await release(page);
-  // A scheduled next batch proves the successful batch has published its state.
-  await page.clock.runFor(10000);
-  await expect.poll(() => reads(page)).toBe(before + 2);
-  await expect(ui.locator('#message-status')).toHaveText(validation);
-  expect(await page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').at(-1).params.arguments.start_time)).toBe('2026-01-09T00:00:00.000Z');
-  await ui.locator('#message-start').fill('2026-01-09');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect.poll(() => reads(page)).toBe(before + 3);
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
-});
-
 const reads = page => page.evaluate(() => window.calls.filter(c => c.params.name === 'get_records').length);
 const busy = ui => ui.locator('#message-loading');
 async function release(page) { await page.evaluate(() => { window.hold = []; for (const r of window.held.splice(0)) window.answer(r); }); }
@@ -706,7 +701,7 @@ test('visible polling discovers first thread from empty, reads only selected pee
   expect(await reads(page)).toBe(0);
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => reads(page)).toBe(1);
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
   await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'newly arrived' }]; window.hold = ['get_records']; });
   await page.clock.runFor(10000);
   await expect(busy(ui)).toBeHidden();

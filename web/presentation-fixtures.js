@@ -44,6 +44,26 @@ export const test = base.extend({
         return result;
       };
     }, schema);
+    // Latest-record reads (initial window and list previews) are answered from
+    // window.latestRows and logged in window.latestReads, so harness read logs and
+    // index-based responders only see range reads. setContent clears window
+    // listeners, so install after it and before the harness registers its own.
+    const setContent = page.setContent.bind(page);
+    page.setContent = async (...args) => {
+      await setContent(...args);
+      await page.evaluate(() => {
+        window.latestReads = [];
+        addEventListener('message', event => {
+          const r = event.data;
+          if (r?.method !== 'tools/call' || r.params?.name !== 'get_records' || !r.params.arguments?.latest) return;
+          event.stopImmediatePropagation();
+          window.latestReads.push(r);
+          const { data_type, fulcra_userid } = r.params.arguments;
+          const rows = window.latestRows?.[`${fulcra_userid ?? 'me'}/${data_type}`] ?? [];
+          event.source.postMessage({ jsonrpc: '2.0', id: r.id, result: window.connectionResult({ content: [{ type: 'text', text: `Records for ${data_type} from None to None: ${JSON.stringify(rows)}` }] }) }, '*');
+        }, true);
+      });
+    };
     await use(page);
   },
 });

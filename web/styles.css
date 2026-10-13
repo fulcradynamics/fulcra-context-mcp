@@ -92,8 +92,8 @@ input, textarea, select { color: #fff; background: var(--surface); border: 1px s
 select { width: fit-content; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
-.range-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
-#message-range { margin-top: 24px; }
+#message-more { display: flex; margin: 16px auto; }
+#message-more[hidden] { display: none; }
 #message-status { margin-block: 20px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
@@ -144,6 +144,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .thread-peer { min-width: 0; overflow-wrap: anywhere; }
 .identity-secondary { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
 .thread-account { margin: 4px 0 0; padding-left: 48px; }
+.thread-preview { margin: 4px 0 0; padding-left: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Message rows: direction tile in column 1, stacked header / date / body in
    column 2. A grid (not a wrapper div) keeps each text node a direct <li> child. */
@@ -217,7 +218,5 @@ html { overflow-anchor: none; }
 @media (max-width: 520px) {
   body { padding-left: calc(16px + var(--host-safe-left, 0px)); padding-right: calc(16px + var(--host-safe-right, 0px)); }
   .invite-section { margin-bottom: 24px; }
-  .range-controls { grid-template-columns: minmax(0, 1fr); }
-  .range-controls button { justify-self: start; }
   .section-header h2 { font-size: 11px; }
 }

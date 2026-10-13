@@ -11,7 +11,7 @@ import {
   MessageSquare,
   Send,
   Sparkles,
-  CalendarRange,
+  History,
   ChevronDown,
 } from 'lucide';
 
@@ -38,6 +38,6 @@ export {
   MessageSquare,
   Send,
   Sparkles,
-  CalendarRange,
+  History,
   ChevronDown,
 };
