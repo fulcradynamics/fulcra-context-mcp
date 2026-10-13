@@ -10,6 +10,8 @@ The global, thread and inline-list resources are respectively
 `ui://fulcra/mesh/threads/v35.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
+A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
+through server instructions and the plugin's main `fulcra-context` skill.
 
 ## Protocol and provenance
 
