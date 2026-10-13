@@ -19,7 +19,7 @@ test('click sends only a user message requesting the invitation action', async (
   await button.click();
   assert.equal(calls.length, 1);
   assert.equal(calls[0].role, 'user');
-  assert.match(calls[0].content[0].text, /fulcra-invite/);
+  assert.match(calls[0].content[0].text, /use the invite skill/);
   assert.match(calls[0].content[0].text, /invite another user/);
   assert.match(calls[0].content[0].text, /First show me a copyable invitation prompt/);
   assert.match(calls[0].content[0].text, /my own verified Fulcra user ID/);
@@ -69,5 +69,5 @@ test('unsupported host and failed connection leave button disabled', async () =>
 test('unsupported messaging offers the same invitation action', async () => {
   const { button, status } = ui();
   await setupInvite(host({ getHostCapabilities: () => ({}) }), button, status);
-  assert.match(status.textContent, /fulcra-invite skill/);
+  assert.match(status.textContent, /use the invite skill/);
 });

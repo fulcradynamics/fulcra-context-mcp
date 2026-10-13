@@ -1,7 +1,7 @@
 import { getContextLifecycle } from './native-context.js';
 
 const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
-  + 'Please use the fulcra-invite skill to help me prepare the invitation. '
+  + 'Please use the invite skill to help me prepare the invitation. '
   + 'First show me a copyable invitation prompt for the other person to give their agent, '
   + 'using my own verified Fulcra user ID and the mesh skill URL. Do not ask for the other user\'s ID. '
   + 'Then ask whether I want to add optional context about who or what the invite is for, '
@@ -34,7 +34,7 @@ export async function setupInvite(app, button, status) {
   try {
     await app.connect();
     if (!app.getHostCapabilities()?.message?.text) {
-      status.textContent = 'This host cannot send chat messages. Ask the agent to use the fulcra-invite skill in the conversation.';
+      status.textContent = 'This host cannot send chat messages. Ask the agent to use the invite skill in the conversation.';
       return true;
     }
     status.textContent = '';
