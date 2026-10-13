@@ -64,12 +64,12 @@ async def test_all_covering_grants_checked(call, backend, change):
     fake.record_data_type.assert_not_called()
 
 
-@pytest.mark.parametrize('case', ['no_grant', 'duplicate_grant', 'foreign', 'ambiguous', 'inactive', 'deleted', 'nonrecordable', 'self', 'malformed', 'blank', 'conflict'])
+@pytest.mark.parametrize('case', ['no_grant', 'foreign', 'ambiguous', 'inactive', 'deleted', 'nonrecordable', 'self', 'malformed', 'blank', 'conflict'])
 async def test_refuses_unsafe_or_ambiguous_target(call, backend, case):
     fake, rows = backend
     args = dict(ARGS)
     if case == 'no_grant': fake.get_datashares.return_value = []
-    if case == 'duplicate_grant': fake.get_datashares.return_value *= 2
+
     if case == 'foreign': fake.resolve_data_type.return_value[0]['fulcra_userid'] = OTHER
     if case == 'ambiguous': fake.resolve_data_type.return_value *= 2
     if case == 'inactive': fake.resolve_data_type.return_value[0]['deprecated'] = True

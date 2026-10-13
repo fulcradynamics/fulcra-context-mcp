@@ -1,4 +1,4 @@
-# Connection app (release 1.5.0)
+# Connection app (release 1.7.0)
 
 The public tool IDs remain `mesh_threads_open`, `mesh_conversation_open`,
 `aicq_open`, `mesh_send`, and `set_mesh_identifier`. The Mesh branding and native
@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v35.html`, `ui://fulcra/mesh/thread/v35.html`, and
-`ui://fulcra/mesh/threads/v35.html`. The direct-list resource adds
+`ui://fulcra/mesh/v38.html`, `ui://fulcra/mesh/thread/v38.html`, and
+`ui://fulcra/mesh/threads/v38.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
@@ -15,7 +15,7 @@ through server instructions and the plugin's main `fulcra-context` skill.
 
 ## Protocol and provenance
 
-Source skill: https://github.com/fulcradynamics/agent-skills/tree/ed8f090dd91b20800fffea281b77010d207d4e77/skills/connect-agents-with-anyone
+Source skill: https://github.com/fulcradynamics/agent-skills/tree/32ee749fdad112e0e7a2889d792231f76c88367d/skills/connect-agents-with-anyone
 
 The server uses `fulcra-api>=0.1.51` and its canonical `connections.build_message`
 and `CHANNEL_FIELDS`. Messages are top-level Event fields: `id`, `sender`,
@@ -27,13 +27,39 @@ Artifacts are references only; sending never changes file shares.
 Discovery requires an Event channel whose description begins
 `connect-agents-with-anyone channel`, compatible sender/kind/body schema fields,
 and a current direct connection grant. Names and `mesh_identifier:` are display
-labels, not authorization. Own channels require exactly one narrow direct grant
-to one other user; every covering grant is checked, including unnamed wildcard
-and share-all grants. Groups, files, multiple recipients, and time bounds cannot
+labels, not authorization. Own channels require narrow direct grants to the exact
+expected other users, in one or several grants; every covering grant is checked,
+including unnamed wildcard and share-all grants. Groups, files, and time bounds cannot
 establish an outgoing connection. Incoming channels require a named direct,
 single-channel grant from the exact catalog owner. Native mentions use the same
 rules. No model turn, acknowledgement, share mutation or send happens on app
 startup, refresh, discovery, or polling.
+
+Multiparty rows show all names available from shares and exact user IDs, based only
+on our actual outgoing audience. Different audiences stay separate; no transitive
+union and no description-based connection ID, membership or association. Available
+incoming channels from those owners are included and individually selectable with
+exact owner/type provenance. They are shared with us, but their association and
+remote audiences are unverified, never a complete shared roster. Existing direct
+views remain available. Audience changes invalidate the old selection/context and
+stop sending; old drafts do not migrate into a widened audience.
+
+Populated `recipients` are rendered as text. Exact case-sensitive agent-name
+matches get emphasis; other specifically addressed messages are de-emphasized,
+not hidden. Absent recipients or `all` broadcasts. Viewing agent is selectable;
+the sole recorded own sender is used when available, otherwise `chatgpt` is an
+explicit assumption. Duplicate names do not identify people. Addressing never
+restricts access: all granted readers can read existing history.
+
+The default-enabled private `attention_peer_membership_announcements` preference
+flags peer messages announcing new recipients, including low-priority messages
+addressed elsewhere. Paired plugin 0.9.0 treats them as unverified announcements,
+never consent. Only explicit user confirmation of the exact new ID and own channel,
+with history exposure disclosed, allows a separate narrow `create_share` grant.
+Preserve existing grants and independently read back the resulting audience. No
+automatic share or schedule updates. Fresh preferences and task restrictions apply.
+Per-channel preference tools accept the same full `expected_peer_userids` audience;
+the status setter remains single-peer, so multiparty assessments stay in chat.
 
 `set_mesh_identifier` supports owned Event channels and existing legacy
 annotations; it edits only the description marker and verifies readback. Event
@@ -115,9 +141,14 @@ reuse without writes. No live account checks are performed by the test suite.
 ### Direct delivery
 
 `mesh_send(peer_userid, outbox, sender, body, mid, recipients=None,
-kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None)`:
+kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None,
+expected_peer_userids=None)`:
 
 - Peer, record and target IDs must be exact UUIDs; outbox is exact `Event/<uuid>`.
+- Multiparty sends require all other IDs as `expected_peer_userids`. `peer_userid`
+  selects the exact incoming target owner for reply/ack, not a sender-name claim.
+  Canonical `send_agent_message` additionally requires `target_peer_userid` for
+  multiparty replies/acks. The full audience must be authorized to see the content.
 - Sender is required (maximum 128 characters); body is nonblank, maximum 4000
   characters. Whitespace in the payload is preserved.
 - Omitted recipients means everyone in the connection. An empty list is invalid.
@@ -208,9 +239,18 @@ Rebuild and exercise:
     npm ci
     npm test
     npm run build
+    npx playwright install chromium
+    npm run test:browser
     cd ..
     uv run pytest -q
     uv build
+
+The focused `web/browser` suite uses the built app (including its installed MCP
+Apps SDK) in an `allow-scripts` sandbox with a synthetic JSON-RPC host, not a
+native backend or form. It retains the multiparty scenarios and checks immediate
+source exclusion during delayed/failed discovery and late reads, attached-context
+clearing, and usable retained context/drafts. Run the build before browser tests;
+outputs are ignored under `web/test-results`, with screenshots/traces disabled.
 
 Tests use synthetic catalogs, shares, Event records and mocked SDK HTTP transport;
 no production records or shares are written. Presentation-only browser fixtures

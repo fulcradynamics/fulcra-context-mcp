@@ -1,5 +1,7 @@
 import { createThreadComposer } from './thread-composer.js';
-import { renderIdentity } from './identity.js';
+import { renderIdentity, renderThreadIdentity } from './identity.js';
+import { messageAddressing, viewingAgent } from './addressing.js';
+import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
 import { readConversation, readLatest } from './conversation.js';
 import { createMessageList } from './message-list.js';
@@ -19,6 +21,37 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
+  const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Viewing agent name';
+  const viewer = doc.createElement('input'); viewer.type = 'text'; viewer.maxLength = 128; viewer.id = 'viewing-agent';
+  viewerLabel.append(viewer);
+  const addressingHelp = doc.createElement('p'); addressingHelp.className = 'addressing-help';
+  addressingHelp.textContent = 'Addressing uses case-sensitive agent names, not user IDs or verified people. Shared names may refer to several agents. All readers can read all history; emphasis is not privacy filtering. Defaults to your sole recorded outgoing agent name, otherwise chatgpt.';
+  const rosterWarning = doc.createElement('p'); rosterWarning.className = 'addressing-help';
+  const readingOptions = doc.createElement('div');
+  const readingSummary = doc.createElement('p'); readingSummary.className = 'addressing-help';
+  readingOptions.append(readingSummary, viewerLabel, addressingHelp);
+  const incoming = incomingSelector(doc, (key, checked) => {
+    if (!selected) return;
+    const draft = drafts.get(selected.peer);
+    draft.excludedSources = [...new Set([...(draft.excludedSources ?? []).filter(k => k !== key), ...(!checked ? [key] : [])])];
+    contextLifecycle.invalidate();
+    // Selection changes invalidate reads, not the mounted composer's lifetime.
+    sourceGeneration++;
+    selected = selectedSources(selected, draft.excludedSources);
+    if (displayed) {
+      displayed = { ...displayed,
+        messages: displayed.messages.filter(m => selected.sources.some(s => s.id === m.source.id && s.fulcra_userid === m.source.fulcra_userid)),
+        warnings: [...new Set([...displayed.warnings, ...selected.warnings])] };
+      render(displayed, ready);
+    } else {
+      updateComposer(selected.peer, start && { start_time: start }, { messages: [], warnings: selected.warnings }, false, false);
+    }
+    requestRefresh();
+  });
+  const about = doc.querySelector('.reading-details');
+  about.before(rosterWarning, incoming.element);
+  about.append(readingOptions);
+  let activeViewer = 'chatgpt';
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
   const more = doc.querySelector('#message-more');
@@ -45,7 +78,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     () => ({peer_fulcra_userid:selected?.peer, legacy_sources:selected?.convertedFrom ?? []}),
     {lifecycle:contextLifecycle, isCurrent:()=>!!selected?.convertedFrom?.length && !unavailable});
 
-  let generation = 0;
+  let generation = 0, sourceGeneration = 0;
   let returnFocus;
   let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer;
   let refreshState = { running: false, paused: false, nextAt: null };
@@ -102,6 +135,18 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
       const text = direction === 'Outgoing' ? 'Outgoing' : `${record.sender || direction} (${name})`;
       if (title.textContent !== text) title.textContent = text;
+      const addressing = messageAddressing(record, activeViewer);
+      item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
+      item.classList.toggle('addressed-to-others', addressing === 'other');
+      let recipients = item.querySelector('.message-recipients');
+      if (!recipients) { recipients = doc.createElement('p'); recipients.className = 'message-recipients'; date.after(recipients); }
+      recipients.hidden = record.recipients === undefined;
+      const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
+      if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
+      let provenance = item.querySelector('.message-source');
+      if (!provenance) { provenance = doc.createElement('p'); provenance.className = 'message-source'; recipients.after(provenance); }
+      provenance.hidden = !selected?.participants;
+      provenance.textContent = selected?.participants ? `${source.fulcra_userid} / ${source.id}${source.association ? ' — association unverified' : ''}` : '';
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; title.after(badge); }
       if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
@@ -113,8 +158,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     });
   const setTitle = thread => {
     renderAssessment(assessment, thread.assessment);
-    renderIdentity(title, thread.identifier, thread.peer, 'Thread with ',
+    if (thread.participants) renderThreadIdentity(title, thread, 'Thread with ');
+    else renderIdentity(title, thread.identifier, thread.peer, 'Thread with ',
       thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
+    rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
+    rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
     refreshLegacyHandoff();
   };
@@ -122,12 +170,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   function render(result, canSend = true) {
     ready = canSend;
     const draft = drafts.get(selected.peer);
+    activeViewer = viewingAgent(result.messages, draft.viewingAgent);
+    readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === 'chatgpt' ? ' (assumption; change here)' : ''}`;
+    if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
     const confirmed = reconcilePosts(draft, result.messages).at(-1);
     if (confirmed) doc.querySelector('#send-status').textContent = `Peer ${selected.peer}, message ${confirmed.envelope.id}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
     const posts = unavailable ? [] : (draft.posts ?? [])
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
-    result = { ...result, assessment: selected.assessment, messages: [...result.messages, ...posts] };
+    result = { ...result, assessment: selected.assessment, participants: selected.participants,
+      viewingAgent: activeViewer, sources: selected.sources, messages: [...result.messages, ...posts] };
     result = { ...result, messages: [...result.messages].sort((a, b) => {
       const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
       const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
@@ -161,10 +213,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   async function read(discovery) {
     if (!selected) return true;
     loading.hidden = !firstAttempt;
-    const requestGeneration = generation;
-    const current = () => generation === requestGeneration;
+    const requestGeneration = generation, requestSourceGeneration = sourceGeneration;
+    const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
     try {
-      const thread = discovery.threads.find(t => t.peer === selected.peer);
+      const available = discovery.threads.find(t => t.peer === selected.peer);
+      if (available) incoming.update(available, drafts.get(selected.peer)?.excludedSources);
+      const thread = available && selectedSources(available, drafts.get(selected.peer)?.excludedSources);
+      if (thread) discovery = { ...discovery, threads: discovery.threads.map(t => t.peer === thread.peer ? thread : t) };
       const sourcesRemoved = selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid));
       if (sourcesRemoved || JSON.stringify(selected.convertedFrom) !== JSON.stringify(thread?.convertedFrom)) contextLifecycle.invalidate();
       selected = thread ?? { ...selected, sources: [], convertedFrom: [], assessment: undefined };
@@ -204,7 +259,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
     } finally {
-      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
+      if (current()) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
     }
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
@@ -221,6 +276,12 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     requestRefresh();
   };
   const onOrder = () => { if (displayed) render(displayed, ready); };
+  const onViewer = () => {
+    if (!selected) return;
+    drafts.get(selected.peer).viewingAgent = viewer.value;
+    contextLifecycle.invalidate();
+    if (displayed) render(displayed, ready);
+  };
   const onBack = () => {
     contextLifecycle.invalidate();
     generation++;
@@ -247,6 +308,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   };
   more.addEventListener('click', onMore);
   order.addEventListener('change', onOrder);
+  viewer.addEventListener('input', onViewer);
   back.addEventListener('click', onBack);
   messages.addEventListener('click', onMessageClick);
   messages.addEventListener('keydown', onMessageKey);
@@ -260,6 +322,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     returnFocus = button;
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
+    incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), orderField,
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
       () => { if (selected && displayed) render(displayed, ready); });
@@ -277,6 +340,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     messageList.dispose();
     more.removeEventListener('click', onMore);
     order.removeEventListener('change', onOrder);
+    viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
     messages.removeEventListener('click', onMessageClick);
     messages.removeEventListener('keydown', onMessageKey);

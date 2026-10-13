@@ -1,4 +1,4 @@
-"""Two-party Event connection sends using the SDK's canonical message schema.
+"""Audience-checked Event connection sends using the SDK's canonical schema.
 
 One authenticated request client; no ambient credentials or sharing changes.
 """
@@ -31,13 +31,19 @@ def channel_entry(api, owner, channel):
     return entry
 
 
-def _authorize(api, own, peer, outbox):
+def _authorize(api, own, peer, outbox, expected_peer_userids=None):
     entry = channel_entry(api, own, outbox)
     if not entry.get('recordable'):
         raise ValueError('Channel is not recordable.')
     shares = api.get_datashares()
     if not isinstance(shares, list):
         raise ValueError('Could not verify outgoing grants.')
+    expected = expected_peer_userids if expected_peer_userids is not None else [peer]
+    if (not isinstance(expected, list) or not expected or len(expected) > 32
+            or any(not _uuid(p) or p == own for p in expected)
+            or len(set(expected)) != len(expected) or peer not in expected):
+        raise ValueError('Provide the exact distinct expected peer user IDs, excluding yourself.')
+    audience = set()
     covering = []
     for share in shares:
         selectors = share.get('fulcra_data_types')
@@ -47,15 +53,19 @@ def _authorize(api, own, peer, outbox):
             continue
         permissions = share.get('permissions')
         if (share['share_all_data'] or selectors != [outbox]
-                or not isinstance(permissions, list) or len(permissions) != 1
-                or permissions[0].get('allowed_fulcra_userid') != peer
+                or not isinstance(permissions, list) or not permissions
+                or any(not isinstance(p, dict) or not _uuid(p.get('allowed_fulcra_userid'))
+                       or p['allowed_fulcra_userid'] == own for p in permissions)
                 or any(share.get(k) for k in ('group_permissions', 'group_id', 'file_paths', 'files',
                                               'file_history_paths', 'time_start', 'time_end'))
                 or not _uuid(share.get('id') or share.get('datashare_id'))):
-            raise ValueError('Every covering grant must share only this channel with exactly this peer, without groups, files or time bounds.')
+            raise ValueError('Every covering grant must share only this channel with direct users, without groups, files or time bounds.')
+        audience.update(p['allowed_fulcra_userid'] for p in permissions)
         covering.append(share)
-    if len(covering) != 1 or not covering[0].get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX):
-        raise ValueError('Exactly one narrow direct connection grant is required. Nothing was shared.')
+    if not covering or not all(s.get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX) for s in covering):
+        raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
+    if audience != set(expected):
+        raise ValueError('Channel audience changed or differs from expected_peer_userids. Nothing submitted.')
     return entry
 
 
@@ -95,7 +105,8 @@ def _readback(api, entry, record):
 
 
 def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
-         kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None):
+         kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None,
+         expected_peer_userids=None):
     result = dict(mid=mid, outbox=outbox, peer_userid=peer_userid, peer_acknowledged=False)
     attempted = False
     try:
@@ -110,7 +121,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
         own = api.get_fulcra_userid()
         if not _uuid(own) or own == peer_userid:
             raise ValueError('Could not establish distinct authenticated sender and peer.')
-        entry = _authorize(api, own, peer_userid, outbox)
+        entry = _authorize(api, own, peer_userid, outbox, expected_peer_userids)
         if in_reply_to:
             target = _target(api, peer_userid, in_reply_to, datetime.now(timezone.utc))
             if slug is None and 'topic' in target:
@@ -129,7 +140,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
             raise ValueError('Channel schema validation failed; nothing submitted.')
         for attempt in range(2):
             # Revalidate even on retry; grants and record ingestion are not atomic.
-            _authorize(api, own, peer_userid, outbox)
+            _authorize(api, own, peer_userid, outbox, expected_peer_userids)
             if api.get_fulcra_userid() != own:
                 raise ValueError('Authenticated account changed.')
             attempted = True

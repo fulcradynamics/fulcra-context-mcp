@@ -36,6 +36,24 @@ def backend(fake, catalog, outgoing=(), incoming=()):
     fake.get_shared_datasets.return_value = incoming
 
 
+async def test_multiparty_native_descriptor_opens_exact_own_audience(fake_fulcra):
+    backend(fake_fulcra, [entry('a')], outgoing=[{
+        'share_all_data': False, 'fulcra_data_types': ['Event/a'],
+        'permissions': [{'allowed_fulcra_userid': p} for p in ['peer', 'other']]}])
+    async with Client(mcp) as client:
+        items = await search(client)
+        assert len(items) == 2
+        descriptor = json.loads((await client.read_resource(items[1]['uri']))[0].text)
+        assert 'peer_fulcra_userid' not in descriptor
+        assert descriptor['thread_id'].startswith('connection:')
+        assert descriptor['open_tool']['arguments'] == {'thread_id': descriptor['thread_id']}
+        opened = await client.call_tool('mesh_conversation_open', descriptor['open_tool']['arguments'])
+        assert opened.structured_content['thread_id'] == descriptor['thread_id']
+        fake_fulcra.get_datashares.return_value = []
+        with pytest.raises(McpError):
+            await client.read_resource(items[1]['uri'])
+
+
 async def search(client, query=""):
     return (await client.call_tool("mesh_mentions_search", {"query": query})).structured_content["items"]
 

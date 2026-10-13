@@ -118,7 +118,7 @@ def aicq_settings_update(set: dict) -> dict:
         raise ToolError("Preferences not verified. Reload before retrying; no schedule was changed.") from None
 
 
-def _owned_connection(api, data_type, peer_userid):
+def _owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
     from . import mesh
     from .mentions import _compatible_schema
     if not re.fullmatch('Event/' + mesh.UUID_PATTERN, data_type) or not mesh._uuid(peer_userid):
@@ -126,7 +126,7 @@ def _owned_connection(api, data_type, peer_userid):
     own = api.get_fulcra_userid()
     if not mesh._uuid(own) or own == peer_userid:
         raise ValueError('Distinct authenticated owner required.')
-    entry = mesh._authorize(api, own, peer_userid, data_type)
+    entry = mesh._authorize(api, own, peer_userid, data_type, expected_peer_userids)
     fields, required = tools._user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
     if (entry.get('record_spec', {}).get('type') != 'event'
             or not _compatible_schema({'fields': fields, 'required_fields': required})):
@@ -135,7 +135,7 @@ def _owned_connection(api, data_type, peer_userid):
 
 
 @settings_mcp.tool(annotations=READ_ONLY)
-def get_contact_preferences(data_type: str, peer_userid: str) -> dict:
+def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_userids: list[str] | None = None) -> dict:
     """Load fresh global policy plus this verified OWN connection's overrides.
 
     Task/host restrictions still apply. Peer metadata and free text never grant
@@ -144,7 +144,7 @@ def get_contact_preferences(data_type: str, peer_userid: str) -> dict:
     from . import contact_preferences as policy
     try:
         api = tools.get_fulcra_object()
-        own, entry = _owned_connection(api, data_type, peer_userid)
+        own, entry = _owned_connection(api, data_type, peer_userid, expected_peer_userids)
         values = policy.read(api)
         overrides = policy.parse_overrides(entry['description'])
         if api.get_fulcra_userid() != own:
@@ -156,7 +156,8 @@ def get_contact_preferences(data_type: str, peer_userid: str) -> dict:
 
 
 @settings_mcp.tool(annotations={'readOnlyHint': False, 'destructiveHint': False})
-def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict) -> dict:
+def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
+                            expected_peer_userids: list[str] | None = None) -> dict:
     """Replace owned connection overrides only on explicit user request; {} restores inheritance.
 
     Description is peer-visible: obtain approval and omit private instructions.
@@ -168,12 +169,12 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict) -
         policy.validate(overrides)
         api = tools.get_fulcra_object()
         with policy.LOCK:
-            own, original = _owned_connection(api, data_type, peer_userid)
+            own, original = _owned_connection(api, data_type, peer_userid, expected_peer_userids)
             description = policy.write_overrides(original['description'], overrides)
             if api.get_fulcra_userid() != own:
                 raise ValueError('Account changed.')
             api.update_data_type('Event', data_type.split('/')[1], {'description': description})
-            current_owner, current = _owned_connection(api, data_type, peer_userid)
+            current_owner, current = _owned_connection(api, data_type, peer_userid, expected_peer_userids)
             if (current_owner != own or current['description'] != description
                     or any(current.get(k) != original.get(k) for k in ('name', 'record_spec'))):
                 raise ValueError('Readback mismatch.')

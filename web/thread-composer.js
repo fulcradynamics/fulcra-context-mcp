@@ -22,6 +22,8 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
     usable = loaded;
     // Refresh timestamps alone do not invalidate a snapshot. No automatic attach.
     const nextIdentity = JSON.stringify({ peer, range, warnings: result.warnings, assessment: result.assessment,
+      participants: result.participants, viewingAgent: result.viewingAgent,
+      sources: result.participants ? result.sources : undefined,
       messages: result.messages.map(({ last_success_at, ...message }) => message) });
     if (!ready || (identity !== undefined && identity !== nextIdentity)) lifecycle.invalidate();
     identity = nextIdentity;
