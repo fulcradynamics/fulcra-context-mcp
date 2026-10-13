@@ -8,10 +8,18 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 Adds optional own-connection status metadata, an independently verified narrow setter,
 and compact list/detail display with honest unknown/partial aggregation. Pair with
-plugin 0.4.0; refresh server discovery and reinstall. Existing scheduling permissions
-do not expand automatically. Foreground polling stays read-only. Local SDK/stdio and
+plugin 0.4.1, which includes the contact assessment and native settings workflows;
+refresh server discovery and reinstall. Existing scheduling permissions do not
+expand automatically. Foreground polling stays read-only. Local SDK/stdio and
 sandbox browser tests do not establish live backend/model/ChatGPT task acceptance;
 see [the app contract](docs/mesh-app.md).
+
+### Native mesh check status (1.5.0)
+
+Replaces the dedicated settings action/modal with read-only group-title status
+and plain chat instructions. Pair with plugin 0.4.1 and refresh server discovery.
+No Mesh UI resource change or schedule/checkpoint mutation. Exact native title
+rendering and same-task chat updates need [host acceptance](docs/mesh-settings.md).
 
 ### Latest-message window (UI v34)
 

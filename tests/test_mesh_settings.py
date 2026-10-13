@@ -35,23 +35,51 @@ async def test_native_settings_read_contract(fake_fulcra):
         result = (await client.call_tool(tool.name, {})).structured_content
         assert result["schema"] == {"type": "object", "properties": {}}
         assert result["values"] == {}
-        action = result["layout"][0]["items"][0]
-        assert action["tool"] == "aicq_schedule_settings"
-        assert action["description"] == "Last mesh check: Never checked"
-        opener = tools[action["tool"]]
-        assert opener.inputSchema.get("properties", {}) == {}
-        assert opener.meta["ui"]["visibility"] == ["app"]
-        assert opener.annotations.readOnlyHint
-        status = (await client.call_tool(opener.name, {})).structured_content
-        assert status["status"] == "never_checked"
-        resource = (await client.read_resource(opener.meta["ui"]["resourceUri"]))[0]
-        assert resource.mimeType == "text/html;profile=mcp-app"
-        assert "Reschedule checks in Chat" in resource.text
-        assert "PRIVATE MESSAGE" not in json.dumps(result) + json.dumps(status)
+        assert result["layout"] == [
+            {"kind": "group", "title": "Last mesh check: Never checked", "items": []},
+            {"kind": "group", "title": 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”', "items": []},
+        ]
+        assert "aicq_schedule_settings" not in tools
+        assert all("/settings/" not in str(r.uri) for r in await client.list_resources())
+        assert "PRIVATE MESSAGE" not in json.dumps(result)
         rejected = await client.call_tool("aicq_settings_update", {"set": {"interval": 30}}, raise_on_error=False)
         assert rejected.is_error
     assert {c[0] for c in fake_fulcra.mock_calls} <= {
         "get_fulcra_userid", "list_files", "download_file"}
+
+
+@pytest.mark.parametrize("scenario,label", [
+    ("empty", "Not set up"),
+    ("never", "Never checked"),
+    ("checked", "2026-10-12T15:00:00Z"),
+    ("unavailable", "Status unavailable"),
+    ("wrong_account", "Status unavailable"),
+    ("multiple", "Multiple configurations — ask in chat to choose one"),
+])
+async def test_native_titles_cover_status_without_actions_or_writes(fake_fulcra, scenario, label):
+    state(fake_fulcra, "2026-10-12T10:00:00-05:00" if scenario == "checked" else None)
+    if scenario == "empty":
+        fake_fulcra.list_files.return_value["files"] = []
+    elif scenario == "unavailable":
+        fake_fulcra.list_files.side_effect = RuntimeError("PRIVATE ERROR")
+    elif scenario == "wrong_account":
+        fake_fulcra.get_fulcra_userid.return_value = "other"
+    elif scenario == "multiple":
+        fake_fulcra.list_files.return_value["files"].append({"id": "file-b", "name": "b.md"})
+    async with Client(mcp) as client:
+        for _ in range(2):
+            result = (await client.call_tool("aicq_settings_read", {})).structured_content
+            assert result["schema"] == {"type": "object", "properties": {}}
+            assert result["values"] == {}
+            assert result["layout"][0]["title"] == "Last mesh check: " + label
+            assert result["layout"][1]["title"] == (
+                'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”')
+            assert all(g["kind"] == "group" and g["items"] == [] for g in result["layout"])
+            assert "PRIVATE" not in json.dumps(result)
+    assert {c[0] for c in fake_fulcra.mock_calls} <= {
+        "get_fulcra_userid", "list_files", "download_file"}
+    if scenario in {"empty", "unavailable", "multiple"}:
+        fake_fulcra.download_file.assert_not_called()
 
 
 @pytest.mark.parametrize("last,label", [(None, "Never checked"),

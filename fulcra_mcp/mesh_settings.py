@@ -3,7 +3,6 @@
 import json
 import re
 from datetime import datetime, timezone
-from importlib.resources import files
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
@@ -12,7 +11,7 @@ from . import tools
 
 settings_mcp = FastMCP("Mesh check settings")
 STATE_ROOT = "/agent/chatgpt/mesh-checks/"
-SETTINGS_URI = "ui://fulcra/mesh/settings/v1.html"
+SCHEDULE_GUIDANCE = 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”'
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 SETTINGS_OUTPUT = {
     "type": "object", "properties": {
@@ -82,34 +81,24 @@ def check_status(configuration_id: str | None = None) -> dict:
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY,
                    output_schema=SETTINGS_OUTPUT)
 def aicq_settings_read() -> dict:
-    """Read mesh check status and the settings action; no editable scheduler values."""
+    """Read mesh check status and chat guidance; no editable scheduler values."""
     status = check_status()
+    label = ("Multiple configurations — ask in chat to choose one"
+             if status["status"] == "choose_configuration" else status["label"])
     return {"schema": {"type": "object", "properties": {}}, "values": {},
-            "layout": [{"kind": "group", "title": "Mesh checks", "items": [
-                {"kind": "tool", "tool": "aicq_schedule_settings",
-                 "description": "Last mesh check: " + status["label"]}]}]}
+            "layout": [
+                {"kind": "group", "title": "Last mesh check: " + label, "items": []},
+                {"kind": "group", "title": SCHEDULE_GUIDANCE, "items": []},
+            ]}
 
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
 def aicq_settings_update(set: dict) -> dict:
     """Reject edits: cadence is managed through the host's existing task in chat."""
-    raise ToolError("No editable settings. Use Reschedule checks in Chat to manage the existing task.")
-
-
-@settings_mcp.tool(title="Mesh check settings", annotations=READ_ONLY,
-                   app={"resourceUri": SETTINGS_URI, "visibility": ["app"]})
-def aicq_schedule_settings() -> dict:
-    """Open read-only check status and an explicit schedule-management chat handoff."""
-    return check_status()
+    raise ToolError("No editable settings. " + SCHEDULE_GUIDANCE)
 
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
 def aicq_check_status(configuration_id: str | None = None) -> dict:
     """Read a selected private check configuration; omit the ID to discover choices."""
     return check_status(configuration_id)
-
-
-@settings_mcp.resource(SETTINGS_URI, mime_type="text/html;profile=mcp-app")
-def settings_html() -> str:
-    """Serve the bundled settings modal without account data embedded in the HTML."""
-    return files("fulcra_mcp").joinpath("ui/mesh-settings.html").read_text(encoding="utf-8")
