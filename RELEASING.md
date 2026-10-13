@@ -4,7 +4,17 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
-### Native mesh check status (unreleased)
+### Contact last assessments (1.5.0 / UI v35)
+
+Adds optional own-connection status metadata, an independently verified narrow setter,
+and compact list/detail display with honest unknown/partial aggregation. Pair with
+plugin 0.4.1, which includes the contact assessment and native settings workflows;
+refresh server discovery and reinstall. Existing scheduling permissions do not
+expand automatically. Foreground polling stays read-only. Local SDK/stdio and
+sandbox browser tests do not establish live backend/model/ChatGPT task acceptance;
+see [the app contract](docs/mesh-app.md).
+
+### Native mesh check status (1.5.0)
 
 Replaces the dedicated settings action/modal with read-only group-title status
 and plain chat instructions. Pair with plugin 0.4.1 and refresh server discovery.
@@ -15,7 +25,10 @@ rendering and same-task chat updates need [host acceptance](docs/mesh-settings.m
 
 Threads open on a window anchored to the latest incoming and outgoing messages,
 replacing the date picker; **Load more history** adds two weeks. The thread list previews
-each contact's latest message. Refresh server discovery; no plugin change.
+each contact's latest message. An in-flow 232px footer spacer plus safe-area insets
+keeps history controls above the host composer; the through-date label shows the
+earliest attempted date. These UI-only changes require no plugin change and are
+retained alongside contact assessments in UI v35. Refresh server discovery.
 
 ### Original setup session (1.4.1 / UI v31)
 

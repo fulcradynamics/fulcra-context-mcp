@@ -99,7 +99,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     update(); if (send.disabled) return;
     const peer = peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: agent.value, kind: 'message', priority: 'P2', topic: 'chat', body: input.value };
-    const { identifier: _identifier, setupSession: _setupSession, direction: _direction, ...provenance } = source;
+    const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
     const report = text => { status.textContent = `Peer ${peer}, message ${mid}: ${text}`; };

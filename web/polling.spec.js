@@ -267,6 +267,60 @@ test('thread list previews the latest sent or received message and keeps it on r
   await expect(peerRow.locator('.thread-preview')).toHaveText('<b>received newest</b>');
 });
 
+test('assessment and latest preview coexist through failed history expansion and retry', async ({ page }) => {
+  const status = { attention: false, reason: 'Aucune action nécessaire', assessed_at: '2026-01-10T11:00:00Z' };
+  const ui = await open(page, [channel(), { ...channel('me', 'out'), description: `[contact_status: ${JSON.stringify(status)}]` }]);
+  await page.evaluate(() => {
+    window.shares.outgoing = [{ data_types: ['Event/out'], with_user_ids: ['peer'], share_all_data: false }];
+    window.latestRows = {
+      'peer/Event/in': [{ id: 'in', recorded_at: '2026-01-10T11:00:00Z', note: 'Latest incoming' }],
+      'me/Event/out': [{ id: 'out', recorded_at: '2025-12-20T12:00:00Z', note: 'Earlier outgoing' }],
+    };
+    window.rows = structuredClone(window.latestRows);
+  });
+  await page.clock.runFor(10000);
+  const row = ui.locator('#meshes > li').filter({ has: ui.getByRole('button', { name: 'peer', exact: true }) });
+  await expect(row.locator('.contact-status')).toContainText(status.reason);
+  await expect(row.locator('.thread-preview')).toHaveText('Latest incoming');
+  await row.getByRole('button', { name: 'peer', exact: true }).click();
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  const snapshot = async () => JSON.parse((await ui.locator('#thread-context').textContent()).split('\n')[1]);
+  expect((await snapshot()).range.start_time).toBe('2025-12-13T12:00:00.000Z');
+  const handoff = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
+  await handoff.click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  await ui.locator('textarea:not([readonly])').fill('Keep this draft');
+  await page.evaluate(() => {
+    window.entries[1].description = '[contact_status: {"attention":true,"reason":"等待决定","assessed_at":"2026-01-10T12:00:00Z"}]';
+    window.fail = ['get_records'];
+  });
+  const more = ui.getByRole('button', { name: 'Load more history', exact: true });
+  await more.click();
+  await expect(ui.locator('#contact-assessment')).toContainText('Needs attention — 等待决定');
+  await expect(ui.locator('#message-status')).toContainText('Retrying in 20 seconds');
+  await expect.poll(() => page.evaluate(() => window.contexts.at(-1).params.content)).toEqual([]);
+  const retained = await snapshot();
+  expect(retained.range.start_time).toBe('2025-12-13T12:00:00.000Z');
+  expect(retained.contact_status.reason).toBe('等待决定');
+  expect(retained.messages.every(m => m.stale)).toBe(true);
+  expect(retained.completeness).toBe('partial');
+  await expect(more).toBeDisabled();
+  await expect(handoff).toBeEnabled();
+  await page.evaluate(() => { window.fail = []; });
+  await page.clock.runFor(20000);
+  await expect(more).toBeEnabled();
+  expect((await snapshot()).range.start_time).toBe('2025-11-29T12:00:00.000Z');
+  expect((await snapshot()).contact_status.reason).toBe('等待决定');
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep this draft');
+  expect(await page.evaluate(() => window.contexts.filter(r => r.params.content.length).length)).toBe(1);
+  expect(await page.evaluate(() => window.sends.length)).toBe(1);
+  expect(await page.evaluate(() => [...window.calls, ...window.latestReads].every(r => ['get_data_catalog', 'list_shares', 'get_records'].includes(r.params.name)))).toBe(true);
+  await ui.getByRole('button', { name: 'Back to threads' }).click();
+  await page.clock.runFor(10000);
+  await expect(row.locator('.contact-status')).toContainText('等待决定');
+  await expect(row.locator('.thread-preview')).toHaveText('Latest incoming');
+});
+
 test('manual refresh coalesces, preserves keyed list focus and labels account names without a global spinner', async ({ page }) => {
   const ui = await open(page, [channel(), channel('other')]);
   const peer = ui.getByRole('button', { name: 'peer', exact: true });

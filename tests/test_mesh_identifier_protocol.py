@@ -45,6 +45,18 @@ async def test_mesh_identifier_http_auth_and_contract(tmp_path, monkeypatch):
         assert tool['inputSchema']['required'] == ['data_type', 'identifier']
         assert tool['annotations']['readOnlyHint'] is False
         assert tool['annotations']['idempotentHint'] is True
+        status_tool = next(t for t in listed if t['name'] == 'set_contact_status')
+        assert set(status_tool['inputSchema']['properties']) == {'data_type', 'peer_userid', 'attention', 'reason'}
+        assert status_tool['_meta']['ui']['visibility'] == ['model']
+        assert status_tool['annotations']['readOnlyHint'] is False
+        status_call = {'name': 'set_contact_status', 'arguments': {
+            'data_type': 'Event/12345678-1234-4234-8234-123456789abc',
+            'peer_userid': '00000000-0000-4000-8000-000000000002',
+            'attention': True, 'reason': 'Decision needed'}}
+        for token in ['', 'Bearer invalid-token']:
+            response = await http.post('/mcp', headers={'Authorization': token}, json={
+                'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call', 'params': status_call})
+            assert response.status_code == 401
         for token in ['', 'Bearer invalid-token']:
             response = await http.post('/mcp', headers={'Authorization': token}, json={'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': call})
             assert response.status_code == 401

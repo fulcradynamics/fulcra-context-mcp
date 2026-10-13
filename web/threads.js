@@ -1,6 +1,7 @@
 import { discoverThreads } from './meshes.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderIdentity } from './identity.js';
+import { renderStatus } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
 import { createRefreshScheduler } from './refresh.js';
@@ -86,6 +87,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             row.style.animationDelay = `${Math.min(nextRow, 12) * 40}ms`;
             const button = doc.createElement('button');
             const account = doc.createElement('p'); account.className = 'thread-account';
+            const assessment = doc.createElement('p');
             const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             button.type = 'button'; button.id = `thread-${++nextRow}`;
             button.className = 'thread-button';
@@ -93,12 +95,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             tile.append(icon(MessagesSquare, 'row-icon'));
             const peer = doc.createElement('span'); peer.className = 'thread-peer';
             button.append(tile, peer);
-            entry = { row, button, peer, account, preview, thread };
+            entry = { row, button, peer, account, assessment, preview, thread };
             button.addEventListener('click', () => choose(entry));
-            row.append(button, account, preview); list.append(row); rows.set(thread.peer, entry);
+            row.append(button, assessment, account, preview); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
           renderIdentity(entry.peer, thread.identifier, thread.peer);
+          renderStatus(entry.assessment, thread.assessment);
           const accountName = thread.accountName !== thread.peer ? thread.accountName : '';
           entry.account.textContent = accountName ? `Account: ${accountName}` : '';
           entry.account.hidden = !accountName;
