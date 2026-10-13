@@ -17,7 +17,7 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   const update = setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, orderField, view, changed, presentation);
   if (presentation === 'thread') container.append(help);
   container.append(details);
-  return (peer, range, result, ready, loaded) => {
+  const updater = (peer, range, result, ready, loaded) => {
     peerId = peer;
     usable = loaded;
     // Refresh timestamps alone do not invalidate a snapshot. No automatic attach.
@@ -38,4 +38,6 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
     }
     update();
   };
+  updater.markRead = update.markRead;
+  return updater;
 }

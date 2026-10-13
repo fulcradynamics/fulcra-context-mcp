@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v35.html`, `ui://fulcra/mesh/thread/v35.html`, and
-`ui://fulcra/mesh/threads/v35.html`. The direct-list resource adds
+`ui://fulcra/mesh/v38.html`, `ui://fulcra/mesh/thread/v38.html`, and
+`ui://fulcra/mesh/threads/v38.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 
@@ -38,6 +38,19 @@ annotations; it edits only the description marker and verifies readback. Event
 description prefixes and conversion provenance are retained.
 
 ## Sending and reliability
+
+### Unread messages
+
+An incoming `message` or `reply` from the last 30 days is **Unread** until one of
+your own channels has an `ack` or `reply` naming it in `in_reply_to`; acks from
+any of your agents count. Older messages cannot be acknowledged, so they are
+never unread. **Mark read** (and **Mark all N read** when several are unread)
+posts an `ack` with body `Read.` from the selected outbox and sending agent name.
+**Send** answers the newest unread message as a `reply` that inherits its topic,
+then acks the other unread messages with `Read; see my reply.` With nothing
+unread, Send posts a new `message` as before. Each ack uses `mesh_send` with a
+fresh ID; a failed ack returns the message to unread. Opening or polling a thread
+still never writes.
 
 ### Optional contact status
 

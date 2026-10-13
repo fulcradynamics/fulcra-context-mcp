@@ -22,6 +22,11 @@ export function reconcilePosts(draft, messages) {
   });
   return confirmed;
 }
+export async function postRecord(app, args) {
+  const response = await app.callServerTool({ name: 'mesh_send', arguments: args }, { timeout: 30000 });
+  const result = response.structuredContent ?? JSON.parse(response.content?.find(c => c.type === 'text')?.text ?? '{}');
+  return { response, result };
+}
 export function messageId() {
   // getRandomValues works in sandboxed app frames without a secure origin.
   const bytes = crypto.getRandomValues(new Uint8Array(16));

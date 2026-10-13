@@ -5,6 +5,7 @@ import { readConversation, readLatest } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './mesh-send.js';
+import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { icon, ArrowUpRight, ArrowDownLeft, History, ArrowLeft, ChevronDown } from './icons.js';
 export { parseRecords } from './records.js';
@@ -15,6 +16,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const listPanel = doc.querySelector('#mesh-list');
   const title = doc.querySelector('#message-title');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
+  const markAll = doc.createElement('button'); markAll.type = 'button'; markAll.id = 'mark-all-read'; markAll.hidden = true;
+  assessment.after(markAll);
+  let unread = [];
   const status = doc.querySelector('#message-status');
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
@@ -68,7 +72,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
-    (item, { record, source, direction, state }) => {
+    (item, { record, source, direction, state, unread: isUnread }) => {
       let title, date, body;
       if (!item.firstChild) {
         item.className = 'message-row';
@@ -105,6 +109,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; title.after(badge); }
       if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
+      item.classList.toggle('unread', Boolean(isUnread));
+      let mark = item.querySelector('.mark-read');
+      if (isUnread && !mark) {
+        const label = doc.createElement('span'); label.className = 'unread-badge'; label.textContent = 'Unread';
+        title.after(label);
+        mark = doc.createElement('button'); mark.type = 'button'; mark.className = 'mark-read'; mark.textContent = 'Mark read';
+        mark.addEventListener('click', () => markRead(unread.filter(m => m.record.id === record.id)));
+        item.append(mark);
+      } else if (!isUnread && mark) { mark.remove(); item.querySelector('.unread-badge').remove(); }
+      if (mark) mark.disabled = !ready;
       const dateText = timestamp && Number.isFinite(+timestamp)
         ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
@@ -128,6 +142,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
     result = { ...result, assessment: selected.assessment, messages: [...result.messages, ...posts] };
+    unread = unavailable ? [] : unreadMessages(result.messages, draft.acks);
+    const unreadIds = new Set(unread.map(m => m.record.id));
+    result = { ...result, messages: result.messages.map(m => unreadIds.has(m.record.id) && m.direction === 'Incoming' ? { ...m, unread: true } : m) };
+    markAll.textContent = `Mark all ${unread.length} read`;
+    markAll.hidden = unread.length < 2; markAll.disabled = !ready;
     result = { ...result, messages: [...result.messages].sort((a, b) => {
       const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
       const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
@@ -221,6 +240,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     requestRefresh();
   };
   const onOrder = () => { if (displayed) render(displayed, ready); };
+  // Marking read posts an ack from your own channel, like your agent would.
+  async function markRead(targets) {
+    if (!ready || !targets.length) return;
+    if (!await updateComposer.markRead(targets)) doc.querySelector('#send-status').textContent = 'Choose your outbox and sending agent name under Delivery address to mark messages read.';
+  }
+  const onMarkAll = () => markRead(unread);
+  markAll.addEventListener('click', onMarkAll);
   const onBack = () => {
     contextLifecycle.invalidate();
     generation++;
@@ -233,7 +259,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // Collapse a message by clicking its header (title/date/tile); the body is
   // left clickable for text selection. Collapse state lives on the reused row.
   function toggleMessage(target) {
-    if (target.closest('pre')) return;
+    if (target.closest('pre, button')) return;
     const li = target.closest('.message-row');
     if (!li || !messages.contains(li)) return;
     const collapsed = li.classList.toggle('collapsed');
@@ -276,6 +302,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
+    markAll.removeEventListener('click', onMarkAll);
     order.removeEventListener('change', onOrder);
     back.removeEventListener('click', onBack);
     messages.removeEventListener('click', onMessageClick);

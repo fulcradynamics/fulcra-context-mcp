@@ -42,9 +42,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('aicq_open', 'ui://fulcra/mesh/v35.html', 'global'),
-                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v35.html', 'threads'),
-                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v35.html', 'thread'),
+                    ('aicq_open', 'ui://fulcra/mesh/v38.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v38.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v38.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
@@ -55,7 +55,7 @@ async def main():
                                   'contact_status', 'Not assessed', 'Needs attention',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer'):
                         assert value in text, value
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v35 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v38 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
