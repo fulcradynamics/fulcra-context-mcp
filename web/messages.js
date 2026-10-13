@@ -182,7 +182,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         requestedStart = new Date(Math.min(Date.now(), ...edges) - 7 * DAY).toISOString();
       }
       const query = { start_time: requestedStart ?? start, end_time: new Date().toISOString() };
-      attemptedStart = query.start_time; placeMore();
+      // History controls are placed/revealed by render() once messages exist, so
+      // "Load more history" never appears before the messages during the load.
+      attemptedStart = query.start_time;
       const result = await readConversation(app, selected, query, current, { discovery, previous: displayed, now: query.end_time });
       if (!current()) return true;
       const success = !result.warnings.some(w => w.startsWith('Could not load messages'));
