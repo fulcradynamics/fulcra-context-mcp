@@ -27,7 +27,7 @@
   --violet-tint: rgba(123, 97, 255, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
   /* The host's floating composer is separate from device safe-area insets. */
-  --footer-clearance: calc(160px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px));
+  --footer-clearance: calc(232px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
@@ -36,11 +36,14 @@
 body {
   margin: 0;
   padding: calc(24px + var(--host-safe-top, 0px))
-    calc(24px + var(--host-safe-right, 0px)) var(--footer-clearance)
+    calc(24px + var(--host-safe-right, 0px)) 0
     calc(24px + var(--host-safe-left, 0px));
   overflow-wrap: anywhere;
 }
 main { max-width: 760px; margin-inline: auto; }
+/* An in-flow spacer, not body padding, reserves room for the host's floating
+   composer: it always counts toward scroll height and the reported app height. */
+.footer-spacer { height: var(--footer-clearance); }
 .brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
@@ -92,8 +95,8 @@ input, textarea, select { color: #fff; background: var(--surface); border: 1px s
 select { width: fit-content; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
-.range-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; }
-#message-range { margin-top: 24px; }
+#message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; }
+#message-through { margin: 0; }
 #message-status { margin-block: 20px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
@@ -147,6 +150,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-status { margin: 4px 0 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 #meshes .contact-status { padding-left: 48px; }
 .contact-status.attention, #meshes .contact-status.attention { color: #c79448; }
+.thread-preview { margin: 4px 0 0; padding-left: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Message rows: direction tile in column 1, stacked header / date / body in
    column 2. A grid (not a wrapper div) keeps each text node a direct <li> child. */
@@ -220,7 +224,5 @@ html { overflow-anchor: none; }
 @media (max-width: 520px) {
   body { padding-left: calc(16px + var(--host-safe-left, 0px)); padding-right: calc(16px + var(--host-safe-right, 0px)); }
   .invite-section { margin-bottom: 24px; }
-  .range-controls { grid-template-columns: minmax(0, 1fr); }
-  .range-controls button { justify-self: start; }
   .section-header h2 { font-size: 11px; }
 }

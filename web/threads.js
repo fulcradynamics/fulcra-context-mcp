@@ -2,12 +2,14 @@ import { discoverThreads } from './meshes.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderIdentity } from './identity.js';
 import { renderStatus } from './contact-status.js';
-import { setupMessages } from './messages.js';
+import { setupMessages, messageText } from './messages.js';
+import { readLatest } from './conversation.js';
 import { createRefreshScheduler } from './refresh.js';
 import { icon, MessagesSquare, RefreshCw } from './icons.js';
 
 export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) {
   const status = doc.querySelector('#mesh-status');
+  const listPanel = doc.querySelector('#mesh-list');
   const list = doc.querySelector('#meshes');
   const count = doc.querySelector('#mesh-count');
   const pendingSection = doc.querySelector('#pending-section');
@@ -86,15 +88,16 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const button = doc.createElement('button');
             const account = doc.createElement('p'); account.className = 'thread-account';
             const assessment = doc.createElement('p');
+            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             button.type = 'button'; button.id = `thread-${++nextRow}`;
             button.className = 'thread-button';
             const tile = doc.createElement('span'); tile.className = 'row-tile';
             tile.append(icon(MessagesSquare, 'row-icon'));
             const peer = doc.createElement('span'); peer.className = 'thread-peer';
             button.append(tile, peer);
-            entry = { row, button, peer, account, assessment, thread };
+            entry = { row, button, peer, account, assessment, preview, thread };
             button.addEventListener('click', () => choose(entry));
-            row.append(button, assessment, account); list.append(row); rows.set(thread.peer, entry);
+            row.append(button, assessment, account, preview); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
           renderIdentity(entry.peer, thread.identifier, thread.peer);
@@ -150,6 +153,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         count.textContent = String(discovery.threads.length);
         status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} threads returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
         if (doc.visibilityState !== 'visible') return true;
+        if (!listPanel.hidden) { await refreshPreviews(); return true; }
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
@@ -159,6 +163,18 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       }
     },
   });
+  // Latest sent or received message per thread. A failed read keeps the previous preview.
+  async function refreshPreviews() {
+    await Promise.all([...rows.values()].map(async entry => {
+      const thread = entry.thread;
+      let latest;
+      try { [latest] = await readLatest(app, thread.sources); } catch { return; }
+      if (disposed || rows.get(thread.peer) !== entry) return;
+      const text = latest ? `${latest.direction === 'Outgoing' ? 'You: ' : ''}${messageText(latest.record)}` : '';
+      if (entry.preview.textContent !== text) entry.preview.textContent = text;
+      entry.preview.hidden = !text;
+    }));
+  }
   const stopHost = entrypoint.observeHost?.(context => {
     hostContext = { ...hostContext, ...context };
     if (!inlineList || disposed || !context.displayMode) return;

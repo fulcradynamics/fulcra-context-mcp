@@ -96,7 +96,7 @@ for (const width of [1120, 320]) test(`refresh UX first load, error and success 
   await expect(ui.locator('#message-loading')).toBeHidden();
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying in 20 seconds.');
   await capture('error');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await page.clock.runFor(20000);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
   await expect(ui.locator('#message-loading')).toBeHidden();
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
@@ -165,7 +165,6 @@ for (const width of [1120, 320]) test(`global top-right invitation and list-only
   await choose(ui);
   await expect(refresh).toBeHidden();
   await expect(ui.getByRole('button', { name: 'Back to threads' })).toBeVisible();
-  await expect(ui.getByRole('button', { name: 'Load messages', exact: true })).toBeVisible();
   await expect(ui.locator('#message-loading')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, []); await respond(page, 1, []);
@@ -200,7 +199,9 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   });
   await expect(ui.getByRole('heading', { name: 'Fulcra Mesh', exact: true })).toBeVisible();
   await expect(ui.locator('body')).not.toContainText(/hello world|proof of concept|served by|demo/i);
-  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '172px');
+  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBe(244);
+  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '0px');
+  await expect(ui.locator('body')).toHaveCSS('padding-top', '24px');
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
   await ui.getByRole('button', { name: peerId, exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
@@ -212,19 +213,29 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   await assertNoOverflow();
   expect(await ui.locator('body').evaluate(el => getComputedStyle(el).fontFamily)).toContain('Rubik');
   expect(await frame.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(font => font.family === 'Rubik' && font.status === 'loaded'); })).toBe(true);
-  expect(await ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(160);
+  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(232);
   // SDK host context notifications update insets; unrelated updates preserve them.
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 } } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  await expect.poll(() => ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(256);
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  await expect.poll(() => ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(256);
   const aboveOverlay = async locator => {
     await locator.evaluate(el => el.scrollIntoView({ block: 'center' }));
     const box = await locator.boundingBox();
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(740);
   };
-  await ui.locator('#message-load').focus();
+  // Scrolled fully down, Load more clears the host's floating composer (~232px).
+  await frame.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const more = await ui.getByRole('button', { name: 'Load more history', exact: true }).boundingBox();
+  expect(more.y + more.height).toBeLessThanOrEqual(900 - 232);
+  // Hosts that size the frame to its reported content height must include the spacer.
+  await expect.poll(async () => {
+    const reported = await page.evaluate(() => window.resizeNotifications.at(-1)?.height ?? 0);
+    const spacerEnd = await frame.evaluate(() => document.querySelector('.footer-spacer').getBoundingClientRect().bottom + scrollY);
+    return reported >= Math.floor(spacerEnd);
+  }).toBe(true);
+  await ui.locator('.reading-details summary').focus();
   await page.keyboard.press('Tab');
   await expect(ui.locator('textarea')).toBeFocused();
   await page.keyboard.press('Tab');
@@ -290,13 +301,10 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   await expect(ui.locator('#messages img')).toHaveCount(0);
   await expect(tell(ui)).toHaveCount(1);
   await expect(ui.locator('#messages textarea')).toHaveCount(0);
-  await expect(ui.locator('#message-range + #thread-composer')).toBeVisible();
+  await expect(ui.locator('.reading-details + #thread-composer')).toBeVisible();
   await expect(tell(ui)).toBeEnabled();
   await expect(ui.locator('textarea')).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
-  // Unsubmitted edits must not change the applied context.
-  await ui.locator('#message-start').fill('2020-01-01');
-  await ui.locator('#message-end').fill('2020-01-02');
   await tell(ui).click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
   const sent = await page.evaluate(() => window.contexts[0].params);
@@ -306,7 +314,7 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   expect(sent.content[0].text).not.toContain('other-user');
   const context = JSON.parse(sent.content[0].text.split('\n').slice(1).join('\n'));
   expect(context.peer_fulcra_userid).toBe('peer-user');
-  expect(context.range).toEqual({ start_time: args[0].start_time, end_time: args[0].end_time });
+  expect(context.range).toEqual({ start_time: args[0].start_time });
   expect(context.messages.map(m => m.source)).toEqual([
     { id: second.id, name: second.name, fulcra_userid: 'me' }, { id: own.id, name: own.name, fulcra_userid: 'me' }, { id: peer.id, name: peer.name, fulcra_userid: 'peer-user' },
   ]);
@@ -320,7 +328,7 @@ for (const outgoingOnly of [false, true]) test(`${outgoingOnly ? 'outgoing' : 'i
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, []);
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
   await expect(ui.locator('#thread-context')).toContainText(`missing ${outgoingOnly ? 'incoming' : 'outgoing'}`);
   await expect(tell(ui)).toHaveCount(1);
   await tell(ui).click();
@@ -331,45 +339,38 @@ for (const outgoingOnly of [false, true]) test(`${outgoingOnly ? 'outgoing' : 'i
   expect(context.completeness).toBe('partial');
 });
 
-test('each load refreshes discovery; reload preserves disclosure, applies same dates to new channels', async ({ page }) => {
+test('each refresh rediscovers channels, preserves disclosure and reads new channels over the same window', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
   const ui = await open(page, { paired: false });
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(1);
   await respond(page, 0, [{ note: 'old record' }]);
   await ui.locator('#thread-composer .context-details summary').click();
-  await ui.locator('#message-start').fill('2026-01-01');
-  await ui.locator('#message-end').fill('2026-01-02');
   await page.evaluate(id => { window.shares.outgoing.push({ data_types: [id], with_user_ids: ['peer-user'], share_all_data: false }); window.holdDiscovery = true; }, own.id);
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(tell(ui)).toHaveCount(1);
-  await expect(tell(ui)).toBeDisabled();
+  await page.clock.runFor(10000);
+  await expect.poll(() => page.evaluate(() => window.discovery.length)).toBe(6);
   await expect(ui.locator('#messages > li')).toHaveCount(1);
   await expect(ui.locator('#thread-composer .context-details')).toHaveAttribute('open', '');
-  await expect.poll(() => page.evaluate(() => window.discovery.length)).toBe(6);
   await page.evaluate(() => {
     window.holdDiscovery = false;
     for (const r of window.discovery.slice(4)) window.reply(r.id, { content: [{ type: 'text', text: r.params.name === 'list_shares' ? 'Shares: ' + JSON.stringify(window.shares) : 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': window.entries }) }] });
   });
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(3);
-  for (const args of await page.evaluate(() => window.reads.slice(1).map(r => r.params.arguments))) {
-    expect(args.start_time).toBe('2026-01-01T00:00:00.000Z');
-    expect(args.end_time).toBe('2026-01-03T00:00:00.000Z');
-  }
+  const [first, ...later] = await page.evaluate(() => window.reads.map(r => r.params.arguments));
+  expect(later.map(a => a.data_type).sort()).toEqual([own.id, peer.id].sort());
+  for (const args of later) expect(args.start_time).toBe(first.start_time);
   await respond(page, 1, []); await respond(page, 2, []);
-  await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
-  await expect(ui.locator('#thread-context')).toContainText('2026-01-01T00:00:00.000Z');
+  await expect(ui.locator('#message-status')).toHaveText('No messages yet.');
+  await expect(ui.locator('#thread-context')).toContainText(first.start_time);
   await expect(ui.locator('#thread-composer .context-details')).toHaveAttribute('open', '');
   await expect(tell(ui)).toHaveCount(1);
   expect(await page.evaluate(() => window.agentRequests.length)).toBe(0);
-  await ui.locator('#message-start').fill('2026-02-01');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
-  await expect(ui.locator('#message-status')).toContainText('Choose a valid date range');
-  await expect(tell(ui)).toHaveCount(1);
-  await expect(ui.locator('#thread-context')).toContainText('2026-01-01T00:00:00.000Z');
-  expect(await page.evaluate(() => window.reads.length)).toBe(3);
 });
 
 test('partial failure and truncation remain visible and are sent as incomplete context', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
   const ui = await open(page);
   await choose(ui);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
@@ -384,7 +385,7 @@ test('partial failure and truncation remain visible and are sent as incomplete c
   expect(context.messages).toHaveLength(1);
   expect(context.warnings).toHaveLength(2);
   expect(context.completeness).toBe('partial');
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await page.clock.runFor(20000);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
   await respond(page, 2, []);
   await page.evaluate(() => window.reply(window.reads[3].id, { isError: true }));
@@ -418,6 +419,8 @@ test('navigation ignores late multi-source success and failure, with no peer con
 });
 
 test('late discovery starts no stale reads; failed discovery retains sendable loaded context, retry works', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
   const ui = await open(page);
   await expect(ui.locator('#meshes > li')).toHaveCount(2);
   await page.evaluate(() => { window.holdDiscovery = true; });
@@ -432,13 +435,13 @@ test('late discovery starts no stale reads; failed discovery retains sendable lo
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
   await respond(page, 0, []); await respond(page, 1, []);
   await page.evaluate(() => { window.failDiscovery = true; });
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await page.clock.runFor(10000);
   await expect(ui.locator('#message-status')).toContainText('Could not load messages. Retrying');
   await expect(ui.locator('#thread-context')).toContainText('discovery failed');
   await expect(tell(ui)).toBeEnabled();
   expect(await page.evaluate(() => window.reads.length)).toBe(2);
   await page.evaluate(() => { window.failDiscovery = false; });
-  await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
+  await page.clock.runFor(20000);
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(4);
   await respond(page, 2, []); await respond(page, 3, []);
   await expect(tell(ui)).toHaveCount(1);

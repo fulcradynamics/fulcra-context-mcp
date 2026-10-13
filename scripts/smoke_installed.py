@@ -37,9 +37,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('aicq_open', 'ui://fulcra/mesh/v32.html', 'global'),
-                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v32.html', 'threads'),
-                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v32.html', 'thread'),
+                    ('aicq_open', 'ui://fulcra/mesh/v35.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v35.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v35.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
@@ -47,9 +47,10 @@ async def main():
                     assert f'name="mesh-presentation" content="{marker}"' in text
                     for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
-                                  'contact_status', 'Not assessed', 'Needs attention'):
+                                  'contact_status', 'Not assessed', 'Needs attention',
+                                  'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer'):
                         assert value in text, value
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v32 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v35 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

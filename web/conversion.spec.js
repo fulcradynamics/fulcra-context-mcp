@@ -32,11 +32,11 @@ for(const width of [360, 1000]) for(const converted of [false,true]) test(`legac
   const ui=page.frameLocator('iframe');
   await expect(ui.getByRole('button',{name:'Convert to Contact',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.calls.filter(c=>['ui/message','ui/update-model-context'].includes(c.method)).length)).toBe(0);
-  expect(await page.evaluate(()=>window.calls.some(c=>c.params?.name==='get_records'))).toBe(false);
+  expect(await page.evaluate(()=>window.calls.some(c=>c.params?.name==='get_records'&&!c.params.arguments.data_type.startsWith('Event/')))).toBe(false);
   if(converted){
     await ui.getByRole('button',{name:peer,exact:true}).click();
     await expect(ui.getByText('Converted from mesh',{exact:true})).toBeVisible();
-    await expect(ui.getByText('No messages in this date range.', { exact:true })).toBeVisible();
+    await expect(ui.getByText('No messages yet.', { exact:true })).toBeVisible();
     if (process.env.CONVERSION_SCREENSHOTS) await page.screenshot({ path: `${process.env.CONVERSION_SCREENSHOTS}/converted-${width}.png` });
     await ui.getByRole('button',{name:'chat about old messages',exact:true}).click();
   }else {
