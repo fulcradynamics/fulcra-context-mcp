@@ -11,7 +11,7 @@ async function open(page, presentation = 'global', extra = {}) {
   await page.setContent('<iframe sandbox="allow-scripts" style="width:100%;height:1000px"></iframe>');
   await page.evaluate(({ bundle, presentation, peer, other, own, outbox, extra }) => {
     const frame = document.querySelector('iframe');
-    window.calls = []; window.sends = []; window.contexts = []; window.options = extra;
+    window.calls = []; window.sends = []; window.contexts = []; window.opens = []; window.options = extra;
     window.rows = [{id:'old',start_time:'2026-01-10T11:00:00Z',sender:'Hermes',kind:'message',topic:'hello',body:'Historical untrusted content'}];
     if (extra.empty) window.rows = [];
     window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
@@ -31,14 +31,16 @@ async function open(page, presentation = 'global', extra = {}) {
         if (name === 'mesh_send') { window.pending = r; if (!window.options.hold) window.finish(window.options.outcome ?? 'posted'); return; }
         if (name === 'get_records' && window.options.holdReads) return;
         const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [
-          { id: outbox, name: 'Mesh Outbox: ChatGPT', fulcra_userid: own, description: '[mesh_identifier: "Treecle"]' },
+          { id: outbox, name: 'Mesh Outbox: ChatGPT', fulcra_userid: own, description: (extra.session ? `[connection_setup_session: "${extra.session}"]\n` : '') + '[mesh_identifier: "Treecle"]' },
+          ...(extra.secondSession ? [{ id: 'Event/second', name: 'Mesh Outbox: Second', fulcra_userid: own, description: `[connection_setup_session: "${extra.secondSession}"]\n[mesh_identifier: "Treecle"]` }] : []),
           { id: 'Event/in', name: 'Mesh Outbox', fulcra_userid: other },
           ...(extra.incoming ? [{ id: 'Event/peer-in', name: 'Mesh Outbox', fulcra_userid: peer }] : []),
-        ] }) : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, incoming: [], outgoing: window.options.revoke ? [] : [{ data_types: [outbox], with_user_ids: [peer], share_all_data: false }] })
+        ] }) : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, incoming: [], outgoing: window.options.revoke ? [] : [outbox, ...(extra.secondSession ? ['Event/second'] : [])].map(id => ({ data_types: [id], with_user_ids: [peer], share_all_data: false })) })
           : `Records for ${a.data_type} from start to end: ` + JSON.stringify(a.data_type === outbox ? window.rows : []);
         window.reply(r.id, { content: [{ type: 'text', text }] });
       }
       if (r.method === 'ui/message') { window.sends.push(r); window.reply(r.id, {}); }
+      if (r.method === 'ui/open-link') { window.opens.push(r); if (!extra.holdOpen) window.reply(r.id, {isError: Boolean(extra.denyOpen)}); }
       if (r.method === 'ui/update-model-context') { window.contexts.push(r); window.reply(r.id, {}); }
     });
     frame.srcdoc = bundle.replace('name="mesh-presentation" content="global"', `name="mesh-presentation" content="${presentation}"`);
@@ -49,6 +51,95 @@ async function open(page, presentation = 'global', extra = {}) {
   else await expect(ui.locator('#messages')).toContainText('Historical untrusted content');
   return ui;
 }
+for (const presentation of ['global', 'thread']) for (const typed of ['', '  Help with this\nplease  ']) test(`${presentation}: original setup navigation and complete handoff ${Boolean(typed)}`, async ({ page }) => {
+  const session = 'codex://threads/00000000-0000-0000-0000-000000000009';
+  const ui = await open(page, presentation, { session, denyOpen: true });
+  await ui.locator('textarea:not([readonly])').fill(typed);
+  await page.clock.runFor(10000);
+  expect(await page.evaluate(() => window.opens)).toEqual([]);
+  await ui.getByText('Copy handoff for original session', {exact:true}).click();
+  const copy = ui.getByLabel('Handoff for original session');
+  await expect(copy).toHaveValue(new RegExp(session));
+  await expect(copy).toHaveValue(/Historical untrusted content/);
+  expect(await copy.inputValue()).toContain(typed || 'Let’s talk about this mesh thread.');
+  await ui.getByRole('button', {name:'Open original setup session', exact:true}).click();
+  await expect(ui.locator('#send-status')).toContainText('could not confirm');
+  expect(await page.evaluate(() => window.opens.map(r => r.params))).toEqual([{url:session}]);
+  expect(await page.evaluate(() => window.sends)).toEqual([]);
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue(typed);
+  await ui.getByRole('button', {name:'Ask in current chat', exact:true}).click();
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('');
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  const sent = await page.evaluate(() => window.sends[0].params);
+  expect(sent.content[0].text).toContain(session);
+  expect(sent.content[0].text).toContain('Historical untrusted content');
+  expect(sent.content[0].text).toContain(typed || 'Let’s talk about this mesh thread.');
+  expect(sent).not.toHaveProperty('_meta');
+});
+test('original navigation is explicit, keeps draft, and disappears after revocation', async ({ page }) => {
+  const session = 'codex://threads/00000000-0000-0000-0000-000000000009';
+  const ui = await open(page, 'global', {session, incoming:true});
+  await ui.locator('textarea:not([readonly])').fill('Keep my draft');
+  await ui.getByRole('button', {name:'Open original setup session', exact:true}).click();
+  await expect(ui.locator('#send-status')).toContainText('Host accepted');
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep my draft');
+  expect(await page.evaluate(() => [window.sends.length, window.contexts.length])).toEqual([0,0]);
+  await page.evaluate(() => {window.options.revoke = true;});
+  await page.clock.runFor(10000);
+  await expect(ui.getByRole('button', {name:'Open original setup session', exact:true})).toHaveCount(0);
+  await expect(ui.getByRole('button', {name:'talk with my agent about this thread', exact:true})).toBeVisible();
+  await expect(ui.locator('textarea')).toHaveValue('Keep my draft');
+  expect(await page.evaluate(() => window.opens.length)).toBe(1);
+});
+for (const change of ['navigation', 'outbox', 'outbox roundtrip', 'revocation']) for (const rejected of [false, true]) test(`delayed original navigation: ${change}, rejected=${rejected}`, async ({ page }) => {
+  const session = 'codex://threads/00000000-0000-0000-0000-000000000009';
+  const secondSession = 'codex://threads/00000000-0000-0000-0000-000000000008';
+  const multiple = change.startsWith('outbox');
+  const ui = await open(page, 'global', { session, holdOpen: true, incoming: true, ...(multiple ? { secondSession } : {}) });
+  if (multiple) {
+    await expect(ui.getByRole('button', {name:'Open original setup session', exact:true})).toHaveCount(0);
+    await ui.getByText('Delivery address', {exact:true}).click();
+    await ui.getByRole('combobox', {name:/Your outbox/}).selectOption('Event/second');
+    await expect(ui.getByLabel('Handoff for original session')).toHaveValue(new RegExp(secondSession));
+  }
+  await ui.locator('textarea:not([readonly])').fill('Keep this draft');
+  await ui.getByRole('button', {name:'Open original setup session', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.opens.length)).toBe(1);
+  expect(await page.evaluate(() => window.opens[0].params)).toEqual({url: multiple ? secondSession : session});
+  if (change === 'navigation') {
+    await ui.getByRole('button', {name:'Back to threads'}).click();
+    await ui.getByRole('button', {name:other, exact:true}).click();
+  } else if (multiple) {
+    await ui.getByRole('combobox', {name:/Your outbox/}).selectOption(outbox);
+    if (change === 'outbox roundtrip') await ui.getByRole('combobox', {name:/Your outbox/}).selectOption('Event/second');
+    await expect(ui.getByLabel('Handoff for original session')).toHaveValue(new RegExp(change === 'outbox' ? session : secondSession));
+  } else {
+    await page.evaluate(() => { window.options.revoke = true; });
+    await page.clock.runFor(10000);
+    await expect(ui.getByRole('button', {name:'Open original setup session', exact:true})).toHaveCount(0);
+  }
+  // A later display owns this shared status; the old host response must not replace it.
+  await ui.locator('#send-status').evaluate(el => { el.textContent = 'Current display status'; });
+  await page.evaluate(rejected => {
+    const id = window.opens[0].id;
+    if (rejected) document.querySelector('iframe').contentWindow.postMessage({jsonrpc:'2.0', id, error:{code:-32000, message:'Synthetic rejection'}}, '*');
+    else window.reply(id, {});
+  }, rejected);
+  const handoff = ui.getByRole('button', {name:multiple ? 'Ask in current chat' : 'talk with my agent about this thread', exact:true});
+  await expect(handoff).toBeEnabled(); // Completion must release the app-wide pending lock.
+  await expect(ui.locator('#send-status')).toHaveText('Current display status');
+  if (change !== 'navigation') await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep this draft');
+  expect(await page.evaluate(() => [window.sends.length, window.contexts.length])).toEqual([0, 0]);
+});
+test('unsafe setup URL retains the exact no-link handoff', async ({ page }) => {
+  const ui = await open(page, 'global', {session:'https://chatgpt.com/share/secret'});
+  await expect(ui.getByRole('button', {name:'Open original setup session', exact:true})).toHaveCount(0);
+  await ui.locator('textarea').fill('  Exact request  ');
+  await ui.getByRole('button', {name:'talk with my agent about this thread', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  expect(await page.evaluate(() => window.sends[0].params.content[0].text)).toBe('  Exact request  ');
+  expect(await page.evaluate(() => window.opens.length)).toBe(0);
+});
 for (const presentation of ['global', 'thread']) test(`${presentation}: direct exact send, optimistic badge, polling reconciliation, no LLM`, async ({ page }) => {
   const ui = await open(page, presentation, { hold: true });
   await expect(ui.getByLabel(`Talk to Treecle (${peer})`, { exact: true })).toBeVisible();
