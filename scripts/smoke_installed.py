@@ -24,8 +24,13 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.5.0'
+                assert initialized.serverInfo.version == '1.6.0'
                 tools = {t.name:t for t in (await client.list_tools()).tools}
+                assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
+                assert tools['aicq_settings_update'].annotations.readOnlyHint is False
+                assert tools['aicq_settings_read'].meta['ui']['visibility'] == ['app', 'model']
+                rejected = await client.call_tool('aicq_settings_update', {'set': {'interval': 30}})
+                assert rejected.isError
                 schema = tools['mesh_send'].inputSchema
                 assert {'sender','body','mid','outbox','peer_userid'} <= set(schema['required'])
                 assert 'peer_agent' not in schema['properties']
