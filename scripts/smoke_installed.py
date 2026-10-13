@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.6.0'
+                assert initialized.serverInfo.version == '1.7.0'
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['aicq_settings_update'].annotations.readOnlyHint is False
@@ -34,6 +34,9 @@ async def main():
                 schema = tools['mesh_send'].inputSchema
                 assert {'sender','body','mid','outbox','peer_userid'} <= set(schema['required'])
                 assert 'peer_agent' not in schema['properties']
+                assert 'expected_peer_userids' in schema['properties']
+                assert 'target_peer_userid' in tools['send_agent_message'].inputSchema['properties']
+                assert 'expected_peer_userids' in tools['get_contact_preferences'].inputSchema['properties']
                 assert 'send_agent_message' in tools
                 status = tools['set_contact_status']
                 assert set(status.inputSchema['required']) == {'data_type', 'peer_userid', 'attention', 'reason'}
@@ -42,9 +45,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('aicq_open', 'ui://fulcra/mesh/v38.html', 'global'),
-                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v38.html', 'threads'),
-                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v38.html', 'thread'),
+                    ('aicq_open', 'ui://fulcra/mesh/v39.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v39.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v39.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
@@ -53,9 +56,10 @@ async def main():
                     for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention',
-                                  'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer'):
+                                  'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
+                                  'association unverified', 'viewing-agent', 'expected_peer_userids'):
                         assert value in text, value
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v38 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v39 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

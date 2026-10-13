@@ -56,7 +56,9 @@ test('setup links belong only to eligible own outgoing channels', async () => {
   const sources = result.selections[0].sources;
   assert.equal(sources.find(s => s.direction === 'Outgoing').setupSession, url);
   assert.equal(sources.find(s => s.direction === 'Incoming').setupSession, undefined);
-  assert.equal((await load([linked('own')], [grant('own'), grant('own', 'other')])).selections.length, 0);
+  const multi = (await load([linked('own')], [grant('own'), grant('own', 'other')])).selections[0];
+  assert.equal(multi.participants.length, 3);
+  assert.equal(multi.sources[0].setupSession, url);
 });
 const grant = (id, peer = 'peer') => ({ data_types: [`Event/${id}`], with_user_ids: [peer], share_all_data: false });
 test('assessment uses only verified own channels, never peer-authored status', async () => {
@@ -100,12 +102,12 @@ test('only catalog groups compatible with get_records are readable', () => {
 
 test('orphans and self do not become threads; broad/mixed grants cannot hide behind a narrow grant', async () => {
   for (const extra of [
-    { ...grant('own'), with_user_ids: ['peer', 'other'] },
+
     { ...grant('own'), data_types: ['Event/own', 'StepCount'] },
     { share_all_data: true },
     { ...grant('own'), with_group_ids: ['group'] },
     { ...grant('own'), file_paths: ['/'] },
-    grant('own', 'other'),
+
   ]) {
     const result = await load([entry('own'), entry('orphan'), entry('self', 'me'), entry('incoming', 'peer')], [grant('own'), extra, grant('self', 'me')]);
     assert.deepEqual(result.selections.map(t => t.peer), ['peer']);

@@ -8,7 +8,8 @@ PATH = ROOT + '/settings.md'
 LOCK = RLock()  # Serializes this worker only; storage has no compare-and-swap.
 DEFAULTS = dict(autonomous_replies=False, status_metadata=False,
                 attention_waiting=True, attention_overdue=True, unanswered_days=2,
-                attention_high_priority=True, notifications='attention', special_instructions='')
+                attention_high_priority=True, attention_peer_membership_announcements=True,
+                notifications='attention', special_instructions='')
 SCHEMA = {
     'autonomous_replies': {'type': 'boolean', 'title': 'Allow autonomous replies',
         'description': 'Opt in to bounded replies using known, authorized information. Existing task restrictions still apply; no commitments or unrelated actions.'},
@@ -18,6 +19,9 @@ SCHEMA = {
     'attention_overdue': {'type': 'boolean', 'title': 'Flag contacts that have not replied'},
     'unanswered_days': {'type': 'integer', 'title': 'Days without a response', 'minimum': 1, 'maximum': 365},
     'attention_high_priority': {'type': 'boolean', 'title': 'Flag high-priority messages'},
+    'attention_peer_membership_announcements': {'type': 'boolean',
+        'title': 'Flag peers announcing added recipients',
+        'description': 'Notify about unverified peer membership announcements, even low-priority or addressed to another agent. Never grants sharing consent.'},
     'notifications': {'type': 'string', 'title': 'Notify about', 'enum': ['attention', 'all_messages', 'none'],
         'description': 'Guides check summaries, not ChatGPT completion alerts or OS permissions.'},
     'special_instructions': {'type': 'string', 'title': 'Special instructions', 'maxLength': 2000,

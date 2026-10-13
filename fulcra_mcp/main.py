@@ -40,6 +40,8 @@ mcp = FastMCP(
     instructions="""
     This server provides personal data retrieval tools.
     Always specify the time zone when using times as parameters.
+    When the user mentions Fulcra without a task, call mesh_threads_open({})
+    to show their contacts and the Invite someone button.
     When the user submits a List Meshes or Open Mesh: composer mention without
     another task, open its UI without asking what to do next: List Meshes calls
     mesh_threads_open({}); Open Mesh: resolves the mesh://threads/id- resource

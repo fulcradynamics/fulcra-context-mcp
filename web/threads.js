@@ -1,6 +1,6 @@
 import { discoverThreads } from './meshes.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { renderIdentity } from './identity.js';
+import { renderThreadIdentity } from './identity.js';
 import { renderStatus } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
@@ -100,7 +100,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             row.append(button, assessment, account, preview); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          renderIdentity(entry.peer, thread.identifier, thread.peer);
+          renderThreadIdentity(entry.peer, thread);
           renderStatus(entry.assessment, thread.assessment);
           const accountName = thread.accountName !== thread.peer ? thread.accountName : '';
           entry.account.textContent = accountName ? `Account: ${accountName}` : '';
@@ -220,7 +220,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
       launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible thread below.';
     } else {
-      requestedPeer = data.peer_fulcra_userid;
+      requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
       launchPending = requestedPeer != null;
       launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : 'Choose an accessible thread.';
     }

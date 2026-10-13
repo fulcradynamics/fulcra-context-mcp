@@ -23,6 +23,8 @@ export function parseMeshIdentifier(description) {
 }
 
 export function threadTitle(thread) {
+  if (thread.participants) return `${thread.identifier || 'Multiparty connection'} — `
+    + thread.participants.map(p => p.name === p.id ? p.id : `${p.name} (${p.id})`).join(', ');
   return thread.identifier ? `${thread.identifier} (${thread.peer})` : thread.peer;
 }
 

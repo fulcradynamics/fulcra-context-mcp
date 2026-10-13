@@ -351,8 +351,9 @@ async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: 
                     kind: Literal["message", "reply", "ack"] = "message",
                     in_reply_to: str | None = None,
                     pri: Literal["P1", "P2", "P3"] = "P2", slug: str | None = None,
-                    artifacts: list[dict] | None = None) -> dict:
-    """Post an Event message to an existing, exclusively peer-shared channel.
+                    artifacts: list[dict] | None = None,
+                    expected_peer_userids: list[str] | None = None) -> dict:
+    """Post an Event message to an existing, exact-audience channel.
 
     Requires exact peer_userid and owned Event/<uuid> outbox. sender is your
     agent name, body is exact nonblank text <=4000 characters. Omitted recipients
@@ -371,6 +372,7 @@ async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: 
         body: Exact nonblank text, at most 4000 characters.
         mid: Stable UUID allocated before the first attempt.
         recipients: Agent names; omit for everyone in the connection.
+        expected_peer_userids: Exact full other-user audience; required for multiparty.
         kind: message, reply or ack.
         in_reply_to: Peer message/reply UUID within 30 days; required for reply/ack.
         pri: P1 urgent, P2 normal, P3 low.
@@ -381,6 +383,7 @@ async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: 
     fulcra = get_fulcra_object()
     return await asyncio.to_thread(send, fulcra, peer_userid=peer_userid, outbox=outbox,
                                    sender=sender, body=body, mid=mid, recipients=recipients,
+                                   expected_peer_userids=expected_peer_userids,
                                    kind=kind, in_reply_to=in_reply_to, pri=pri, slug=slug,
                                    artifacts=artifacts)
 
@@ -898,6 +901,8 @@ async def send_agent_message(
     ack: str | None = None,
     record_id: str | None = None,
     artifacts: list[dict] | None = None,
+    expected_peer_userids: list[str] | None = None,
+    target_peer_userid: str | None = None,
 ) -> dict:
     """Send a message to another person's agent, over a connection made with
     the connect-agents-with-anyone skill. Everyone in the connection can read
@@ -916,6 +921,8 @@ async def send_agent_message(
         record_id: To retry a send whose outcome is unknown, the id it
             returned, so it isn't sent twice.
         artifacts: Optional file references (path, version, owner); never creates shares.
+        expected_peer_userids: Exact full other-user audience; required for multiparty.
+        target_peer_userid: Exact owner of a multiparty reply/ack target; never inferred from sender.
     """
     from uuid import uuid4
     from .mesh import send, _uuid, UUID_PATTERN
@@ -928,9 +935,15 @@ async def send_agent_message(
             if reply_to is not None and ack is not None:
                 raise ValueError('Give reply_to or ack, not both.')
             channel, people = connections.resolve_connection(fulcra.get_datashares(), connection)
-            if len(people) != 1:
-                raise ValueError('Only two-party connections are supported.')
-            return send(fulcra, peer_userid=people[0], outbox=channel, sender=sender,
+            if len(people) != 1 and (expected_peer_userids is None or not connection.startswith('Event/')):
+                raise ValueError('Multiparty sends require an exact owned channel and expected_peer_userids.')
+            if len(people) > 1 and (reply_to or ack) and target_peer_userid is None:
+                raise ValueError('Multiparty reply/ack requires target_peer_userid from the exact incoming grant.')
+            peer = target_peer_userid if target_peer_userid is not None else people[0]
+            if peer not in people:
+                raise ValueError('Target peer is not in the selected channel audience.')
+            return send(fulcra, peer_userid=peer, outbox=channel, sender=sender,
+                        expected_peer_userids=expected_peer_userids,
                         body=body, mid=mid, recipients=recipients, pri=priority or 'P2',
                         slug=topic, kind='reply' if reply_to else 'ack' if ack else 'message',
                         in_reply_to=reply_to if reply_to is not None else ack, artifacts=artifacts)

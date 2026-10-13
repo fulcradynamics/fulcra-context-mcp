@@ -1,5 +1,5 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
-import { renderIdentity } from './identity.js';
+import { renderThreadIdentity } from './identity.js';
 import { clearPostedDraft, matchesPost, messageId, postRecord, recipientAgent } from './mesh-send.js';
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
@@ -51,15 +51,15 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   draft.posts ??= []; draft.agents ??= {}; draft.acks ??= new Set();
   // Acknowledge each target once; a failure returns it to unread for another try.
   async function ack(targets, body) {
-    const peer = peerId(), outboxId = source?.id, sender = agent.value;
+    const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = agent.value;
     if (!outboxId || !sender.trim()) return false;
     targets = targets.filter(m => !draft.acks.has(m.record.id));
     targets.forEach(m => draft.acks.add(m.record.id)); changed();
     let failed = 0;
     for (const m of targets) {
       try {
-        const { response, result } = await postRecord(app, { peer_userid: peer, outbox: outboxId, sender, body,
-          mid: messageId(), kind: 'ack', in_reply_to: m.record.id });
+        const { response, result } = await postRecord(app, { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body,
+          mid: messageId(), kind: 'ack', in_reply_to: m.record.id, ...(audience ? { expected_peer_userids: audience } : {}) });
         if (response.isError || result.status !== 'posted') throw new Error('Not posted');
       } catch { draft.acks.delete(m.record.id); failed++; }
     }
@@ -69,7 +69,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   }
   const update = () => {
     const current = view();
-    renderIdentity(caption, current.thread?.identifier, current.thread?.peer ?? peerId() ?? 'this thread', 'Talk to ');
+    renderThreadIdentity(caption, current.thread, 'Talk to ');
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
@@ -82,7 +82,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         option.textContent = s.name ? `${s.name}${duplicate ? ` (${s.id})` : ''}` : s.id;
         outbox.append(option);
       }
-      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox : outgoing.length === 1 ? outgoing[0].id : '';
+      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
+        : draft.outbox === undefined && outgoing.length === 1 ? outgoing[0].id : '';
       outbox.value = draft.outbox;
     }
     const selected = outgoing.find(s => s.id === outbox.value);
@@ -116,9 +117,11 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
-    const peer = peerId(), mid = messageId(), startedAt = Date.now();
     // Sending answers the newest unread message and acknowledges the rest.
+    // Answers name the target's sender; the server finds targets on their channel.
+    const audience = view().thread?.expectedPeerUserids;
     const unread = unreadMessages(view().result?.messages ?? [], draft.acks), target = unread.at(-1);
+    const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: agent.value, kind: target ? 'reply' : 'message', priority: 'P2',
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
     const posted = () => {
@@ -134,7 +137,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     report('Posting…');
     try {
       const { response, result } = await postRecord(app, { peer_userid: peer, outbox: post.source.id,
-        sender: envelope.sender, body: envelope.body, mid, ...(target ? { kind: 'reply', in_reply_to: target.record.id } : {}) });
+        sender: envelope.sender, body: envelope.body, mid, ...(target ? { kind: 'reply', in_reply_to: target.record.id } : {}),
+        ...(audience ? { expected_peer_userids: audience } : {}) });
       if (post.state === 'posted' || (!response.isError && result.status === 'posted' && result.mid === mid
           && result.outbox === post.source.id && result.peer_userid === peer
           && result.record && matchesPost({ ...post, record: result.record }, post))) {

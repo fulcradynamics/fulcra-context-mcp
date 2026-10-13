@@ -5,9 +5,9 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Fulcra Mesh UI")
-UI_URI = "ui://fulcra/mesh/v38.html"
-THREAD_UI_URI = "ui://fulcra/mesh/thread/v38.html"
-THREADS_UI_URI = "ui://fulcra/mesh/threads/v38.html"
+UI_URI = "ui://fulcra/mesh/v39.html"
+THREAD_UI_URI = "ui://fulcra/mesh/thread/v39.html"
+THREADS_UI_URI = "ui://fulcra/mesh/threads/v39.html"
 MESHES_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 
@@ -20,7 +20,8 @@ def mesh_threads_open() -> dict[str, str]:
     """Show clickable Mesh threads in chat. Select a peer to request a conversation panel.
 
     Does not write account data or send messages.
-    Use for a submitted List Meshes mention unless the user asks for another task.
+    Use for a bare Fulcra mention or a submitted List Meshes mention unless the
+    user asks for another task.
     """
     return {"presentation": "threads"}
 
@@ -52,15 +53,19 @@ def meshes_html() -> str:
     meta={"openai/ui": {"entrypoints": [{"type": "thread"}]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
-def mesh_conversation_open(peer_fulcra_userid: str | None = None) -> dict:
-    """Open a Mesh conversation, optionally with an exact referenced peer user ID.
+def mesh_conversation_open(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
+    """Open a Mesh conversation with an exact peer ID or discovered multiparty thread_id.
 
-    Omit the ID to choose a thread. Accessible peers are discovered by the app;
+    Omit both IDs to choose a thread. Accessible audiences are discovered by the app;
     names are not identifiers. Does not write account data or send messages.
     Use for a submitted Open Mesh: mention after resolving its exact peer ID.
     """
     if peer_fulcra_userid is not None and not peer_fulcra_userid.strip():
         raise ValueError("Provide a nonblank exact peer user ID or omit it.")
+    if thread_id is not None:
+        if peer_fulcra_userid is not None or not thread_id.startswith('connection:'):
+            raise ValueError('Use one exact discovered thread_id or peer user ID, not both.')
+        return {"presentation": "thread", "thread_id": thread_id}
     return {"presentation": "thread", "peer_fulcra_userid": peer_fulcra_userid}
 
 
