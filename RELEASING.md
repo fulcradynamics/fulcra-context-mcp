@@ -4,10 +4,10 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
-### Latest-message window (UI v33)
+### Latest-message window (UI v34)
 
 Threads open on a window anchored to the latest incoming and outgoing messages,
-replacing the date picker; **Load more** adds two weeks. The thread list previews
+replacing the date picker; **Load more history** adds two weeks. The thread list previews
 each contact's latest message. Refresh server discovery; no plugin change.
 
 ### Original setup session (1.4.1 / UI v31)

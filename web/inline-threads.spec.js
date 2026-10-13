@@ -212,7 +212,7 @@ for (const width of [320, 1120]) test(`compact inline list and exact-peer shared
   const ui = await open(page, { holdDisplay: true });
   await expect(ui.locator('#mesh-status')).toContainText('2 threads returned');
   expect(await ui.locator('html').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
-  expect(await ui.locator('body').evaluate(e => parseFloat(getComputedStyle(e).paddingBottom))).toBeLessThan(40);
+  expect(await ui.locator('.footer-spacer').evaluate(e => e.getBoundingClientRect().height)).toBeLessThan(40);
   if (process.env.INLINE_PREVIEW_DIR) await page.screenshot({ path: `${process.env.INLINE_PREVIEW_DIR}/mesh-inline-${width}.png` });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.requests.filter(r => r.method === 'ui/request-display-mode').length)).toBe(1);

@@ -125,7 +125,7 @@ for (const invalidation of ['Back', 'Load more', 'revocation', 'teardown']) test
   await action(ui).click();
   await expect(ui.locator('#send-status')).toContainText('accepted');
   if (invalidation === 'Back') await ui.getByRole('button', { name: 'Back to threads' }).click();
-  if (invalidation === 'Load more') await ui.getByRole('button', { name: 'Load more', exact: true }).click();
+  if (invalidation === 'Load more') await ui.getByRole('button', { name: 'Load more history', exact: true }).click();
   if (invalidation === 'revocation') {
     await page.evaluate(() => { window.entries = window.entries.filter(e => e.fulcra_userid !== 'peer'); });
     await page.clock.runFor(10000);
@@ -238,7 +238,7 @@ for (const change of ['poll', 'Load more', 'revocation']) test(`held attach inva
     await page.clock.runFor(10000);
     await expect(ui.locator('#messages')).toContainText('new history');
   } else if (change === 'Load more') {
-    await ui.getByRole('button', { name: 'Load more', exact: true }).click();
+    await ui.getByRole('button', { name: 'Load more history', exact: true }).click();
   } else {
     await page.evaluate(() => { window.entries = window.entries.filter(e => e.fulcra_userid !== 'peer'); });
     await page.clock.runFor(10000);

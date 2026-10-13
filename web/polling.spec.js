@@ -217,16 +217,20 @@ test('window starts a week before the earlier latest side; Load more adds two we
   // One week before the latest outgoing message, which is the earlier of the two.
   expect(new Set(await ranges())).toEqual(new Set(['2025-12-13T12:00:00.000Z']));
   await expect(ui.locator('#message-start, #message-end, #message-load')).toHaveCount(0);
-  const more = ui.getByRole('button', { name: 'Load more', exact: true });
+  const more = ui.getByRole('button', { name: 'Load more history', exact: true });
   await expect(more).toBeVisible();
-  expect(await more.evaluate(el => el.previousElementSibling?.id)).toBe('messages');
+  expect(await ui.locator('#message-history').evaluate(el => el.previousElementSibling?.id)).toBe('messages');
+  const through = ui.locator('#message-through');
+  await expect(through).toHaveText(await through.evaluate(() => `Showing messages through ${new Date('2025-12-13T12:00:00.000Z').toLocaleDateString()}`));
   await expect(ui.locator('#messages li').first()).toContainText('newer body');
   await ui.getByLabel('Message order').selectOption('oldest');
   await expect(ui.locator('#messages li').first()).toContainText('sent body');
-  expect(await more.evaluate(el => el.nextElementSibling?.id)).toBe('messages');
+  expect(await ui.locator('#message-history').evaluate(el => el.nextElementSibling?.id)).toBe('messages');
   await page.evaluate(() => { window.hold = ['get_records']; });
   await more.click();
   await expect(more).toBeDisabled();
+  // The label reports the attempted date while the wider read is in flight.
+  await expect(through).toHaveText(await through.evaluate(() => `Showing messages through ${new Date('2025-11-29T12:00:00.000Z').toLocaleDateString()}`));
   await expect.poll(async () => (await ranges()).slice(-2)).toEqual(['2025-11-29T12:00:00.000Z', '2025-11-29T12:00:00.000Z']);
   await release(page);
   await expect(more).toBeEnabled();
@@ -457,7 +461,7 @@ test('revoked source is removed even while Load more fails; the applied window a
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(2);
   await page.evaluate(entries => { window.entries = entries; window.hold = ['get_records']; window.fail = ['get_records']; }, [channel('peer', 'two')]);
-  await ui.getByRole('button', { name: 'Load more', exact: true }).click();
+  await ui.getByRole('button', { name: 'Load more history', exact: true }).click();
   await expect(ui.locator('#messages')).not.toContainText('revoked content');
   await expect(ui.locator('#thread-context')).not.toContainText('revoked content');
   expect(await page.evaluate(() => window.held.at(-1).params.arguments.start_time)).toBe('2025-12-20T12:00:01.000Z');

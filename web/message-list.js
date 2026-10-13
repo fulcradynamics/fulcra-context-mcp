@@ -13,7 +13,7 @@ export function createMessageList(list, activity, order, renderRow) {
   const doc = list.ownerDocument, win = doc.defaultView;
   let rows = new Map();
   const latest = () => order.value === 'latest' ? list.firstElementChild : list.lastElementChild;
-  const bottom = () => win.innerHeight - parseFloat(win.getComputedStyle(doc.body).paddingBottom);
+  const bottom = () => win.innerHeight - (doc.querySelector('.footer-spacer')?.offsetHeight ?? 0);
   function atLatest() {
     const edge = latest()?.getBoundingClientRect();
     return !edge || (order.value === 'latest' ? Math.abs(edge.top) <= 40 : edge.bottom <= bottom() + 40);
