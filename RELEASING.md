@@ -4,6 +4,14 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Original setup session (1.4.1 / UI v31)
+
+Optional own-channel description metadata enables explicit original-session
+navigation and a copyable contextual handoff, with unchanged no-link fallback.
+Pair with plugin 0.3.1; refresh server discovery and reinstall. Host APIs cannot
+target an arbitrary existing chat or transfer context by opening its URL; native
+desktop/web acceptance remains required. See [app contract](docs/mesh-app.md).
+
 ### Mesh check settings (1.3.0 / settings UI v1)
 
 Adds native read-only mesh-check settings and an explicit schedule-management

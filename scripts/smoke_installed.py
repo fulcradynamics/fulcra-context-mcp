@@ -31,17 +31,18 @@ async def main():
                 assert 'send_agent_message' in tools
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('aicq_open', 'ui://fulcra/mesh/v30.html', 'global'),
-                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v30.html', 'threads'),
-                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v30.html', 'thread'),
+                    ('aicq_open', 'ui://fulcra/mesh/v31.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v31.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v31.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="mesh-presentation" content="{marker}"' in text
-                    for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages'):
+                    for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages',
+                                  'connection_setup_session', 'Open original setup session', 'Copy handoff for original session'):
                         assert value in text, value
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v30 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v31 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

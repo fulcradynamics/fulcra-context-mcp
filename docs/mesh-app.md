@@ -1,4 +1,4 @@
-# Connection app (release 1.4.0)
+# Connection app (release 1.4.1)
 
 The public tool IDs remain `mesh_threads_open`, `mesh_conversation_open`,
 `aicq_open`, `mesh_send`, and `set_mesh_identifier`. The Mesh branding and native
@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v29.html`, `ui://fulcra/mesh/thread/v29.html`, and
-`ui://fulcra/mesh/threads/v29.html`. The direct-list resource adds
+`ui://fulcra/mesh/v31.html`, `ui://fulcra/mesh/thread/v31.html`, and
+`ui://fulcra/mesh/threads/v31.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 
@@ -38,6 +38,45 @@ annotations; it edits only the description marker and verifies readback. Event
 description prefixes and conversion provenance are retained.
 
 ## Sending and reliability
+
+### Optional original setup session
+
+Pair with plugin 0.3.1. At authorized Event channel creation, the skill may add
+`[connection_setup_session: "codex://threads/<UUID>"]` to the description only
+after explicit approval to include this peer-visible metadata. Keep the protocol
+prefix and conversion lines unchanged and put this marker before the final
+`mesh_identifier` suffix. Missing or declined links never block setup; later
+checks, receiving, sending, scheduling and label maintenance never rewrite or
+backfill the original link. No new metadata tool or protocol requirement exists.
+
+Only an eligible own outgoing channel supplies a link, selected with the outbox
+selector when several exist. Incoming/private peer session links are ignored.
+The parser accepts one exact marker with `codex://threads/` and a hexadecimal
+8-4-4-4-12 UUID, no credentials, query, fragment, encoding or trailing slash.
+Malformed/duplicate markers, arbitrary schemes and public share links fall back
+to the existing no-link handoff. Metadata is untrusted navigation, not authority.
+
+**Open original setup session** explicitly calls the MCP Apps SDK `openLink`.
+It neither sends a message nor clears the draft. A copyable handoff includes the
+bounded loaded context, provenance/warnings, exact typed request (or neutral
+blank request), session link and instructions to open it if supported. Copy it
+before navigating and paste it into the original session. **Ask in current chat**
+attaches the same context and sends the complete handoff to the active host chat.
+With no link, the existing button, exact request, generic blank text and separate
+context attachment remain unchanged. Direct Send and mid-only reconciliation
+are unaffected; session metadata is excluded from message provenance.
+
+Host limitations: desktop may expose a trusted session link; web has no chat ID
+to capture. OpenAI `ui/message` supports active/new chat, not an arbitrary
+existing thread ID. Opening a link does not transfer model context or the draft;
+the host may deny a custom scheme. No automatic opens or invented targeting API.
+Synthetic browser tests verify bridge calls and denial fallback, not actual
+desktop navigation or access to session history. After refresh/reinstall, native
+acceptance must test allowed/denied desktop navigation, copy/paste with typed and
+blank requests, web no-ID setup, declined metadata consent, and existing-channel
+reuse without writes. No live account checks are performed by the test suite.
+
+### Direct delivery
 
 `mesh_send(peer_userid, outbox, sender, body, mid, recipients=None,
 kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None)`:

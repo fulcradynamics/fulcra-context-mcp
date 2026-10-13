@@ -49,6 +49,15 @@ test('sharing account names are labeled without inventing agent names or groupin
 });
 
 const entry = (id, owner) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
+test('setup links belong only to eligible own outgoing channels', async () => {
+  const url = 'codex://threads/00000000-0000-0000-0000-000000000001';
+  const linked = (id, owner) => ({ ...entry(id, owner), description: `[connection_setup_session: "${url}"]` });
+  const result = await load([linked('own'), linked('incoming', 'peer')], [grant('own')]);
+  const sources = result.selections[0].sources;
+  assert.equal(sources.find(s => s.direction === 'Outgoing').setupSession, url);
+  assert.equal(sources.find(s => s.direction === 'Incoming').setupSession, undefined);
+  assert.equal((await load([linked('own')], [grant('own'), grant('own', 'other')])).selections.length, 0);
+});
 const grant = (id, peer = 'peer') => ({ data_types: [`Event/${id}`], with_user_ids: [peer], share_all_data: false });
 const text = result => ({ structuredContent: { result } });
 async function load(catalog, outgoing = [], own = 'me') {

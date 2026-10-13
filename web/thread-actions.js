@@ -2,6 +2,7 @@ import { setupReplySuggestions } from './reply-suggestions.js';
 import { renderIdentity } from './identity.js';
 import { clearPostedDraft, matchesPost, messageId, recipientAgent } from './mesh-send.js';
 import { icon, Send } from './icons.js';
+import { sessionHandoff } from './setup-session.js';
 const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
@@ -15,6 +16,15 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
   const handoff = doc.createElement('button'); handoff.type = 'button';
   handoff.textContent = 'talk with my agent about this thread';
+  const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
+  original.textContent = 'Open original setup session';
+  const transfer = doc.createElement('details'); transfer.hidden = true;
+  const transferTitle = doc.createElement('summary'); transferTitle.textContent = 'Copy handoff for original session';
+  const transferHelp = doc.createElement('p');
+  transferHelp.textContent = 'Opening the session does not transfer your message or context. Copy this handoff first, then paste it there. Or ask in the current chat. The host may block opening the link.';
+  const transferText = doc.createElement('textarea'); transferText.readOnly = true; transferText.rows = 6;
+  transferText.setAttribute('aria-label', 'Handoff for original session');
+  transfer.append(transferTitle, transferText);
   const address = doc.createElement('details'), addressTitle = doc.createElement('summary');
   addressTitle.textContent = 'Delivery address';
   const outboxLabel = doc.createElement('label'); outboxLabel.textContent = 'Your outbox';
@@ -36,7 +46,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   container.append(label, actions, address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct mesh Send remains available.';
-  let updateSuggestions = () => {}, source, sourceIdentity;
+  let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
   draft.posts ??= []; draft.agents ??= {};
   const update = () => {
     const current = view();
@@ -56,7 +66,19 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox : outgoing.length === 1 ? outgoing[0].id : '';
       outbox.value = draft.outbox;
     }
-    source = outgoing.find(s => s.id === outbox.value);
+    const selected = outgoing.find(s => s.id === outbox.value);
+    if (source?.id !== selected?.id || source?.setupSession !== selected?.setupSession) selectionVersion++;
+    source = selected;
+    const session = source?.setupSession;
+    original.hidden = transfer.hidden = transferHelp.hidden = !session;
+    if (session && !original.isConnected) handoff.before(original);
+    if (!session) original.remove();
+    if (session && !transfer.isConnected) address.before(transferHelp, transfer);
+    if (!session) { transferHelp.remove(); transfer.remove(); }
+    original.disabled = lifecycle.pending || !isCurrent();
+    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this thread';
+    const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
+    if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';
     outboxId.hidden = !source?.name;
     const inferred = source ? recipientAgent(current.result?.messages ?? [], source, peerId()) : '';
@@ -77,7 +99,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     update(); if (send.disabled) return;
     const peer = peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: agent.value, kind: 'message', priority: 'P2', topic: 'chat', body: input.value };
-    const { identifier: _identifier, direction: _direction, ...provenance } = source;
+    const { identifier: _identifier, setupSession: _setupSession, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
     const report = text => { status.textContent = `Peer ${peer}, message ${mid}: ${text}`; };
@@ -117,21 +139,40 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       }
     } finally { lifecycle.pending = false; changed(); lifecycle.onChange(); }
   });
+  original.addEventListener('click', async () => {
+    update(); if (original.disabled || !source?.setupSession) return;
+    const url = source.setupSession, outboxId = source.id, peer = peerId();
+    const token = lifecycle.token(), version = selectionVersion;
+    // Never pair a late navigation result with another display's copyable handoff.
+    const report = text => {
+      if (isCurrent() && lifecycle.current(token) && peerId() === peer && selectionVersion === version
+          && source?.id === outboxId && source?.setupSession === url) status.textContent = text;
+    };
+    lifecycle.pending = true; update();
+    try {
+      const result = await app.openLink({ url }, options);
+      if (result.isError) throw new Error('Host rejected link');
+      report('Host accepted the request to open the original setup session. Your message and context were not transferred; copy the handoff and paste it there.');
+    } catch {
+      report(`The host could not confirm opening the original setup session. Open ${url} manually and copy the handoff, or ask in the current chat. Your draft is unchanged.`);
+    } finally { lifecycle.pending = false; lifecycle.onChange(); }
+  });
   handoff.addEventListener('click', async () => {
     update(); if (handoff.disabled) return;
     const submitted = input.value;
-    const text = submitted.trim() ? submitted : 'Let’s talk about this mesh thread.';
+    const session = source?.setupSession, snapshot = context();
+    const text = sessionHandoff(submitted, snapshot, session);
     const version = draft.version, token = lifecycle.token();
     const origin = `Submitted request #${++lifecycle.requestSequence} for peer ID ${JSON.stringify(peerId())} (not the current draft): `;
     const report = message => { status.textContent = origin + message; };
-    const current = () => isCurrent() && lifecycle.current(token);
+    const current = () => isCurrent() && lifecycle.current(token) && source?.setupSession === session;
     const restore = () => { if (draft.version === version) draft.value = submitted; };
     draft.value = '';
     lifecycle.pending = true; update();
     let attempted = false;
     report('Attaching displayed context before sending…');
     try {
-      if (!await lifecycle.attach(context(), token) || !current()) {
+      if (!await lifecycle.attach(snapshot, token) || !current()) {
         restore();
         report('Context changed before sending. No message sent; draft retained.'); return;
       }

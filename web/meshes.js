@@ -1,5 +1,6 @@
 import { parseMeshIdentifier, threadIdentifier, threadTitle } from './mesh-identifier.js';
 import { compatibleSchema } from './connection-schema.js';
+import { parseSetupSession } from './setup-session.js';
 
 const prefix = 'Available data types, grouped by compatible tool: ';
 
@@ -107,6 +108,8 @@ export async function discoverThreads(app) {
       const exact = entry.fields ? [entry] : parseMeshes(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
       const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
       if (!schema || !compatibleSchema(schema)) { omitted++; continue; }
+      const setupSession = owner === own && parseSetupSession(entry.description);
+      if (setupSession) source.setupSession = setupSession;
       source.conversionClaims = conversionSources(entry.description, own, peer);
     }
     const collection = connection ? threads : legacy;
