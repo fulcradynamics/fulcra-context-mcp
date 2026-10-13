@@ -206,7 +206,6 @@ Rebuild and exercise:
     npm ci
     npm test
     npm run build
-    npx playwright test --workers=4
     cd ..
     uv run pytest -q
     uv build
