@@ -109,6 +109,25 @@ async def test_tools_declare_the_panel_and_app_only_visibility(client, fake_fulc
     assert "get_file_download_link" not in tools  # folded into read_file(as_link)
 
 
+async def test_the_files_prompt_is_listed_with_an_optional_path(client, fake_fulcra):
+    [prompt] = [p for p in await client.list_prompts() if p.name == "files"]
+
+    assert prompt.title == "Fulcra files"
+    assert [(a.name, a.required) for a in prompt.arguments] == [("path", False)]
+
+
+@pytest.mark.parametrize("args, folder", [({}, "/"), ({"path": "reports/2026"}, "/reports/2026")])
+async def test_the_files_prompt_asks_for_the_file_manager(client, fake_fulcra, args, folder):
+    result = await client.get_prompt("files", args)
+
+    [message] = result.messages
+    assert message.role == "user"
+    assert message.content.text == (
+        f"Open my Fulcra file manager at {folder} with open_file_manager, "
+        "so I can upload or download files."
+    )
+
+
 async def test_open_file_manager_helps_clients_without_the_panel(call, fake_fulcra):
     fake_fulcra.list_files.return_value = {"folders": ["/reports/2026"], "files": [FILE]}
 

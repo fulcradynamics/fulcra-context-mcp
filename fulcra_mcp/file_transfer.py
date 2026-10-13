@@ -304,6 +304,24 @@ async def open_file_manager(path: str = "/") -> str:
     )
 
 
+@tools_mcp.prompt(
+    name="files",
+    title="Fulcra files",
+    description="Open the Fulcra file manager to upload or download files.",
+)
+def files_prompt(path: str = "/") -> str:
+    """A slash command (an MCP prompt) for the file manager. Prompts cost no
+    model context until the user picks one, unlike tools.
+
+    Args:
+        path: The folder to open (default "/").
+    """
+    return (
+        f"Open my Fulcra file manager at {_file_path(path)} with open_file_manager, "
+        "so I can upload or download files."
+    )
+
+
 def _require_grant() -> str:
     grant_id = current_grant_id()
     if grant_id is None:

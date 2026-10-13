@@ -134,6 +134,7 @@ Users can upload arbitrary files to their account for storage alongside their da
 
 Over MCP, files of any type and size move without passing through the model:
 
+* **The `files` prompt** (a slash command in clients that show MCP prompts, e.g. `/mcp__fulcra__files` in Claude Code; optional `path`) asks for the file manager.
 * **`open_file_manager`** shows a file manager panel (an [MCP App](https://modelcontextprotocol.io/extensions/apps/overview)) in clients that display them, such as Claude. The user browses folders, drops files in to upload them, and downloads files. In other clients the tool returns the folder listing and says what to use instead.
 * **`read_file(path, as_link=true)`** gives the user a link to download a file in a browser, valid for 10 minutes. A server running locally (stdio) saves the file to the user's `~/Downloads` instead.
 * **`read_file`** returns `.xlsx` spreadsheets as CSV, one section per sheet. **`write_file`** takes base64 (`encoding="base64"`) for binary files up to 5 MB.
