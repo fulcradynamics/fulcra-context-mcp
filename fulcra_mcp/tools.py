@@ -1635,13 +1635,6 @@ async def read_file(
             return f"Content of {path} (as CSV, {size_text}): {text}"
         return f"{path} looks like a spreadsheet but couldn't be read as one. {link_hint}"
 
-    if include_binary and size is not None and (size + 2) // 3 * 4 > max_bytes:
-        return (
-            f"{path} is {size} bytes, {(size + 2) // 3 * 4} base64 characters, "
-            f"exceeding max_bytes={max_bytes}. Binary content is not truncated. "
-            + link_hint
-        )
-
     # Read only as much as can be returned, plus a little to tell whether
     # there's more and to complete a character cut off at the end.
     response = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid)

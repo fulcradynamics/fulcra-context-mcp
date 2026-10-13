@@ -469,13 +469,27 @@ async def test_max_bytes_is_capped(call, fake_fulcra):
     assert response.asked == [ft.MAX_RESOURCE_BYTES + 4]
 
 
-async def test_large_binary_with_include_binary_is_refused_before_downloading(call, fake_fulcra):
+async def test_large_binary_with_include_binary_is_refused_after_a_bounded_read(call, fake_fulcra):
+    response = LimitedResponse(b"\xff\xfe" * 500_000)
     fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="a.bin", size=1_000_000)]
+    fake_fulcra.download_file.return_value = response
 
     text = await call("read_file", {"path": "/a.bin", "include_binary": True})
 
-    assert "exceeding max_bytes" in text and "get_file_download_link" in text
-    fake_fulcra.download_file.assert_not_called()
+    assert "larger than max_bytes" in text and "get_file_download_link" in text
+    assert response.asked == [100_004]  # never the whole file
+
+
+async def test_include_binary_still_returns_text_that_fits(call, fake_fulcra):
+    # 80 KB of text fits in max_bytes even though its base64 (107 KB) wouldn't:
+    # text is returned as text.
+    body = "ü" * 40_000  # 80,000 bytes of UTF-8
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="notes.txt", size=80_000)]
+    _download_returns(fake_fulcra, body.encode())
+
+    text = await call("read_file", {"path": "/notes.txt", "include_binary": True, "max_bytes": 100_000})
+
+    assert text == f"Content of /notes.txt: {body}"
 
 
 async def test_read_file_on_other_binaries_says_what_to_do(call, fake_fulcra):
