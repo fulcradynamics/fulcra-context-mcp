@@ -41,10 +41,11 @@ test('renders Event body literally, never decodes legacy envelopes', () => {
   assert.equal(messageText({sender:'agent',kind:'message',body:'<script>not executable</script>'}),'<script>not executable</script>');
   assert.doesNotMatch(messageText({note:'{"v":1,"body":"legacy secret"}'}),/legacy secret/);
 });
-test('exact Event readback matches record id and content, rejects extras', () => {
+test('Event readback matches only the message id', () => {
   const record = {id:'stable',sender:'me',kind:'message',body:'hi',topic:'chat',priority:'P2'};
   const source = {id,fulcra_userid:own};
   const post = {source,envelope:record};
   assert.equal(matchesPost({direction:'Outgoing',source,record:{...record,start_time:'now'}},post),true);
-  assert.equal(matchesPost({direction:'Outgoing',source,record:{...record,recipients:['other']}},post),false);
+  assert.equal(matchesPost({direction:'Incoming',source:{},record:{id:'stable',recipients:['other']}},post),true);
+  assert.equal(matchesPost({record:{...record,id:'different'}},post),false);
 });

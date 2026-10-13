@@ -126,6 +126,7 @@ test('accepted send cannot clear an edited current draft', async ({ page }) => {
   const ui = await open(page, { peer: 'peer', holdSend: true });
   await ui.locator('textarea').fill('first');
   await ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true }).click();
+  await expect(ui.locator('textarea')).toHaveValue('');
   await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
   await ui.locator('textarea').fill('second');
   await page.evaluate(() => window.reply(window.sends[0].id, {}));

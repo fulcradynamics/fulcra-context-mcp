@@ -81,6 +81,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
     const report = text => { status.textContent = `Peer ${peer}, message ${mid}: ${text}`; };
+    draft.value = '';
     draft.posts.push(post); lifecycle.pending = true; changed(); update();
     report('Posting…');
     try {
@@ -96,6 +97,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         report('Posted to your outbox; not confirmed delivered or read by the peer.');
       } else if (!response.isError && result.status === 'rejected' && result.mid === mid && result.outbox === post.source.id) {
         draft.posts = draft.posts.filter(p => p !== post);
+        if (draft.version === post.version) draft.value = envelope.body;
         report(`Message not posted. ${result.reason ?? ''} Draft retained.`);
       } else throw new Error('Unconfirmed');
     } catch {
@@ -108,6 +110,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         setTimeout(() => {
           if (post.state !== 'sending') return;
           post.state = 'uncertain';
+          if (draft.version === post.version) draft.value = envelope.body;
           if (status.textContent === waitingStatus) report('Posting unconfirmed. Draft retained; Send is paused for this peer. Check the outbox for this message ID before retrying.');
           changed(); lifecycle.onChange();
         }, Math.max(0, 60000 - (Date.now() - startedAt)));
@@ -116,16 +119,20 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   });
   handoff.addEventListener('click', async () => {
     update(); if (handoff.disabled) return;
-    const text = input.value.trim() ? input.value : 'Let’s talk about this mesh thread.';
+    const submitted = input.value;
+    const text = submitted.trim() ? submitted : 'Let’s talk about this mesh thread.';
     const version = draft.version, token = lifecycle.token();
     const origin = `Submitted request #${++lifecycle.requestSequence} for peer ID ${JSON.stringify(peerId())} (not the current draft): `;
     const report = message => { status.textContent = origin + message; };
     const current = () => isCurrent() && lifecycle.current(token);
+    const restore = () => { if (draft.version === version) draft.value = submitted; };
+    draft.value = '';
     lifecycle.pending = true; update();
     let attempted = false;
     report('Attaching displayed context before sending…');
     try {
       if (!await lifecycle.attach(context(), token) || !current()) {
+        restore();
         report('Context changed before sending. No message sent; draft retained.'); return;
       }
       attempted = true; report('Awaiting host confirmation…');
@@ -134,6 +141,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       report('Request accepted by the host. Check the conversation for the response; no mesh reply was posted by this handoff.');
       if (draft.version === version) { draft.value = ''; draft.version++; }
     } catch {
+      restore();
       report(attempted ? 'Could not confirm delivery. Check the conversation before retrying; draft retained.'
         : 'Could not confirm context attachment. No message sent; draft retained.');
     } finally { lifecycle.pending = false; lifecycle.onChange(); }

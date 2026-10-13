@@ -1,4 +1,4 @@
-const fields = ['id', 'sender', 'kind', 'body', 'recipients', 'topic', 'priority', 'in_reply_to', 'artifacts'];
+
 const sameSource = (a, b) => a.id === b.id && a.fulcra_userid === b.fulcra_userid;
 export function recipientAgent(messages, source, peer) {
   const names = new Set(messages.filter(m => m.direction === 'Outgoing' && sameSource(m.source, source))
@@ -6,8 +6,7 @@ export function recipientAgent(messages, source, peer) {
   return names.size === 1 ? [...names][0] : 'chatgpt';
 }
 export function matchesPost(message, post) {
-  return message.direction === 'Outgoing' && sameSource(message.source, post.source)
-    && fields.every(k => JSON.stringify(message.record[k]) === JSON.stringify(post.envelope[k]));
+  return message.record.id === post.envelope.id;
 }
 export function clearPostedDraft(draft, post) {
   if (draft.version === post.version) { draft.value = ''; draft.version++; }

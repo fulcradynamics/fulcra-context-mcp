@@ -10,13 +10,11 @@ test('sender inferred only from exact own outgoing source, not label or incoming
   assert.equal(recipientAgent([message], {...source, id:'other'}, 'peer'), 'chatgpt');
   assert.equal(recipientAgent([message, { ...message, record: { ...envelope, sender: 'different' } }], source, 'peer'), 'chatgpt');
 });
-test('poll only reconciles full envelope at exact outgoing owner and channel', () => {
+test('poll reconciles by mid alone despite different metadata and content', () => {
   const draft = { value: 'hello', version: 1, posts: [{ ...message, envelope, state: 'uncertain', version: 1 }] };
-  reconcilePosts(draft, [{ ...message, source: { ...source, fulcra_userid: 'foreign' } }]);
-  assert.equal(draft.posts[0].state, 'uncertain');
-  reconcilePosts(draft, [{ ...message, record: { ...envelope, body: 'different' } }]);
-  assert.equal(draft.posts[0].state, 'uncertain');
-  reconcilePosts(draft, [message]);
+  reconcilePosts(draft, [{ ...message, record: { ...envelope, id: 'different-id' } }]);
+  assert.equal(draft.posts.length, 1);
+  reconcilePosts(draft, [{ source: { id: 'other', fulcra_userid: 'foreign' }, direction: 'Incoming', record: { id: envelope.id, body: 'different', recipients: null } }]);
   assert.equal(draft.posts.length, 0);
   assert.equal(draft.value, '');
 });

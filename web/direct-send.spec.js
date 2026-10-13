@@ -55,6 +55,7 @@ for (const presentation of ['global', 'thread']) test(`${presentation}: direct e
   await ui.locator('textarea').fill('  Hello directly\nwith whitespace  ');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(ui.locator('#messages')).toContainText('sending…');
+  await expect(ui.locator('textarea')).toHaveValue('');
   await expect(ui.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => [window.sends.length, window.contexts.length])).toEqual([0, 0]);
   await page.clock.runFor(10000);
@@ -171,6 +172,25 @@ test('readback during the grace period confirms immediately and stays confirmed 
   await page.clock.runFor(60000);
   await expect(ui.locator('#send-status')).toContainText('Posted');
   await expect(ui.locator('#messages')).not.toContainText('unconfirmed');
+});
+
+test('unconfirmed placeholder is replaced by the fetched record with the same mid', async ({ page }) => {
+  const ui = await open(page, 'global', { outcome: 'uncertain' });
+  await ui.locator('textarea').fill('one message');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.clock.runFor(60000);
+  await expect(ui.locator('.send-badge')).toHaveText('unconfirmed');
+  await page.evaluate(() => {
+    const a = window.pending.params.arguments;
+    window.rows.push({ id: a.mid, sender: a.sender, kind: 'message', body: a.body,
+      recipients: null, start_time: '2026-01-10T12:00:01Z' });
+  });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#messages li')).toHaveCount(2);
+  await expect(ui.locator('.send-badge:visible')).toHaveCount(0);
+  await expect(ui.locator('textarea')).toHaveValue('');
+  await expect(ui.locator('#send-status')).toContainText('Posted');
+  expect(await page.evaluate(() => window.calls.filter(r => r.params.name === 'mesh_send').length)).toBe(1);
 });
 
 for (const text of ['', '  Help with this message  ']) test(`secondary handoff attaches bounded context with optional composition: ${text}`, async ({ page }) => {
