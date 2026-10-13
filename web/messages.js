@@ -17,6 +17,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
+  const history = doc.querySelector('#message-history');
+  const through = doc.querySelector('#message-through');
   const more = doc.querySelector('#message-more');
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
@@ -26,7 +28,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'), presentation);
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
-  let selected, displayed, start, requestedStart, updateComposer, lastSuccess, ready = false;
+  let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
   const converted = doc.createElement('p'); converted.hidden = true;
   const convertedLabel = doc.createElement('span'); convertedLabel.textContent = 'Converted from mesh';
   const oldMessages = doc.createElement('button'); oldMessages.type = 'button'; oldMessages.textContent = 'chat about old messages';
@@ -177,6 +179,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         requestedStart = new Date(Math.min(Date.now(), ...edges) - 7 * DAY).toISOString();
       }
       const query = { start_time: requestedStart ?? start, end_time: new Date().toISOString() };
+      attemptedStart = query.start_time; placeMore();
       const result = await readConversation(app, selected, query, current, { discovery, previous: displayed, now: query.end_time });
       if (!current()) return true;
       const success = !result.warnings.some(w => w.startsWith('Could not load messages'));
@@ -194,10 +197,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); }
     }
   }
-  // Load more sits at the earliest end of the list and extends the window by two weeks.
+  // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
   function placeMore() {
-    more.hidden = !displayed?.messages.length;
-    if (order.value === 'oldest') messages.before(more); else messages.after(more);
+    history.hidden = !attemptedStart;
+    if (attemptedStart) through.textContent = `Showing messages through ${new Date(attemptedStart).toLocaleDateString()}`;
+    if (order.value === 'oldest') messages.before(history); else messages.after(history);
   }
   const onMore = () => {
     if (!start || requestedStart) return;
@@ -210,7 +214,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
-    clearTimeout(statusTimer); loading.hidden = true; more.hidden = true;
+    clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
@@ -239,7 +243,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
-    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; ready = false;
+    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
     clearTimeout(statusTimer); loading.hidden = false;
     returnFocus = button;
@@ -249,7 +253,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
       () => { if (selected && displayed) render(displayed, ready); });
     setTitle(thread);
-    more.hidden = true; more.disabled = false;
+    history.hidden = true; more.disabled = false;
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();

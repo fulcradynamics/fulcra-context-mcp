@@ -61,11 +61,15 @@
         <p id="message-status" role="status" aria-live="polite"></p>
         <button id="new-activity" type="button" hidden>New activity</button>
         <ol id="messages"></ol>
-        <button id="message-more" type="button" hidden>Load more</button>
+        <div id="message-history" hidden>
+          <p id="message-through" class="meta" role="status"></p>
+          <button id="message-more" type="button">Load more history</button>
+        </div>
       </div>
     </section>
     <p id="context-status" role="status" aria-live="polite"></p>
   </main>
+  <div class="footer-spacer" aria-hidden="true"></div>
   <script>/* APP_SCRIPT */</script>
 </body>
 </html>

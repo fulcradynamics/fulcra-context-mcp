@@ -199,7 +199,9 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   });
   await expect(ui.getByRole('heading', { name: 'Fulcra Mesh', exact: true })).toBeVisible();
   await expect(ui.locator('body')).not.toContainText(/hello world|proof of concept|served by|demo/i);
-  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '244px');
+  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBe(244);
+  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '0px');
+  await expect(ui.locator('body')).toHaveCSS('padding-top', '24px');
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
   await ui.getByRole('button', { name: peerId, exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
@@ -211,12 +213,12 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   await assertNoOverflow();
   expect(await ui.locator('body').evaluate(el => getComputedStyle(el).fontFamily)).toContain('Rubik');
   expect(await frame.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(font => font.family === 'Rubik' && font.status === 'loaded'); })).toBe(true);
-  expect(await ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(232);
+  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(232);
   // SDK host context notifications update insets; unrelated updates preserve them.
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 } } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(256);
+  await expect.poll(() => ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(256);
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(256);
+  await expect.poll(() => ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(256);
   const aboveOverlay = async locator => {
     await locator.evaluate(el => el.scrollIntoView({ block: 'center' }));
     const box = await locator.boundingBox();
@@ -225,8 +227,14 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   };
   // Scrolled fully down, Load more clears the host's floating composer (~232px).
   await frame.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
-  const more = await ui.getByRole('button', { name: 'Load more', exact: true }).boundingBox();
+  const more = await ui.getByRole('button', { name: 'Load more history', exact: true }).boundingBox();
   expect(more.y + more.height).toBeLessThanOrEqual(900 - 232);
+  // Hosts that size the frame to its reported content height must include the spacer.
+  await expect.poll(async () => {
+    const reported = await page.evaluate(() => window.resizeNotifications.at(-1)?.height ?? 0);
+    const spacerEnd = await frame.evaluate(() => document.querySelector('.footer-spacer').getBoundingClientRect().bottom + scrollY);
+    return reported >= Math.floor(spacerEnd);
+  }).toBe(true);
   await ui.locator('.reading-details summary').focus();
   await page.keyboard.press('Tab');
   await expect(ui.locator('textarea')).toBeFocused();

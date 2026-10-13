@@ -36,11 +36,14 @@
 body {
   margin: 0;
   padding: calc(24px + var(--host-safe-top, 0px))
-    calc(24px + var(--host-safe-right, 0px)) var(--footer-clearance)
+    calc(24px + var(--host-safe-right, 0px)) 0
     calc(24px + var(--host-safe-left, 0px));
   overflow-wrap: anywhere;
 }
 main { max-width: 760px; margin-inline: auto; }
+/* An in-flow spacer, not body padding, reserves room for the host's floating
+   composer: it always counts toward scroll height and the reported app height. */
+.footer-spacer { height: var(--footer-clearance); }
 .brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
@@ -92,8 +95,8 @@ input, textarea, select { color: #fff; background: var(--surface); border: 1px s
 select { width: fit-content; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
-#message-more { display: flex; margin: 16px auto; }
-#message-more[hidden] { display: none; }
+#message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; }
+#message-through { margin: 0; }
 #message-status { margin-block: 20px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows

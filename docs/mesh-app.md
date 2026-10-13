@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v33.html`, `ui://fulcra/mesh/thread/v33.html`, and
-`ui://fulcra/mesh/threads/v33.html`. The direct-list resource adds
+`ui://fulcra/mesh/v34.html`, `ui://fulcra/mesh/thread/v34.html`, and
+`ui://fulcra/mesh/threads/v34.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 
@@ -120,8 +120,9 @@ Opening a thread reads the latest record of each channel (`latest=true`), then
 loads every message from one week before the earlier of the latest incoming and
 latest outgoing messages through now. With only one side, that side's latest
 message sets the window; with none, it starts one week ago. There is no date
-picker. **Load more**, at the earliest end of the list in either order, extends
-the window by two weeks; polling keeps the extended window. A failed wider read
+picker. **Load more history**, at the earliest end of the list in either order,
+extends the window by two weeks, beside "Showing messages through <date>" for
+the earliest attempted date; polling keeps the extended window. A failed wider read
 keeps the previously applied window in context and retries automatically.
 
 The thread list shows each contact's latest sent or received message, read with
