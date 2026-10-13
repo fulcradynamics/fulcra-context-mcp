@@ -194,6 +194,40 @@ def file_download(token: str) -> Response:
     )
 
 
+@app.put("/files/upload/{token}")
+async def file_upload(token: str, request: Request) -> Response:
+    """Receive a file sent to a link made by write_file(encoding="upload_link"),
+    e.g. with `curl -T report.xlsx <link>`. The link is the only credential, so
+    it's short-lived; it acts for the login that made it."""
+
+    def fulcra_for(grant_id: str):
+        creds = oauth_provider.reload_grant(grant_id)
+        if creds is None:
+            raise file_transfer.LinkUploadError(
+                410, "The Fulcra sign-in behind this link has ended. Reconnect Fulcra and ask for a new link."
+            )
+        return fulcra_for_grant(grant_id, creds)
+
+    length = request.headers.get("content-length")
+    try:
+        result = await file_transfer.receive_link_upload(
+            token,
+            int(length) if length and length.isdigit() else None,
+            request.stream(),
+            fulcra_for,
+        )
+    except file_transfer.LinkUploadError as e:
+        return Response(f"{e}\n", status_code=e.status, media_type="text/plain")
+    except Exception as exc:
+        logger.warning("file_link_upload_failed", exc_info=exc)
+        return Response(
+            "Couldn't save this file to Fulcra. Try again, or ask for a new link.\n",
+            status_code=502,
+            media_type="text/plain",
+        )
+    return Response(json.dumps(result) + "\n", media_type="application/json")
+
+
 @app.get("/callback")
 async def callback_handler(request: Request) -> Response:
     code = request.query_params.get("code")

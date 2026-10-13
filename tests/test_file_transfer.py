@@ -535,3 +535,165 @@ async def test_write_file_refuses_bad_or_large_base64(call, fake_fulcra, monkeyp
     assert "isn't valid base64" in bad
     assert "start_file_upload" in large and "open_file_manager" in large
     fake_fulcra.upload_file.assert_not_called()
+
+
+# --- upload links (write_file encoding="upload_link") --------------------------------
+
+
+async def test_write_file_hands_out_an_upload_link(call, fake_fulcra, hosted):
+    text = await call("write_file", {"path": "/reports/q3.xlsx", "encoding": "upload_link"})
+
+    assert "curl -sS -T <local file> 'https://mcp.example/files/upload/" in text
+    token = text.split("/files/upload/")[1].split("'")[0]
+    record = ft._load_record("upload_links", token)
+    assert record["path"] == "/reports/q3.xlsx" and record["grant_id"] == "grant-1"
+    assert token not in "".join(p.name for p in settings.state_path.rglob("*"))
+    fake_fulcra.upload_file.assert_not_called()
+
+
+async def test_upload_link_mode_refuses_content_and_local_servers(call, fake_fulcra, hosted, monkeypatch):
+    with_content = await call(
+        "write_file", {"path": "/a.bin", "content": "x", "encoding": "upload_link"}
+    )
+    monkeypatch.setattr(settings, "fulcra_environment", "stdio")
+    local = await call("write_file", {"path": "/a.bin", "encoding": "upload_link"})
+
+    assert "leave content empty" in with_content
+    assert "uvx fulcra-api file upload" in local
+    fake_fulcra.upload_file.assert_not_called()
+
+
+@pytest.fixture
+def link_uploads(monkeypatch, put_chunks):
+    """An upload link, with Fulcra's side faked: sessions and chunk storage."""
+    import fulcra_mcp.main as main
+
+    sessions = []
+
+    def fake_session(fulcra, path, size, content_type):
+        sessions.append((path, size, content_type))
+        return {"url": "https://storage.example/up", "file": dict(FILE, size=size)}
+
+    monkeypatch.setattr(ft, "_create_upload_session", fake_session)
+    monkeypatch.setattr(main.oauth_provider, "reload_grant", lambda grant_id: object())
+    monkeypatch.setattr(main, "fulcra_for_grant", lambda grant_id, creds: object())
+    monkeypatch.setattr(settings, "oidc_server_url", "https://mcp.example")
+    token = ft.make_upload_link("/reports/q3.xlsx", "grant-1").rsplit("/", 1)[1]
+    return TestClient(main.app), token, sessions
+
+
+def test_a_file_sent_to_an_upload_link_is_saved_in_chunks(link_uploads, put_chunks):
+    client, token, sessions = link_uploads
+    data = bytes(range(256)) * (ft.LINK_UPLOAD_CHUNK_BYTES // 256 + 5) + b"tail"
+
+    response = client.put(f"/files/upload/{token}", content=data)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["path"] == "/reports/q3.xlsx"
+    assert response.json()["size"] == len(data)
+    assert sessions == [(
+        "/reports/q3.xlsx",
+        len(data),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )]
+    assert b"".join(chunk for _, chunk, _, _ in put_chunks) == data
+    # every chunk but the last is a whole number of storage granules
+    assert all(len(chunk) % ft.UPLOAD_GRANULE == 0 for _, chunk, _, _ in put_chunks[:-1])
+
+
+def test_resending_to_a_used_link_returns_the_same_result(link_uploads, put_chunks):
+    client, token, sessions = link_uploads
+
+    first = client.put(f"/files/upload/{token}", content=b"abc")
+    again = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert first.json() == again.json()
+    assert len(sessions) == 1 and len(put_chunks) == 1
+
+
+def test_an_empty_file_can_be_sent_to_a_link(link_uploads, put_chunks):
+    client, token, sessions = link_uploads
+
+    response = client.put(f"/files/upload/{token}", content=b"")
+
+    assert response.status_code == 200 and response.json()["size"] == 0
+    assert put_chunks[0][1:] == (b"", 0, 0)
+
+
+def test_an_upload_link_needs_a_length_within_the_limit(link_uploads, put_chunks):
+    client, token, _ = link_uploads
+
+    def chunked():
+        yield b"abc"
+
+    no_length = client.put(f"/files/upload/{token}", content=chunked())
+    too_big = client.put(
+        f"/files/upload/{token}",
+        content=b"x",
+        headers={"Content-Length": str(ft.MAX_LINK_UPLOAD_BYTES + 1)},
+    )
+
+    assert no_length.status_code == 411 and "curl -T" in no_length.text
+    assert too_big.status_code == 413 and "open_file_manager" in too_big.text
+    assert put_chunks == []
+
+
+@pytest.mark.parametrize(
+    "length, pieces, message",
+    [
+        (10, [b"abc"], "ended before its Content-Length"),
+        (2, [b"abc"], "more bytes than its Content-Length"),
+    ],
+)
+async def test_a_body_that_disagrees_with_its_length_is_refused(
+    link_uploads, put_chunks, length, pieces, message
+):
+    _, token, _ = link_uploads
+
+    async def body():
+        for piece in pieces:
+            yield piece
+
+    with pytest.raises(ft.LinkUploadError, match=message):
+        await ft.receive_link_upload(token, length, body(), lambda grant_id: object())
+    # the link can be used again
+    assert ft._load_record("upload_links", token)["state"] == "new"
+
+
+def test_a_failed_upload_can_be_retried_with_the_same_link(link_uploads, monkeypatch):
+    client, token, sessions = link_uploads
+
+    def broken(url, data, start, total):
+        raise OSError("storage unreachable")
+
+    monkeypatch.setattr(ft, "_put_chunk", broken)
+    failed = client.put(f"/files/upload/{token}", content=b"abc")
+    monkeypatch.setattr(ft, "_put_chunk", lambda url, data, start, total: start + len(data))
+    retried = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert failed.status_code == 502 and "Try again" in failed.text
+    assert retried.status_code == 200
+
+
+def test_an_upload_already_in_progress_is_refused(link_uploads, put_chunks):
+    client, token, _ = link_uploads
+    record = ft._load_record("upload_links", token)
+    record.update(state="uploading", started_at=time.time())
+    ft._save_record("upload_links", token, record)
+
+    response = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert response.status_code == 409 and put_chunks == []
+
+
+def test_an_expired_or_ended_upload_link_says_so(link_uploads, monkeypatch, put_chunks):
+    import fulcra_mcp.main as main
+
+    client, token, _ = link_uploads
+    unknown = client.put("/files/upload/not-a-token", content=b"abc")
+    monkeypatch.setattr(main.oauth_provider, "reload_grant", lambda grant_id: None)
+    ended = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert unknown.status_code == 410 and "expired" in unknown.text
+    assert ended.status_code == 410 and "Reconnect Fulcra" in ended.text
+    assert put_chunks == []

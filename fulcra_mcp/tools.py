@@ -1677,9 +1677,9 @@ async def read_file(
 @_friendly_http_errors
 async def write_file(
     path: str,
-    content: str,
+    content: str = "",
     content_type: str | None = None,
-    encoding: Literal["text", "base64"] = "text",
+    encoding: Literal["text", "base64", "upload_link"] = "text",
 ) -> str:
     """Write a file to the user's Fulcra account.
 
@@ -1695,14 +1695,47 @@ async def write_file(
             has on their computer, use open_file_manager.
         content_type: Optional MIME type; guessed from the file name when left
             out (e.g. "application/json" for .json).
-        encoding: "text" (default) or "base64".
+        encoding: "text" (default) or "base64". "upload_link" leaves content
+            empty and returns a link to send a file on disk to, e.g. from a
+            sandbox: `curl -T <file> <link>` (up to 30 MB).
     Returns:
         A JSON string describing the written file.
     """
-    from .file_transfer import MAX_WRITE_BASE64_BYTES, guess_content_type
+    from .file_transfer import (
+        MAX_LINK_UPLOAD_BYTES,
+        MAX_WRITE_BASE64_BYTES,
+        UPLOAD_LINK_TTL_SECONDS,
+        guess_content_type,
+        make_upload_link,
+    )
 
     fulcra = get_fulcra_object()
     path = _file_path(path)
+    if encoding == "upload_link":
+        if content:
+            return 'With encoding="upload_link", leave content empty: the file is sent to the link.'
+        if not PurePath(path).name:
+            return "path must end in a file name, e.g. /reports/q3.xlsx."
+        if settings.fulcra_environment == "stdio":
+            return (
+                "This server runs on the user's computer, so it has no upload link. "
+                "Use the Fulcra CLI (`uvx fulcra-api file upload <file> "
+                f"{path}`), or encoding=\"base64\" for files up to 5 MB."
+            )
+        from . import file_transfer
+
+        grant_id = file_transfer.current_grant_id()
+        if grant_id is None:
+            return "This session isn't connected to a Fulcra account."
+        url = make_upload_link(path, grant_id)
+        return (
+            f"Send the file to this link within {UPLOAD_LINK_TTL_SECONDS // 60} "
+            f"minutes to save it as {path} (up to {MAX_LINK_UPLOAD_BYTES // 1024**2} MB; "
+            "an existing file there gets a new version):\n"
+            f"curl -sS -T <local file> '{url}'\n"
+            "It replies with the saved file's details. The link saves one file; "
+            "sending to it again returns the same result."
+        )
     if encoding == "base64":
         try:
             data = base64.b64decode(content, validate=True)

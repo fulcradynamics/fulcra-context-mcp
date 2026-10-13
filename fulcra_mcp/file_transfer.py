@@ -19,6 +19,7 @@ a server vary its tool list by client), so their descriptions say what to use
 instead.
 """
 
+import asyncio
 import base64
 import binascii
 import functools
@@ -66,8 +67,9 @@ MAX_WRITE_BASE64_BYTES = 5 * 1024**2
 # For agents in clients that can't show the panel.
 WITHOUT_THE_PANEL = (
     "If this client can't display the file manager panel: write_file uploads "
-    "text, or base64 with encoding='base64' (up to 5 MB); for larger files, "
-    "use start_file_upload and upload_file_chunk, or the Fulcra CLI "
+    "text, or base64 with encoding='base64' (up to 5 MB); for a file on disk, "
+    "encoding='upload_link' returns a link to send it to with curl (up to 30 MB). "
+    "Otherwise use start_file_upload and upload_file_chunk, or the Fulcra CLI "
     "(`uvx fulcra-api file upload`). get_file_download_link gives the user a "
     "link to download any file. read_file reads a file's contents, including "
     "spreadsheets as CSV."
@@ -339,19 +341,7 @@ async def start_file_upload(
         raise ToolError(f"size must be between 0 and {MAX_UPLOAD_BYTES} bytes.")
     content_type = content_type or guess_content_type(name)
 
-    fulcra = tools.get_fulcra_object()
-    response = json.loads(
-        fulcra.fulcra_api(
-            "/input/v1/file_upload",
-            method="POST",
-            data={
-                "content_length": size,
-                "content_type": content_type,
-                "name": name,
-                "path": str(PurePosixPath(path).parent),
-            },
-        )
-    )
+    response = _create_upload_session(tools.get_fulcra_object(), path, size, content_type)
     upload_id = secrets.token_urlsafe(16)
     _save_record(
         "uploads",
@@ -362,7 +352,7 @@ async def start_file_upload(
             "path": path,
             "size": size,
             "received": 0,
-            "file": _slim_file(response.get("file") or {}),
+            "file": _new_file_summary(response.get("file")),
             "expires_at": time.time() + UPLOAD_TTL_SECONDS,
         },
     )
@@ -373,6 +363,30 @@ async def start_file_upload(
         "size": size,
         "chunk_size": UPLOAD_CHUNK_BYTES,
     }
+
+
+def _new_file_summary(file: dict) -> dict:
+    """A just-uploaded file's record, minus its state: that was captured when the
+    upload began, and Fulcra marks the file uploaded a moment after the last
+    byte arrives."""
+    return {k: v for k, v in _slim_file(file or {}).items() if k != "state"}
+
+
+def _create_upload_session(fulcra, path: str, size: int, content_type: str) -> dict:
+    """Start a resumable upload of ``size`` bytes to ``path``. Returns Fulcra's
+    response: the upload ``url`` and the new ``file`` record."""
+    return json.loads(
+        fulcra.fulcra_api(
+            "/input/v1/file_upload",
+            method="POST",
+            data={
+                "content_length": size,
+                "content_type": content_type,
+                "name": PurePosixPath(path).name,
+                "path": str(PurePosixPath(path).parent),
+            },
+        )
+    )
 
 
 def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
@@ -546,6 +560,104 @@ async def get_file_download_link(path: str, fulcra_userid: str | None = None) ->
         "expires_in_seconds": DOWNLOAD_LINK_TTL_SECONDS,
         "note": "Give the user this link to open in a browser. It works for 10 minutes.",
     }
+
+
+# -------------------------------------------------------------- upload links
+
+UPLOAD_LINK_TTL_SECONDS = 600
+# One link upload is one HTTP request, and Cloud Run caps an HTTP/1 request body
+# at 32 MiB. Larger files go through the file manager, which sends chunks.
+MAX_LINK_UPLOAD_BYTES = 30 * 1024**2
+LINK_UPLOAD_CHUNK_BYTES = 32 * UPLOAD_GRANULE  # 8 MiB
+# A link upload in progress longer than this is taken to have died.
+LINK_UPLOAD_STALE_SECONDS = 300
+
+
+def make_upload_link(path: str, grant_id: str) -> str:
+    """A short-lived URL that saves one file, sent in a PUT, to ``path``."""
+    token = secrets.token_urlsafe(32)
+    _save_record(
+        "upload_links",
+        token,
+        {
+            "grant_id": grant_id,
+            "path": path,
+            "state": "new",
+            "expires_at": time.time() + UPLOAD_LINK_TTL_SECONDS,
+        },
+    )
+    return f"{settings.oidc_server_url.rstrip('/')}/files/upload/{token}"
+
+
+class LinkUploadError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
+
+async def receive_link_upload(token: str, length: int | None, body, fulcra_for) -> dict:
+    """Save the file PUT to an upload link. ``body`` yields the request's bytes;
+    ``fulcra_for(grant_id)`` gives the client to act as.
+
+    A link saves one file. Once it has, sending to it again returns the same
+    result without storing anything, so a retry after a lost reply is safe.
+    Raises ``LinkUploadError`` with the HTTP status and a message for the sender.
+    """
+    record = _load_record("upload_links", token)
+    if record is None:
+        raise LinkUploadError(410, "This upload link has expired. Ask for a new one.")
+    if record["state"] == "done":
+        return record["result"]
+    if record["state"] == "uploading" and time.time() - record["started_at"] < LINK_UPLOAD_STALE_SECONDS:
+        raise LinkUploadError(409, "An upload to this link is already in progress.")
+    if length is None:
+        raise LinkUploadError(411, "Send the file with its length, e.g. curl -T <file> <link>.")
+    if length > MAX_LINK_UPLOAD_BYTES:
+        raise LinkUploadError(
+            413,
+            f"An upload link takes at most {MAX_LINK_UPLOAD_BYTES} bytes; this file is "
+            f"{length}. Upload it with open_file_manager instead.",
+        )
+
+    record.update(state="uploading", started_at=time.time())
+    _save_record("upload_links", token, record)
+    try:
+        path = record["path"]
+        fulcra = fulcra_for(record["grant_id"])
+        session = await asyncio.to_thread(
+            _create_upload_session, fulcra, path, length, guess_content_type(path)
+        )
+        url, sent, pending = session["url"], 0, bytearray()
+        async for piece in body:
+            pending += piece
+            if sent + len(pending) > length:
+                raise LinkUploadError(400, "The upload sent more bytes than its Content-Length.")
+            while len(pending) >= LINK_UPLOAD_CHUNK_BYTES and sent + len(pending) < length:
+                chunk = bytes(pending[:LINK_UPLOAD_CHUNK_BYTES])
+                await asyncio.to_thread(_put_chunk, url, chunk, sent, length)
+                sent += len(chunk)
+                del pending[:LINK_UPLOAD_CHUNK_BYTES]
+        if sent + len(pending) != length:
+            raise LinkUploadError(400, "The upload ended before its Content-Length.")
+        committed = await asyncio.to_thread(_put_chunk, url, bytes(pending), sent, length)
+        if committed < length:
+            raise LinkUploadError(502, "Storage didn't take the whole file. Try again.")
+    except BaseException:
+        # Let the sender try again with the same link.
+        record.update(state="new")
+        _save_record("upload_links", token, record)
+        raise
+
+    result = {
+        "path": path,
+        "size": length,
+        "file": _new_file_summary(session.get("file")),
+        "resource_uri": file_resource_uri(path),
+    }
+    record.update(state="done", result=result)
+    _save_record("upload_links", token, record)
+    logger.info("file_link_upload_finished", path=path, size=length)
+    return result
 
 
 def download_link_target(token: str) -> dict | None:
