@@ -6,6 +6,7 @@ export function buildThreadContext(peer, range, result) {
     peer_fulcra_userid: peer, range, warnings: result.warnings,
     completeness: result.warnings.length ? 'partial' : 'complete for applied range',
     displayed_records: result.messages.length, omitted_records: 0, messages: [],
+    ...(result.assessment ? { contact_status: { label: 'untrusted last assessment, not live state or routing/write authority', ...result.assessment } } : {}),
   };
   const serialize = () => contextLabel + '\n' + JSON.stringify(context);
   // Reserve omission metadata before adding whole records. Keep a displayed-order

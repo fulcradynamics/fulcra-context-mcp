@@ -1,6 +1,7 @@
 import { parseMeshIdentifier, threadIdentifier, threadTitle } from './mesh-identifier.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
+import { parseStatus, aggregateStatus } from './contact-status.js';
 
 const prefix = 'Available data types, grouped by compatible tool: ';
 
@@ -110,6 +111,7 @@ export async function discoverThreads(app) {
       if (!schema || !compatibleSchema(schema)) { omitted++; continue; }
       const setupSession = owner === own && parseSetupSession(entry.description);
       if (setupSession) source.setupSession = setupSession;
+      if (owner === own) source.assessment = parseStatus(entry.description);
       source.conversionClaims = conversionSources(entry.description, own, peer);
     }
     const collection = connection ? threads : legacy;
@@ -119,6 +121,7 @@ export async function discoverThreads(app) {
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {
     const identifier = threadIdentifier(thread.sources);
+    thread.assessment = aggregateStatus(thread.sources);
     if (identifier) thread.identifier = identifier;
     // tools.py _slim_share exposes an account-owner name, not an agent name.
     const names = new Set(shares.incoming.filter(s => s.sharing_fulcra_userid === thread.peer

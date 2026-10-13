@@ -59,6 +59,18 @@ test('setup links belong only to eligible own outgoing channels', async () => {
   assert.equal((await load([linked('own')], [grant('own'), grant('own', 'other')])).selections.length, 0);
 });
 const grant = (id, peer = 'peer') => ({ data_types: [`Event/${id}`], with_user_ids: [peer], share_all_data: false });
+test('assessment uses only verified own channels, never peer-authored status', async () => {
+  const assessed = (id, owner, attention) => ({ ...entry(id, owner), description:
+    `[contact_status: ${JSON.stringify({attention, reason:'Decision needed', assessed_at:'2026-10-13T12:00:00Z'})}]` });
+  const peerOnly = await load([assessed('incoming', 'peer', true)]);
+  assert.equal(peerOnly.selections[0].assessment.attention, null);
+  assert.equal(peerOnly.selections[0].sources[0].assessment, undefined);
+  const own = await load([assessed('own', 'me', false), assessed('incoming', 'peer', true)], [grant('own')]);
+  assert.equal(own.selections[0].assessment.attention, false);
+  const mixed = await load([assessed('a', 'me', false), assessed('z', 'me', true), entry('unknown','me')], [grant('a'),grant('z'),grant('unknown')]);
+  assert.equal(mixed.selections[0].assessment.attention, true);
+  assert.equal(mixed.selections[0].assessment.partial, true);
+});
 const text = result => ({ structuredContent: { result } });
 async function load(catalog, outgoing = [], own = 'me') {
   const rows = [], selections = [], calls = [], status = {};

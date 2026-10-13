@@ -489,6 +489,63 @@ async def set_mesh_identifier(data_type: str, identifier: str) -> str:
                        "identifier": identifier, "changed": changed, "verified": True})
 
 
+@tools_mcp.tool(annotations={"title": "Set Contact Status", "readOnlyHint": False,
+                            "destructiveHint": False, "idempotentHint": False},
+                meta={"ui": {"visibility": ["model"]}})
+async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
+    """Save a best-effort last assessment on your own existing Event connection.
+
+    Only with status-metadata consent after complete scoped reads; never clear on
+    incomplete history or denial. An ack alone does not resolve a human decision.
+    Reason is a peer-visible neutral label, not private thoughts, excerpts,
+    instructions or permission. Failure must not block reads/checkpoint work;
+    do not retry after denial. Not live state, unread counts or acknowledgement.
+
+    Args:
+        data_type: Exact owned Event/<uuid> channel ID.
+        peer_userid: Exact UUID of its sole directly authorized peer.
+        attention: Whether the user needs to act, based on the completed assessment.
+        reason: Neutral trimmed single-line Unicode label, 1..80 code points, without control characters.
+    """
+    from datetime import datetime, timezone
+    from . import mesh
+    from .contact_status import write_status, parse_status, validate_status
+    from .mentions import _compatible_schema
+
+    result = {'data_type': data_type, 'peer_userid': peer_userid, 'verified': False}
+    try:
+        if not re.fullmatch('Event/' + mesh.UUID_PATTERN, data_type) or not mesh._uuid(peer_userid):
+            raise ValueError('Use an exact Event/<uuid> channel and peer UUID.')
+        assessment = dict(attention=attention, reason=reason,
+                          assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        validate_status(assessment)
+        api = get_fulcra_object()
+        own = api.get_fulcra_userid()
+        if not mesh._uuid(own) or own == peer_userid:
+            raise ValueError('Distinct authenticated owner and peer required.')
+        original = mesh._authorize(api, own, peer_userid, data_type)
+        fields, required = _user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
+        if (original.get('record_spec', {}).get('type') != 'event'
+                or not _compatible_schema({'fields': fields, 'required_fields': required})):
+            raise ValueError('An actual Event connection schema is required.')
+        description = write_status(original.get('description'), assessment)
+        if api.get_fulcra_userid() != own:
+            raise ValueError('Authenticated account changed.')
+        api.update_data_type('Event', data_type.split('/')[1], {'description': description})
+        current = mesh._authorize(api, own, peer_userid, data_type)
+        # Catalog update timestamps may legitimately change. The SDK PUT sends
+        # only description; verify target content plus stable type metadata.
+        if (current.get('description') != description
+                or any(current.get(k) != original.get(k) for k in ('name', 'record_spec'))
+                or parse_status(current.get('description')) != assessment):
+            raise ValueError('Contact status readback mismatch.')
+        return {**result, 'verified': True, 'assessment': assessment}
+    except Exception:
+        # Metadata is optional. Do not turn denial/uncertainty into a retry, or
+        # let it prevent the agent from finishing its separate read workflow.
+        return {**result, 'reason': 'Status not verified. Continue read/report work; do not retry or bypass denial.'}
+
+
 def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | str:
     """(v1 base type or None for an annotation, the type's UUID) from a
     user-defined type ID, or an error message if it isn't one."""
