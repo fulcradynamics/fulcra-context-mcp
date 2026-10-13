@@ -83,7 +83,7 @@ async def test_a_shared_file_resource_reads_as_that_user(client, fake_fulcra):
 async def test_a_file_too_large_for_one_message_points_to_a_link(client, fake_fulcra):
     fake_fulcra.resolve_filepath.return_value = [dict(FILE, size=ft.MAX_RESOURCE_BYTES + 1)]
 
-    with pytest.raises(Exception, match="get_file_download_link"):
+    with pytest.raises(Exception, match="as_link=true"):
         await client.read_resource("fulcra://files/reports/q3.xlsx")
     fake_fulcra.download_file.assert_not_called()
 
@@ -106,7 +106,7 @@ async def test_tools_declare_the_panel_and_app_only_visibility(client, fake_fulc
     for name in ("start_file_upload", "upload_file_chunk"):
         # Listed, so hosts can let the panel call them, but hidden from the model.
         assert tools[name].meta["ui"]["visibility"] == ["app"]
-    assert "ui" not in (tools["get_file_download_link"].meta or {})
+    assert "get_file_download_link" not in tools  # folded into read_file(as_link)
 
 
 async def test_open_file_manager_helps_clients_without_the_panel(call, fake_fulcra):
@@ -115,7 +115,7 @@ async def test_open_file_manager_helps_clients_without_the_panel(call, fake_fulc
     text = await call("open_file_manager", {"path": "reports"})
 
     fake_fulcra.list_files.assert_called_once_with("/reports")
-    assert "write_file" in text and "get_file_download_link" in text
+    assert "write_file" in text and "as_link=true" in text
     assert '"q3.xlsx"' in text
 
 
@@ -294,7 +294,7 @@ async def test_a_local_server_saves_the_file_to_downloads(call, fake_fulcra, tmp
     fake_fulcra.resolve_filepath.return_value = [FILE]
     _download_returns(fake_fulcra, b"spreadsheet")
 
-    text = await call("get_file_download_link", {"path": "/reports/q3.xlsx"})
+    text = await call("read_file", {"path": "/reports/q3.xlsx", "as_link": True})
 
     saved = tmp_path / "Downloads" / "q3 (1).xlsx"
     assert saved.read_bytes() == b"spreadsheet"
@@ -308,10 +308,10 @@ def hosted(monkeypatch):
     monkeypatch.setattr(ft, "current_grant_id", lambda: "grant-1")
 
 
-async def test_a_hosted_server_makes_a_short_lived_link(client, fake_fulcra, hosted):
+async def test_a_hosted_server_makes_a_short_lived_link(call, fake_fulcra, hosted):
     fake_fulcra.resolve_filepath.return_value = [FILE]
 
-    link = await _structured(client, "get_file_download_link", {"path": "/reports/q3.xlsx"})
+    link = json.loads(await call("read_file", {"path": "/reports/q3.xlsx", "as_link": True}))
 
     assert link["url"].startswith("https://mcp.example/files/download/")
     token = link["url"].rsplit("/", 1)[1]
@@ -424,7 +424,7 @@ async def test_a_large_spreadsheet_is_refused_before_downloading(call, fake_fulc
 
     text = await call("read_file", {"path": "/reports/q3.xlsx"})
 
-    assert "too large to convert" in text and "get_file_download_link" in text
+    assert "too large to convert" in text and "as_link=true" in text
     fake_fulcra.download_file.assert_not_called()
 
 
@@ -476,7 +476,7 @@ async def test_large_binary_with_include_binary_is_refused_after_a_bounded_read(
 
     text = await call("read_file", {"path": "/a.bin", "include_binary": True})
 
-    assert "larger than max_bytes" in text and "get_file_download_link" in text
+    assert "larger than max_bytes" in text and "as_link=true" in text
     assert response.asked == [100_004]  # never the whole file
 
 
@@ -498,7 +498,7 @@ async def test_read_file_on_other_binaries_says_what_to_do(call, fake_fulcra):
 
     text = await call("read_file", {"path": "/photo.jpg"})
 
-    assert "get_file_download_link" in text
+    assert "as_link=true" in text
     assert "fulcra://files/photo.jpg" in text
     assert "include_binary" in text
 

@@ -145,7 +145,7 @@ for _route in create_protected_resource_routes(
 
 @app.get("/files/download/{token}")
 def file_download(token: str) -> Response:
-    """Serve a link made by get_file_download_link: the file, as an attachment.
+    """Serve a link made by read_file(as_link=True): the file, as an attachment.
 
     The link is the only credential, so it's short-lived; it acts for the login
     that made it."""

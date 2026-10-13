@@ -1571,6 +1571,7 @@ async def read_file(
     max_bytes: int = 100000,
     include_binary: bool = False,
     fulcra_userid: str | None = None,
+    as_link: bool = False,
 ) -> str:
     """Read a file from the user's Fulcra account, or one another user shares.
     Spreadsheets (.xlsx) come back as CSV, one section per sheet.
@@ -1581,9 +1582,10 @@ async def read_file(
             Pass a larger value only when the full content is truly needed;
             large files consume a lot of context.
         include_binary: Return other binary files base64-encoded (default
-            false); this uses a lot of context. To give the user a file, use
-            get_file_download_link instead.
+            false); this uses a lot of context.
         fulcra_userid: Read a file of another Fulcra user (if shared).
+        as_link: Instead of the contents, return a link the user opens to
+            download the file, e.g. a spreadsheet. It works for 10 minutes.
     Returns:
         The file's text content (possibly truncated), or its base64-encoded
         content for binary files.
@@ -1591,6 +1593,7 @@ async def read_file(
     from .file_transfer import (
         MAX_RESOURCE_BYTES,
         MAX_SPREADSHEET_FILE_BYTES,
+        download_link_for,
         file_resource_uri,
         is_spreadsheet,
         spreadsheet_as_csv,
@@ -1604,13 +1607,15 @@ async def read_file(
         if fulcra_userid:
             return _not_shared_message(path, fulcra_userid)
         return f"No file found at {path!r}. Use list_files to see available files."
+    if as_link:
+        return json.dumps(download_link_for(fulcra, file_record, path, fulcra_userid))
     # Never more than this, however large max_bytes is: the whole of what's
     # read is held in memory.
     max_bytes = max(1, min(max_bytes, MAX_RESOURCE_BYTES))
     size = file_record.get("size")
     size_text = f"{size} bytes" if size is not None else "size unknown"
     link_hint = (
-        "To give it to the user, call get_file_download_link. Clients that read "
+        "To give it to the user, call read_file with as_link=true. Clients that read "
         f"MCP resources can fetch it as {file_resource_uri(path, fulcra_userid)}."
     )
 
@@ -1661,8 +1666,8 @@ async def read_file(
                 f"{path} is a binary file ({len(data)} bytes, {len(encoded)} "
                 f"base64 characters), exceeding max_bytes={max_bytes}. Binary "
                 f"content is not truncated; pass max_bytes={len(encoded)} or "
-                "more if you truly need it, or use get_file_download_link to "
-                "give it to the user."
+                "more if you truly need it, or use as_link=true to give it to "
+                "the user."
             )
         return f"Content of {path} (base64-encoded binary): {encoded}"
     if more:

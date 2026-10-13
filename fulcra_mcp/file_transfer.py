@@ -11,7 +11,7 @@ client, without passing their bytes through the model.
   ``upload_file_chunk``, which feed a resumable upload to Fulcra's storage. It
   downloads through ``resources/read`` and the host's ``ui/download-file``, or a
   download link where the host can't do that.
-* **Download links** (``get_file_download_link``), for any client: a short-lived
+* **Download links** (``read_file(as_link=True)``), for any client: a short-lived
   link the user opens in a browser. ``main.py`` serves ``/files/download/<token>``.
 
 Clients without MCP Apps still list the app-only tools (the protocol doesn't let
@@ -70,9 +70,9 @@ WITHOUT_THE_PANEL = (
     "text, or base64 with encoding='base64' (up to 5 MB); for a file on disk, "
     "encoding='upload_link' returns a link to send it to with curl (up to 30 MB). "
     "Otherwise use start_file_upload and upload_file_chunk, or the Fulcra CLI "
-    "(`uvx fulcra-api file upload`). get_file_download_link gives the user a "
-    "link to download any file. read_file reads a file's contents, including "
-    "spreadsheets as CSV."
+    "(`uvx fulcra-api file upload`). read_file reads a file's contents, including "
+    "spreadsheets as CSV, and with as_link=true gives the user a link to download "
+    "any file."
 )
 
 
@@ -206,7 +206,7 @@ def _read_file(path: str, fulcra_userid: str | None) -> list[ResourceContent]:
     if size > MAX_RESOURCE_BYTES:
         raise ResourceError(
             f"{path} is {size} bytes, too large to read in one message (the most "
-            f"is {MAX_RESOURCE_BYTES}). get_file_download_link gives a link to it."
+            f"is {MAX_RESOURCE_BYTES}). read_file with as_link=true gives a link to it."
         )
     data = fulcra.download_file(record["id"], fulcra_userid=fulcra_userid).read()
     mime_type = guess_content_type(record.get("name") or path)
@@ -500,27 +500,10 @@ def _unique_local_path(folder: Path, name: str) -> Path:
     return candidate
 
 
-@tools_mcp.tool(annotations={"title": "Get File Download Link", "readOnlyHint": True})
-@_raising_http_errors
-async def get_file_download_link(path: str, fulcra_userid: str | None = None) -> dict:
-    """Give the user a way to download a file to their computer, e.g. a
-    spreadsheet: a link they open in a browser. It works for 10 minutes; make a
-    new one rather than reusing an old one.
-
-    Args:
-        path: The file's full path.
-        fulcra_userid: Download a file another Fulcra user shares.
-    """
-    fulcra = tools.get_fulcra_object()
-    path = _file_path(path)
-    try:
-        record = fulcra.resolve_filepath(path, fulcra_userid=fulcra_userid)[0]
-    except Exception:
-        if fulcra_userid:
-            raise ToolError(
-                f"User {fulcra_userid} doesn't share a file at {path!r} with this user."
-            )
-        raise ToolError(f"No file at {path!r}. list_files shows what's there.")
+def download_link_for(fulcra, record: dict, path: str, fulcra_userid: str | None) -> dict:
+    """A way for the user to download a file: a link that works for 10 minutes,
+    or, from a server running on the user's computer, the file saved there.
+    Used by read_file(as_link=True) and the file manager."""
     name = record.get("name") or PurePosixPath(path).name
 
     if settings.fulcra_environment == "stdio":

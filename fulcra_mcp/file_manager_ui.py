@@ -7,7 +7,7 @@ which relays to this server:
 * ``tools/call list_files`` to browse folders;
 * ``tools/call start_file_upload`` / ``upload_file_chunk`` to upload, in chunks;
 * ``resources/read fulcra://files/...`` and ``ui/download-file`` to download,
-  or ``get_file_download_link`` and ``ui/open-link`` where the host can't
+  or ``read_file(as_link=True)`` and ``ui/open-link`` where the host can't
   download files itself or the file is too large for one message.
 
 Kept in a Python module rather than a data file so it ships in the wheel.
@@ -257,14 +257,14 @@ async function downloadFile(path, file) {
       }
       // The user may have cancelled, or the host refused: offer a link to
       // click rather than opening one unasked.
-      const link = await callTool("get_file_download_link", { path });
+      const link = await callTool("read_file", { path, as_link: true });
       if (link.saved_to) setStatus(`Saved ${file.name} to ${link.saved_to}.`);
       else showLink(file, link.url, "The download didn't complete.");
       return;
     }
     // The host can't save files for us, or the file is too large for one
     // message: fall back to a short-lived link.
-    const link = await callTool("get_file_download_link", { path });
+    const link = await callTool("read_file", { path, as_link: true });
     if (link.saved_to) {
       // A server running on the user's computer saves the file there instead.
       setStatus(`Saved ${file.name} to ${link.saved_to}.`);
