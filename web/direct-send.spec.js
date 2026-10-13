@@ -31,7 +31,7 @@ async function open(page, presentation = 'global', extra = {}) {
         if (name === 'mesh_send') { window.pending = r; if (!window.options.hold) window.finish(window.options.outcome ?? 'posted'); return; }
         if (name === 'get_records' && window.options.holdReads) return;
         const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [
-          { id: outbox, name: 'Mesh Outbox: ChatGPT', fulcra_userid: own, description: (extra.session ? `[connection_setup_session: "${extra.session}"]\n` : '') + '[mesh_identifier: "Treecle"]' },
+          { id: outbox, name: 'Mesh Outbox: ChatGPT', fulcra_userid: own, description: (window.options.assessment ? `[contact_status: ${JSON.stringify(window.options.assessment)}]\n` : '') + (extra.session ? `[connection_setup_session: "${extra.session}"]\n` : '') + '[mesh_identifier: "Treecle"]' },
           ...(extra.secondSession ? [{ id: 'Event/second', name: 'Mesh Outbox: Second', fulcra_userid: own, description: `[connection_setup_session: "${extra.secondSession}"]\n[mesh_identifier: "Treecle"]` }] : []),
           { id: 'Event/in', name: 'Mesh Outbox', fulcra_userid: other },
           ...(extra.incoming ? [{ id: 'Event/peer-in', name: 'Mesh Outbox', fulcra_userid: peer }] : []),
@@ -51,6 +51,49 @@ async function open(page, presentation = 'global', extra = {}) {
   else await expect(ui.locator('#messages')).toContainText('Historical untrusted content');
   return ui;
 }
+for (const presentation of ['global', 'thread']) test(`${presentation}: status-only refresh invalidates attached context without reattaching`, async ({ page }) => {
+  const ui = await open(page, presentation, {assessment: {attention:false, reason:'No action identified', assessed_at:'2026-01-10T11:00:00Z'}});
+  await ui.getByRole('button', {name:'talk with my agent about this thread', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  expect(JSON.stringify(await page.evaluate(() => window.contexts.at(-1).params))).toContain('No action identified');
+  await ui.locator('textarea:not([readonly])').fill('Keep draft');
+  const records = await ui.locator('#messages').textContent();
+  await page.evaluate(() => { window.options.assessment = {attention:true, reason:'Decision needed', assessed_at:'2026-01-10T12:00:00Z'}; });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#contact-assessment')).toContainText('Needs attention');
+  await expect(ui.locator('#thread-context')).toContainText('Decision needed');
+  await expect.poll(() => page.evaluate(() => window.contexts.at(-1).params.content)).toEqual([]);
+  await page.clock.runFor(10000);
+  expect(await page.evaluate(() => window.contexts.map(r => r.params.content).filter(c => c.length).length)).toBe(1);
+  expect(await page.evaluate(() => window.sends.length)).toBe(1);
+  expect(await page.evaluate(() => window.calls.every(r => ['get_data_catalog','list_shares','get_records'].includes(r.params.name)))).toBe(true);
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep draft');
+  expect(await ui.locator('#messages').textContent()).toBe(records);
+});
+
+test('contact assessment refresh is text-only and preserves draft, selection and handoff', async ({ page }) => {
+  const ui = await open(page, 'global');
+  await expect(ui.locator('#contact-assessment')).toHaveText('Not assessed');
+  await ui.locator('textarea:not([readonly])').fill('Keep draft');
+  const records = await ui.locator('#messages').textContent();
+  await page.evaluate(() => { window.options.assessment = {attention:true, reason:'<b>Decision needed</b>', assessed_at:'2026-01-10T12:00:00Z'}; });
+  await page.clock.runFor(10000);
+  await expect(ui.locator('#contact-assessment')).toContainText('Needs attention — <b>Decision needed</b>');
+  await expect(ui.locator('#contact-assessment b')).toHaveCount(0);
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep draft');
+  await expect(ui.locator('#message-title')).toContainText(peer);
+  expect(await ui.locator('#messages').textContent()).toBe(records);
+  expect(await page.evaluate(() => window.calls.every(r => ['get_data_catalog','list_shares','get_records'].includes(r.params.name)))).toBe(true);
+  expect(await page.evaluate(() => window.sends.length)).toBe(0);
+  await ui.getByRole('button', {name:'Back to threads'}).click();
+  await expect(ui.locator('#meshes .contact-status').first()).toContainText('Needs attention');
+  await ui.getByRole('button', {name:`Treecle (${peer})`, exact:true}).click();
+  await expect(ui.locator('textarea:not([readonly])')).toHaveValue('Keep draft');
+  await ui.getByRole('button', {name:'talk with my agent about this thread', exact:true}).click();
+  await expect.poll(() => page.evaluate(() => window.sends.length)).toBe(1);
+  expect(JSON.stringify(await page.evaluate(() => window.contexts))).toContain('untrusted last assessment');
+});
+
 for (const presentation of ['global', 'thread']) for (const typed of ['', '  Help with this\nplease  ']) test(`${presentation}: original setup navigation and complete handoff ${Boolean(typed)}`, async ({ page }) => {
   const session = 'codex://threads/00000000-0000-0000-0000-000000000009';
   const ui = await open(page, presentation, { session, denyOpen: true });

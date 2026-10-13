@@ -1,5 +1,6 @@
 import { createThreadComposer } from './thread-composer.js';
 import { renderIdentity } from './identity.js';
+import { renderStatus as renderAssessment } from './contact-status.js';
 import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { getContextLifecycle } from './native-context.js';
@@ -12,6 +13,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const panel = doc.querySelector('#mesh-detail');
   const listPanel = doc.querySelector('#mesh-list');
   const title = doc.querySelector('#message-title');
+  const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   const status = doc.querySelector('#message-status');
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
@@ -105,6 +107,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => {
+    renderAssessment(assessment, thread.assessment);
     renderIdentity(title, thread.identifier, thread.peer, 'Thread with ',
       thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
     converted.hidden = !thread.convertedFrom?.length;
@@ -119,7 +122,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     const posts = unavailable ? [] : (draft.posts ?? [])
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
-    result = { ...result, messages: [...result.messages, ...posts] };
+    result = { ...result, assessment: selected.assessment, messages: [...result.messages, ...posts] };
     result = { ...result, messages: [...result.messages].sort((a, b) => {
       const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
       const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
@@ -143,7 +146,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
     if (unavailable) {
       lastSuccess = undefined;
-      selected = { ...selected, sources: [], convertedFrom: [] };
+      selected = { ...selected, sources: [], convertedFrom: [], assessment: undefined };
       contextLifecycle.invalidate();
     }
     render(displayed, canSend);
@@ -160,7 +163,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const thread = discovery.threads.find(t => t.peer === selected.peer);
       const sourcesRemoved = selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid));
       if (sourcesRemoved || JSON.stringify(selected.convertedFrom) !== JSON.stringify(thread?.convertedFrom)) contextLifecycle.invalidate();
-      selected = thread ?? { ...selected, sources: [], convertedFrom: [] };
+      selected = thread ?? { ...selected, sources: [], convertedFrom: [], assessment: undefined };
       setTitle(selected);
       // Exclude revoked channels immediately, including when a new range fails.
       if (displayed) {

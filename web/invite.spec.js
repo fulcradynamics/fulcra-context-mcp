@@ -42,7 +42,8 @@ test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`,
   }, scenario.result);
   await expect(ui.locator('#mesh-status')).toContainText(scenario.expected);
   if (scenario.name === 'populated') {
-    await expect(ui.locator('#meshes li')).toHaveText('<b>peer-id</b>');
+    await expect(ui.locator('#meshes .thread-button')).toHaveText('<b>peer-id</b>');
+    await expect(ui.locator('#meshes .contact-status')).toHaveText('Not assessed');
     await expect(ui.locator('#meshes b')).toHaveCount(0);
   }
   expect(await page.evaluate(() => window.requests.filter(r => r.method === 'ui/message'))).toHaveLength(0);

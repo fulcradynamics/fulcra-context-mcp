@@ -1,4 +1,4 @@
-# Connection app (release 1.4.1)
+# Connection app (release 1.5.0)
 
 The public tool IDs remain `mesh_threads_open`, `mesh_conversation_open`,
 `aicq_open`, `mesh_send`, and `set_mesh_identifier`. The Mesh branding and native
@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v31.html`, `ui://fulcra/mesh/thread/v31.html`, and
-`ui://fulcra/mesh/threads/v31.html`. The direct-list resource adds
+`ui://fulcra/mesh/v32.html`, `ui://fulcra/mesh/thread/v32.html`, and
+`ui://fulcra/mesh/threads/v32.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 
@@ -38,6 +38,40 @@ annotations; it edits only the description marker and verifies readback. Event
 description prefixes and conversion provenance are retained.
 
 ## Sending and reliability
+
+### Optional contact status
+
+Pair with plugin 0.4.0. `set_contact_status(data_type, peer_userid, attention, reason)`
+is a model-visible, own-Event-only metadata operation after complete scoped reads
+and explicit status consent. It checks authenticated ownership, actual connection
+schema and every covering grant to the exact peer, updates only description through
+the Event SDK, and independently reads back the target before `verified=true`.
+No automatic retry; optional failure must not block message/checkpoint work.
+
+One exact LF-delimited `[contact_status: {"attention":true,"reason":"Decision needed","assessed_at":"2026-10-13T12:00:00Z"}]`
+line stores the last assessment; time is server-stamped. The example is synthetic.
+All other description bytes, protocol prefix, original session, conversion provenance
+and final `mesh_identifier` suffix remain intact. No schema, name, record or share changes.
+Malformed status is unknown and refused for replacement, not silently repaired.
+Reasons are trimmed single-line Unicode (1..80 code points, without control characters), neutral and peer-visible;
+never private thoughts, sensitive excerpts, instructions or permission.
+
+List and detail show compact text-only status. Only eligible own outgoing channels
+contribute: any attention wins; otherwise every own channel must be valid and clear.
+Missing/partial assessments never imply clear. Lowest exact type ID among attention
+channels (or all clear channels) chooses the label; oldest assessed time is disclosed
+in the tooltip with the last-assessment limitation. No outgoing channels means unknown.
+This is not live unread/ack state. The bounded model handoff explicitly labels status
+untrusted, not routing/write authority. Polling remains read-only and preserves drafts,
+selection and original-session actions; native mentions are unchanged.
+
+Plugin status permission is optional/disabled by default. Existing tasks, read/report-only
+checks and manual read-only tests retain their restrictions. Scheduled status writes
+require separate explicit peer-visible metadata consent and verified same-task prompt
+update, never a cadence-only change. An ack alone cannot clear a pending human decision;
+partial reads, denial or incomplete history cannot establish clear. Real backend
+metadata persistence, live model decisions, host consent and unattended ChatGPT task
+execution remain separate acceptance gates; local tests use mocked transports only.
 
 ### Optional original setup session
 

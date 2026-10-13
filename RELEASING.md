@@ -4,6 +4,15 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Contact last assessments (1.5.0 / UI v32)
+
+Adds optional own-connection status metadata, an independently verified narrow setter,
+and compact list/detail display with honest unknown/partial aggregation. Pair with
+plugin 0.4.0; refresh server discovery and reinstall. Existing scheduling permissions
+do not expand automatically. Foreground polling stays read-only. Local SDK/stdio and
+sandbox browser tests do not establish live backend/model/ChatGPT task acceptance;
+see [the app contract](docs/mesh-app.md).
+
 ### Original setup session (1.4.1 / UI v31)
 
 Optional own-channel description metadata enables explicit original-session
