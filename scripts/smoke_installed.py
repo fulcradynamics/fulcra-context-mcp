@@ -45,21 +45,21 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('aicq_open', 'ui://fulcra/mesh/v39.html', 'global'),
-                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v39.html', 'threads'),
-                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v39.html', 'thread'),
+                    ('aicq_open', 'ui://fulcra/mesh/v40.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v40.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v40.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="mesh-presentation" content="{marker}"' in text
-                    for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages',
+                    for value in ('use the invite skill', 'connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids'):
                         assert value in text, value
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v39 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v40 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
