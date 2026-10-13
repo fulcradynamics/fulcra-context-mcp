@@ -20,7 +20,8 @@ def mesh_threads_open() -> dict[str, str]:
     """Show clickable Mesh threads in chat. Select a peer to request a conversation panel.
 
     Does not write account data or send messages.
-    Use for a submitted List Meshes mention unless the user asks for another task.
+    Use for a bare Fulcra mention or a submitted List Meshes mention unless the
+    user asks for another task.
     """
     return {"presentation": "threads"}
 

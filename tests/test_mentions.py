@@ -110,6 +110,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
         assert "List Meshes" in instructions and "Open Mesh:" in instructions
         assert "without asking what to do next" in instructions
         assert "explicit request takes precedence" in instructions
+        assert "mentions Fulcra without a task, call mesh_threads_open({})" in instructions
         items = await search(client)
         for item, name, arguments in zip(items, ["mesh_threads_open", "mesh_conversation_open"],
                                          [{}, {"peer_fulcra_userid": "peer"}]):
