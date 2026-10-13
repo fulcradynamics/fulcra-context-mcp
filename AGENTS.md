@@ -135,7 +135,7 @@ Users can upload arbitrary files to their account for storage alongside their da
 Over MCP, files of any type and size move without passing through the model:
 
 * **`open_file_manager`** shows a file manager panel (an [MCP App](https://modelcontextprotocol.io/extensions/apps/overview)) in clients that display them, such as Claude. The user browses folders, drops files in to upload them, and downloads files. In other clients the tool returns the folder listing and says what to use instead.
-* **`get_file_download_link`** gives the user a link to download a file in a browser, valid for 10 minutes. A server running locally (stdio) saves the file to the user's `~/Downloads` instead.
+* **`read_file(path, as_link=true)`** gives the user a link to download a file in a browser, valid for 10 minutes. A server running locally (stdio) saves the file to the user's `~/Downloads` instead.
 * **`read_file`** returns `.xlsx` spreadsheets as CSV, one section per sheet. **`write_file`** takes base64 (`encoding="base64"`) for binary files up to 5 MB.
 * **Files on disk,** for example in a sandbox: `write_file(path, encoding="upload_link")` returns a 10-minute link, and `curl -T <file> <link>` saves the file (up to 30 MB, one request). The bytes go to Fulcra's server, never to Google Cloud Storage directly, so this works in sandboxes that block it. The link saves one file; sending again returns the same result.
 * **Resources:** `fulcra://files/{path}` serves a file's contents through `resources/read` (up to 20 MB); `fulcra://users/{fulcra_userid}/files/{path}` serves one another user shares.
