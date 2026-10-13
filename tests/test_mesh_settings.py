@@ -10,6 +10,14 @@ from fulcra_mcp.main import mcp
 ROOT = "/agent/chatgpt/mesh-checks/"
 
 
+@pytest.fixture(autouse=True)
+def default_preferences(monkeypatch):
+    # Status-projection tests isolate the separate preference store; its real
+    # persistence/authentication paths are covered in test_contact_preferences.
+    from fulcra_mcp import contact_preferences as policy
+    monkeypatch.setattr(policy, 'read', lambda api: dict(policy.DEFAULTS))
+
+
 def state(fake, last_checked=None, **changes):
     fake.get_fulcra_userid.return_value = "me"
     fake.list_files.return_value = {"folders": [], "files": [
@@ -33,9 +41,10 @@ async def test_native_settings_read_contract(fake_fulcra):
         assert tool.inputSchema.get("properties", {}) == {}
         assert set(tool.outputSchema["required"]) >= {"schema", "values"}
         result = (await client.call_tool(tool.name, {})).structured_content
-        assert result["schema"] == {"type": "object", "properties": {}}
-        assert result["values"] == {}
-        assert result["layout"] == [
+        from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA
+        assert result["schema"] == {"type": "object", "properties": SCHEMA}
+        assert result["values"] == DEFAULTS
+        assert result["layout"][:2] == [
             {"kind": "group", "title": "Last mesh check: Never checked", "items": []},
             {"kind": "group", "title": 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”', "items": []},
         ]
@@ -69,12 +78,14 @@ async def test_native_titles_cover_status_without_actions_or_writes(fake_fulcra,
     async with Client(mcp) as client:
         for _ in range(2):
             result = (await client.call_tool("aicq_settings_read", {})).structured_content
-            assert result["schema"] == {"type": "object", "properties": {}}
-            assert result["values"] == {}
+            from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA
+            assert result["schema"] == {"type": "object", "properties": SCHEMA}
+            assert result["values"] == DEFAULTS
             assert result["layout"][0]["title"] == "Last mesh check: " + label
             assert result["layout"][1]["title"] == (
                 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”')
-            assert all(g["kind"] == "group" and g["items"] == [] for g in result["layout"])
+            assert all(g["kind"] == "group" and g["items"] == [] for g in result["layout"][:2])
+            assert all(item['kind'] == 'property' for item in result['layout'][2]['items'])
             assert "PRIVATE" not in json.dumps(result)
     assert {c[0] for c in fake_fulcra.mock_calls} <= {
         "get_fulcra_userid", "list_files", "download_file"}

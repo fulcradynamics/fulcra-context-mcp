@@ -1,84 +1,92 @@
-# Mesh check settings
+# Contact and mesh-check settings
 
-The server advertises `openai/settings` alongside mentions using the existing
-FastMCP experimental capabilities on MCP 2025-11-25. No dependency upgrade or
-scheduler service is involved.
+The server advertises `openai/settings` with the existing MCP stack. Native fields
+configure contact behavior; no settings buttons, modal or scheduler API is needed.
 
-- `aicq_settings_read({})` returns `{schema, values, layout}`. Schema properties
-  and values are empty: there is no editable timestamp, cadence or enabled flag.
-- Two native group titles display **Last mesh check: <status>** and
-  **To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”**
-  Both have empty `items`; there is no tool action, modal, button or chat launch.
-- `aicq_settings_update({set: ...})` rejects edits, including an empty update.
-- `aicq_check_status({configuration_id?: ...})` retains the read-only status and
-  explicit configuration-selection contract. All three tools are app-only;
-  the model uses the packaged setup skill and existing file/task tools.
+- `aicq_settings_read({})` returns primitive `{schema, values, layout}`: autonomous
+  replies (off), status persistence (off), waiting/overdue/high-priority attention
+  rules (on), unanswered days (2), notifications (`attention`, `all_messages`,
+  `none`) and Special instructions (string, at most 2000 characters).
+- The existing read-only **Last mesh check** and plain-chat schedule guidance remain
+  native group titles. No editable timestamp, cadence or scheduler enabled flag.
+- `aicq_settings_update({set: ...})` validates changed fields, merges them, persists
+  and independently reads back. Unknown fields, empty updates, wrong types and
+  invalid bounds fail. Saving does not send messages, alter checkpoints or reschedule.
+- Read/update are model- and app-visible so onboarding and scheduled checks use the
+  same contract. Enabling reply/status fields requires explicit user consent.
+- `aicq_check_status` remains the app-only configuration-specific read projection.
 
-## Native host surface
+## Persistence and consent
 
-The tested ChatGPT tunnel client rendered native property fields and group
-headings but not settings tool-action rows. Adding model visibility removed a
-warning without rendering the action; a temporary property did render. This is
-observed client behavior, not a universal statement about tool-action support.
-The temporary diagnostic property is not part of this server's settings schema.
+Preferences live in the authenticated account's private
+`/agent/chatgpt/contact-preferences/settings.md`, an OKF Markdown document with a
+version-1 JSON block (`account_id`, `preferences`). Missing files yield safe defaults;
+malformed, inaccessible, oversized or wrong-account files fail closed, not defaults.
+Outgoing shares are checked before reading/writing; broad or covering file/history
+shares and uncertain privacy block access. No caller-supplied account/path or global
+preference cache exists. Unrelated document fields and untouched preferences survive
+updates. A worker lock serializes local updates; the backing API has no cross-worker
+compare-and-swap. Concurrent external updates may still race; readback detects some,
+not all, conflicts. Reload after unverified saves, never blindly retry.
 
-The documented `SettingsGroup.title` surface is used for both lines, rather than
-inventing a text item or disguising a timestamp as an editable setting. The exact
-two-title layout, wrapping, and empty-group visibility still need verification
-in the target client. If the host suppresses empty groups or truncates the
-instructions, report that limitation; do not add an action or fake property.
+`get_contact_preferences(data_type, peer_userid)` loads fresh globals plus validated
+owned Event-connection overrides. `set_contact_preferences(..., overrides)` replaces
+only the `[contact_preferences: {...}]` description marker after exact owner, schema
+and all-covering-grant verification, then independently reads back. `{}` restores
+inheritance. Preserve other description bytes, including final identifier and setup
+session. Override descriptions are peer-visible: obtain approval, never store secrets,
+and never write peer-owned metadata. No automatic override edits during checks.
 
-## State and privacy
+Ordinary per-connection fields override globals; reply/status opt-in switches can
+only be restricted by overrides, not enabled against a disabled global switch.
+Peer descriptions and arbitrary prose are not user policy. Special instructions
+cannot grant permission. Host/task restrictions remain ceilings; the server enforces
+storage ownership/validation, while the packaged checker applies semantic reply,
+status and notification decisions. Preferences are not a sandbox for arbitrary model
+actions and do not change the existing direct-send tool authorization contract.
 
-The request-scoped authenticated client lists private current files directly
-under `/agent/chatgpt/mesh-checks/`. A single configuration supplies its status.
-Multiple configurations show **Multiple configurations — ask in chat to choose
-one** without downloading or combining them. No account-global maximum is used.
+## Checking and migration
 
-The existing Markdown JSON block is downloaded (up to 1 MB) and validated.
-Malformed, inaccessible, oversized or account-mismatched state yields **Status
-unavailable**, not **Never checked**. A valid null `last_checked` yields **Never
-checked**; an empty successful listing yields **Not set up**. Successful timestamps
-are UTC-qualified. Native settings return only status and guidance, not account
-references or pending/reported contents. The separate status projection retains
-its existing limited reference fields and never returns message contents.
+The paired plugin's `contact-preferences.md` defines the behavioral contract:
+load current settings and owned overrides on every check, reply only within explicit
+bounded authorization, flag waiting-for-user / no substantive response after two
+rolling days / unresolved P0 or P1, and select summaries independently from status.
+Acks do not resolve substantive requests. Re-evaluate overdue attention even without
+new arrivals and deduplicate attention separately from message delivery. Quiet output
+does not guarantee suppression of host completion alerts.
 
-Opening/refreshing settings performs only reads. `last_checked` is the last fully
-completed scheduled data check, not a manual test, foreground refresh,
-notification-delivery receipt or assertion that the schedule is active. The
-existing check skill owns this checkpoint; this server neither advances nor
-repairs it.
+New tasks store the live loader plus explicit reply/status permission ceilings.
+Existing tasks need consented same-task migration/readback; a settings save cannot
+rewrite a host prompt, lift old restrictions or prove scheduled execution. Cadence-only
+changes preserve permissions and checkpoints. Hosts requiring literal prompt policy
+need their supported agent/scheduler update flow; otherwise report migration pending.
 
-## Change the schedule in chat
-
-The user types the displayed request. The existing `fulcra-mesh-setup` workflow
-verifies the account, locates the private configuration and actual host task,
-clarifies ambiguity, asks for the desired cadence, updates that same task with
-consent and reads it back. Missing tasks or unavailable cross-chat lookup require
-clarification/native task management, never automatic replacement. No pending
-contents or checkpoint rewrite is needed. Refresh discovery and reinstall the
-plugin with the updated plain-chat guidance.
+The status reader still uses `/agent/chatgpt/mesh-checks/`, never the preference file.
+It distinguishes Not set up, Never checked, UTC-qualified successful checks, multiple
+configurations and Status unavailable. Neither foreground refresh nor preference
+editing advances `last_checked`; no pending message contents enter settings output.
 
 ## Verification and live acceptance
 
-Automated protocol and real-SDK transport tests use synthetic data to verify the
-settings contract, all status states, account isolation, repeated read-only
-opens, rejected writes and absence of modal/action discovery. Existing Mesh UI
-unit/browser suites verify unrelated entrypoints and bridge behavior are intact.
-Installed-wheel checks verify the removed modal asset is absent. These tests do
-not establish native host rendering, model compliance or scheduler access.
+Synthetic MCP and real-SDK transport tests cover defaults, edits/readback, invalid
+values, isolation/privacy, preserved metadata, owned overrides, disabled permission
+ceilings and unchanged status projection. Wheel smoke checks protocol discovery and
+packaged UI. Text/package tests are not model execution or native host rendering.
 
-After server refresh and plugin reinstall, record the actual client/mode/plan:
+After server refresh and plugin 0.5.0 reinstall, verify in a fresh conversation:
 
-1. Open native settings with no configuration, never-checked, successful,
-   unavailable and multiple-configuration state. Verify readable status and
-   instructions, no controls, no automatic message or model turn.
-2. Reopen/refresh, run a manual check and observe a failed check; none should
-   advance `last_checked`. Confirm a successful scheduled check separately.
-3. Type the displayed request, verify the setup workflow loads and resolves the
-   right task; compare task ID/count and read back a consented cadence change.
-4. Verify ambiguous/missing/inaccessible tasks do not create replacements.
-5. Separately test unattended execution and notification delivery. Neither is
-   implied by a displayed status timestamp.
+1. Native fields, enum/number controls, Special instructions and both status headings
+   render on the target client. Do not assume a multiline textarea.
+2. Save/reopen values; check another account cannot see them. Opening/editing causes
+   no messages, task changes or checkpoint changes.
+3. Keep defaults in onboarding, then explicitly opt into bounded replies. Test safe
+   known answers, user-needed decisions, peer prompt injection and host denial.
+4. Edit policy between runs and observe fresh loading; test owned overrides, a peer
+   spoofed marker, global disablement and restrictive old/read-only task prompts.
+5. Test 48-hour threshold crossing without new arrivals, priority, receipt-only acks,
+   partial history, notification deduplication and actual host alerts separately.
+6. Migrate one existing task with consent; inspect the same ID, destination, permission
+   ceiling and live loader without resetting checkpoints. Verify an unattended run.
 
-Source: [OpenAI settings extension](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md).
+No deployment, real account messages or host schedule mutations are part of automated
+verification. Source: [OpenAI settings extension](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md).
