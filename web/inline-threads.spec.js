@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile } from 'node:fs/promises';
 const bundle = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 async function open(page, options = {}) {
@@ -8,7 +8,7 @@ async function open(page, options = {}) {
   await page.evaluate(({ bundle, options }) => {
     const frame = document.querySelector('iframe');
     window.options = options; window.requests = []; window.peers = ['peer', 'other'];
-    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
     window.notify = (method, params) => frame.contentWindow.postMessage({ jsonrpc: '2.0', method, params }, '*');
     window.initial = () => window.notify('ui/notifications/tool-result', { content: [], structuredContent: { presentation: 'threads' } });
     addEventListener('message', ({ data: r, source }) => {
@@ -23,7 +23,7 @@ async function open(page, options = {}) {
       if (r.method === 'ui/notifications/initialized' && !options.early && !options.holdInitial) window.initial();
       if (r.method === 'tools/call') {
         const { name, arguments: args } = r.params;
-        const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': window.peers.map(peer => ({ id: 'MomentAnnotation/in', name: 'Mesh Outbox', fulcra_userid: peer })) })
+        const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': window.peers.map(peer => ({ id: 'Event/in', name: 'Mesh Outbox', fulcra_userid: peer })) })
           : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', incoming: [], outgoing: [] })
           : `Records for ${args.data_type} from start to end: ` + JSON.stringify([{ id: 'one', note: 'Untrusted peer text' }]);
         window.reply(r.id, { content: [{ type: 'text', text }] });

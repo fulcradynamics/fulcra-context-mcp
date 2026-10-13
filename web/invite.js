@@ -1,5 +1,7 @@
+import { getContextLifecycle } from './native-context.js';
+
 const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
-  + 'Please use the fulcra-mesh skill to help me prepare the invitation. '
+  + 'Please use the connect-agents-with-anyone skill to help me prepare the invitation. '
   + 'First show me a copyable invitation prompt for the other person to give their agent, '
   + 'using my own verified Fulcra user ID and the mesh skill URL. Do not ask for the other user\'s ID. '
   + 'Then ask whether I want to add optional context about who or what the invite is for, '
@@ -8,10 +10,14 @@ const invitationPrompt = 'I want to invite another user to connect our agents th
 
 export async function setupInvite(app, button, status) {
   button.addEventListener('click', async () => {
-    if (button.disabled) return;
+    const lifecycle = getContextLifecycle(app, status);
+    if (button.disabled || lifecycle.pending) return;
+    lifecycle.pending = true; lifecycle.onChange();
     button.disabled = true;
     status.textContent = 'Sending request to the conversation…';
     try {
+      await lifecycle.invalidate();
+      if (!lifecycle.isClear()) throw new Error('Previous thread context not cleared');
       const result = await app.sendMessage({
         role: 'user',
         content: [{ type: 'text', text: invitationPrompt }],
@@ -21,13 +27,14 @@ export async function setupInvite(app, button, status) {
     } catch {
       status.textContent = 'Could not send the request. Check the conversation before retrying.';
     } finally {
+      lifecycle.pending = false; lifecycle.onChange();
       button.disabled = false;
     }
   });
   try {
     await app.connect();
     if (!app.getHostCapabilities()?.message?.text) {
-      status.textContent = 'This host cannot send chat messages. Ask the agent to use the fulcra-mesh skill in the conversation.';
+      status.textContent = 'This host cannot send chat messages. Ask the agent to use the connect-agents-with-anyone skill in the conversation.';
       return true;
     }
     status.textContent = '';

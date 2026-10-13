@@ -80,7 +80,7 @@ async def test_tool_readback_mismatch_is_not_success(api):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('value', ['MomentAnnotation/not-a-uuid', 'Event/12345678-1234-4234-8234-123456789abc', '12345678-1234-4234-8234-123456789abc'])
+@pytest.mark.parametrize('value', ['MomentAnnotation/not-a-uuid', 'Metric/12345678-1234-4234-8234-123456789abc', '12345678-1234-4234-8234-123456789abc'])
 async def test_tool_rejects_invalid_id_without_lookup(api, value):
     await getattr(tools, 'set_mesh_identifier')(value, 'Travel')
     api.resolve_data_type.assert_not_called()

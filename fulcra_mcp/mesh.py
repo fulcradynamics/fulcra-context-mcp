@@ -1,39 +1,40 @@
-"""Native mesh v1 sending, adapted from the Hermes mesh operations.
+"""Two-party Event connection sends using the SDK's canonical message schema.
 
-No connection state, sharing, LLM, or ambient credentials: the caller supplies
-one authenticated request client. Account identity is never a tool argument.
+One authenticated request client; no ambient credentials or sharing changes.
 """
-import json
 import re
+import time
 from datetime import datetime, timedelta, timezone
+from urllib.error import HTTPError
 
-from fulcra_api import records
+import jsonschema
+from fulcra_api import connections, records
 
 UUID_PATTERN = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+RETRY_DELAY = 1
 
 
 def _uuid(value):
     return isinstance(value, str) and re.fullmatch(UUID_PATTERN, value) is not None
 
 
-def _envelope(row):
-    try:
-        value = json.loads(row.get('note', ''))
-        return value if isinstance(value, dict) else {}
-    except (TypeError, ValueError):
-        return {}
+def channel_entry(api, owner, channel):
+    entries = api.resolve_data_type(channel, fulcra_userid=owner)
+    if len(entries) != 1:
+        raise ValueError('Missing or ambiguous channel.')
+    entry = entries[0]
+    if (entry.get('id') != channel or entry.get('fulcra_userid') != owner
+            or not entry.get('description', '').startswith('connect-agents-with-anyone channel')
+            or entry.get('deprecated') or entry.get('deleted_at')
+            or entry.get('api_version') != 'v1'):
+        raise ValueError('An active Event connection channel with exact owner identity is required.')
+    return entry
 
 
 def _authorize(api, own, peer, outbox):
-    entries = api.resolve_data_type(outbox, fulcra_userid=own)
-    if len(entries) != 1:
-        raise ValueError('Missing or ambiguous own outbox.')
-    entry = entries[0]
-    if (entry.get('id') != outbox or entry.get('fulcra_userid') != own
-            or not re.search(r'\bmesh outbox\b', entry.get('name', ''), re.I)
-            or entry.get('deprecated') or entry.get('deleted_at') or not entry.get('recordable')
-            or entry.get('api_version') != 'v1alpha1'):
-        raise ValueError('An active, owned MomentAnnotation Mesh Outbox is required.')
+    entry = channel_entry(api, own, outbox)
+    if not entry.get('recordable'):
+        raise ValueError('Channel is not recordable.')
     shares = api.get_datashares()
     if not isinstance(shares, list):
         raise ValueError('Could not verify outgoing grants.')
@@ -42,7 +43,7 @@ def _authorize(api, own, peer, outbox):
         selectors = share.get('fulcra_data_types')
         if not isinstance(selectors, list) or type(share.get('share_all_data')) is not bool:
             raise ValueError('Malformed outgoing grant; reconcile sharing before sending.')
-        if not (share['share_all_data'] or any(s in selectors for s in (outbox, 'MomentAnnotation', '*', 'MomentAnnotation/*'))):
+        if not (share['share_all_data'] or any(s in selectors for s in (outbox, 'Event', '*', 'Event/*'))):
             continue
         permissions = share.get('permissions')
         if (share['share_all_data'] or selectors != [outbox]
@@ -51,54 +52,108 @@ def _authorize(api, own, peer, outbox):
                 or any(share.get(k) for k in ('group_permissions', 'group_id', 'file_paths', 'files',
                                               'file_history_paths', 'time_start', 'time_end'))
                 or not _uuid(share.get('id') or share.get('datashare_id'))):
-            raise ValueError('Every covering grant must share only this outbox with exactly this peer, without groups, files or time bounds.')
+            raise ValueError('Every covering grant must share only this channel with exactly this peer, without groups, files or time bounds.')
         covering.append(share)
-    if len(covering) != 1:
-        raise ValueError('Exactly one narrow direct outbox grant is required. Reconcile shares manually; nothing was shared.')
+    if len(covering) != 1 or not covering[0].get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX):
+        raise ValueError('Exactly one narrow direct connection grant is required. Nothing was shared.')
     return entry
 
 
-def send(api, *, peer_userid, outbox, peer_agent, body, mid, kind, pri, slug):
+def _target(api, peer, target, now):
+    found = []
+    channels = set()
+    for grant in api.get_shared_datasets():
+        types = grant.get('fulcra_data_types')
+        if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
+                and grant.get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX)
+                and isinstance(types, list) and len(types) == 1
+                and re.fullmatch('Event/' + UUID_PATTERN, types[0])
+                and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
+            channels.add((peer, types[0]))
+    for owner, channel in channels:
+        entry = channel_entry(api, owner, channel)
+        for row in records.get_records(api, entry, now - connections.REPLY_LOOKBACK, now):
+            if row.get('id') == target:
+                stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
+                if row.get('kind') not in ('message', 'reply') or not now - connections.REPLY_LOOKBACK <= stamp <= now:
+                    raise ValueError('Reply/ack target must be a peer message or reply within 30 days, never an ack.')
+                found.append(row)
+    if len(found) != 1:
+        raise ValueError('Missing or ambiguous peer reply target within 30 days.')
+    return found[0]
+
+
+def _readback(api, entry, record):
+    now = datetime.now(timezone.utc)
+    rows = records.get_records(api, entry, now - timedelta(days=30), now + timedelta(seconds=1))
+    matches = [row for row in rows if row.get('id') == record['id']]
+    fields = set(connections.CHANNEL_FIELDS['properties']) | {'id'}
+    expected = {k: v for k, v in record.items() if k in fields}
+    if any({k: v for k, v in row.items() if k in fields} != expected for row in matches):
+        raise ValueError('Record ID already has different content; do not overwrite it.')
+    return matches[0] if matches else None
+
+
+def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
+         kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None):
     result = dict(mid=mid, outbox=outbox, peer_userid=peer_userid, peer_acknowledged=False)
     attempted = False
     try:
         if (not _uuid(peer_userid) or not _uuid(mid)
-                or not re.fullmatch('MomentAnnotation/' + UUID_PATTERN, outbox)):
-            raise ValueError('Use exact UUIDs and an exact MomentAnnotation/<uuid> outbox; no normalization is performed.')
-        if not body.strip() or len(body) > 24000:
-            raise ValueError('Message must be nonblank and at most 24000 characters.')
-        if not peer_agent.strip() or len(peer_agent) > 200 or not slug.strip() or len(slug) > 200:
-            raise ValueError('Exact recipient agent and slug must be nonblank and at most 200 characters.')
+                or not re.fullmatch('Event/' + UUID_PATTERN, outbox)
+                or (in_reply_to is not None and not _uuid(in_reply_to))):
+            raise ValueError('Use exact UUIDs and an exact Event/<uuid> channel; no normalization is performed.')
+        if recipients == []:
+            raise ValueError('Omit recipients for everyone; an explicit list cannot be empty.')
+        record = connections.build_message(sender=sender, body=body, record_id=mid, kind=kind,
+                                           in_reply_to=in_reply_to, recipients=recipients, priority=pri, topic=slug)
         own = api.get_fulcra_userid()
         if not _uuid(own) or own == peer_userid:
-            raise ValueError('Could not establish a distinct authenticated sender and peer.')
+            raise ValueError('Could not establish distinct authenticated sender and peer.')
         entry = _authorize(api, own, peer_userid, outbox)
-        envelope = dict(v=1, mid=mid, to=peer_agent, to_user=peer_userid, kind=kind, pri=pri, slug=slug, body=body)
-        now = datetime.now(timezone.utc)
-        start = now - timedelta(days=7)
-        rows = records.get_records(api, entry, start, now)
-        matches = [_envelope(row) for row in rows if _envelope(row).get('mid') == mid]
-        if matches:
-            if any(env != envelope for env in matches):
-                raise ValueError('Message ID already has different content. Reconcile the outbox; do not resend.')
-            return {**result, 'status': 'posted', 'record': next(row for row in rows if _envelope(row) == envelope)}
-        record = {'sources': ['com.fulcradynamics.mcp', 'com.fulcradynamics.annotation.' + outbox.split('/')[1]],
-                  'recorded_at': now.isoformat(), 'note': json.dumps(envelope, ensure_ascii=False)}
-        if api.validate_records('MomentAnnotation', [record], 'v1alpha1'):
-            raise ValueError('The outbox record failed schema validation; nothing posted.')
-        # Recheck immediately before writing. The service has no transaction
-        # spanning grants and records; callers must not promise atomic revocation.
-        _authorize(api, own, peer_userid, outbox)
-        if api.get_fulcra_userid() != own:
-            raise ValueError('Authenticated account changed; nothing posted.')
-        attempted = True
-        api.record_data_type('MomentAnnotation', [record], 'v1alpha1')
-        rows = records.get_records(api, entry, start, datetime.now(timezone.utc) + timedelta(seconds=1))
-        matching = [row for row in rows if _envelope(row) == envelope]
-        if matching:
-            return {**result, 'status': 'posted', 'record': matching[0]}
-        return {**result, 'status': 'uncertain', 'reason': 'Upload returned, but exact envelope not observed in readback. Reconcile this mid; do not resend.'}
+        if in_reply_to:
+            target = _target(api, peer_userid, in_reply_to, datetime.now(timezone.utc))
+            if slug is None and 'topic' in target:
+                record['topic'] = target['topic']
+        elif slug is None:
+            record['topic'] = 'chat'
+        if artifacts is not None:
+            record['artifacts'] = artifacts
+        jsonschema.validate({k: v for k, v in record.items() if k != 'id'},
+                            {'type': 'object', **connections.CHANNEL_FIELDS, 'additionalProperties': False},
+                            format_checker=jsonschema.FormatChecker())
+        existing = _readback(api, entry, record)
+        if existing:
+            return {**result, 'status': 'posted', 'record': existing}
+        if api.validate_records(outbox, [record], 'v1'):
+            raise ValueError('Channel schema validation failed; nothing submitted.')
+        for attempt in range(2):
+            # Revalidate even on retry; grants and record ingestion are not atomic.
+            _authorize(api, own, peer_userid, outbox)
+            if api.get_fulcra_userid() != own:
+                raise ValueError('Authenticated account changed.')
+            attempted = True
+            try:
+                api.record_data_type(outbox, [record], 'v1')
+            except HTTPError as exc:
+                if exc.code < 500:
+                    return {**result, 'status': 'uncertain' if attempt else 'rejected',
+                            'retryable': False,
+                            'reason': 'Permission or validation denied. Do not retry or bypass denial.'}
+            except (TimeoutError, ConnectionError, OSError):
+                pass  # Uncertain transport: read first, then retry the same payload/ID.
+            for poll in range(2):
+                observed = _readback(api, entry, record)
+                if observed:
+                    return {**result, 'status': 'posted', 'record': observed}
+                if poll == 0:
+                    time.sleep(RETRY_DELAY)
+        return {**result, 'status': 'uncertain', 'reason': 'Exact record not observed. Retry only with the same ID and content; never bypass host denial.'}
     except Exception as exc:
         if attempted:
-            return {**result, 'status': 'uncertain', 'reason': 'Could not verify the attempted write. Reconcile this mid in the outbox before sending again; no automatic resend.'}
-        return {**result, 'status': 'rejected', 'reason': str(exc) if isinstance(exc, ValueError) else 'Preflight verification failed. Nothing submitted.'}
+            if (isinstance(exc, (ValueError, jsonschema.ValidationError))
+                    or isinstance(exc, HTTPError) and exc.code < 500):
+                return {**result, 'status': 'uncertain', 'retryable': False,
+                        'reason': 'Write not verified; authorization or validation stopped further attempts. Do not retry or bypass denial.'}
+            return {**result, 'status': 'uncertain', 'reason': 'Write not verified. Keep this ID and content; do not bypass permission denial.'}
+        return {**result, 'status': 'rejected', 'reason': str(exc) if isinstance(exc, (ValueError, jsonschema.ValidationError)) else 'Preflight verification failed. Nothing submitted.'}

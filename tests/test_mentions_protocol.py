@@ -6,6 +6,7 @@ from unittest.mock import create_autospec, Mock
 
 import pytest
 from fulcra_api.core import FulcraAPI
+from fulcra_api.connections import CHANNEL_FIELDS
 from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.provider import AccessToken
 
@@ -23,11 +24,13 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
     fake = create_autospec(FulcraAPI, instance=True)
     fake.get_fulcra_userid.return_value = "synthetic-own"
     fake.v1_catalog.return_value = [{
-        "id": "MomentAnnotation/synthetic", "name": "Mesh Outbox", "api_version": "v1",
+        "id": "Event/synthetic", "name": "Connection", "api_version": "v1",
+        "description": "connect-agents-with-anyone channel",
         "fulcra_userid": "peer/%2F", "categories": ["shared_type"],
     }]
     fake.get_datashares.return_value = []
-    fake.get_shared_datasets.return_value = []
+    fake.v1_catalog_schema.return_value = {'type':'object', **CHANNEL_FIELDS}
+    fake.get_shared_datasets.return_value = [dict(sharing_fulcra_userid='peer/%2F', grant_type='user', datashare_name='connect-agents-with-anyone: test', fulcra_data_types=['Event/synthetic'])]
     creds = FulcraCredentials(access_token="synthetic-backend-token",
                              access_token_expiration=datetime.now() + timedelta(hours=1))
     other_creds = FulcraCredentials(access_token="synthetic-other-token",
@@ -109,6 +112,6 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
                 assert response.status_code == 401
 
     assert {c[0] for c in fake.mock_calls} == {
-        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+        "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
     assert {c[0] for c in other.mock_calls} == {
         "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}

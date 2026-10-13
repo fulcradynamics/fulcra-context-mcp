@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
-const channel = (owner = 'peer', id = 'in') => ({ id: `MomentAnnotation/${id}`, name: 'Mesh Outbox', fulcra_userid: owner });
+const channel = (owner = 'peer', id = 'in') => ({ id: `Event/${id}`, name: 'Mesh Outbox', fulcra_userid: owner });
 async function open(page, entries = []) {
   await page.clock.install({ time: new Date('2026-01-10T12:00:00Z') });
   await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
@@ -11,7 +11,7 @@ async function open(page, entries = []) {
     window.contexts = [];
     window.shares = { own_fulcra_userid: 'me', outgoing: [], incoming: [] };
     const frame = document.querySelector('iframe');
-    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
     window.answer = request => {
       const { name, arguments: args } = request.params;
       if (window.fail?.includes(name) || window.fail?.includes(args.data_type)) { window.reply(request.id, { isError: true }); return; }
@@ -50,7 +50,7 @@ test('mesh identifier renames list/detail without identity, routing or context c
     el.originalIcon = el.querySelector('svg');
     el.originalPeer = el.querySelector('.thread-peer');
   });
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'record', note: 'body' }]; });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'record', note: 'body' }]; });
   await button.click();
   await expect(ui.locator('#message-title')).toHaveText('Thread with Travel (peer)');
   await expect(ui.locator('#messages li')).toHaveCount(1);
@@ -67,7 +67,7 @@ test('mesh identifier renames list/detail without identity, routing or context c
   await expect(ui.locator('#messages li p').first()).toHaveText('Incoming (Mesh Outbox)');
   expect(await ui.locator('#messages li').evaluate(el => el.identityMarker)).toBe(true);
   const context = await ui.locator('#thread-context').textContent();
-  expect(context).toContain('MomentAnnotation/in');
+  expect(context).toContain('Event/in');
   expect(context).toContain('peer');
   expect(context).not.toContain('Renamed');
   // A successful read advances freshness, but labels must not enter context.
@@ -89,7 +89,7 @@ test('mesh identifier renames list/detail without identity, routing or context c
     el.originalPeer === el.querySelector('.thread-peer'))).toBe(true);
   const calls = await page.evaluate(() => window.calls.map(r => r.params));
   expect(calls.every(c => ['get_data_catalog', 'list_shares', 'get_records'].includes(c.name))).toBe(true);
-  expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'MomentAnnotation/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
+  expect(calls.filter(c => c.name === 'get_records').every(c => c.arguments.data_type === 'Event/in' && c.arguments.fulcra_userid === 'peer')).toBe(true);
 });
 
 test('account UUID fallback is not repeated in the thread title or list', async ({ page }) => {
@@ -108,27 +108,27 @@ test('account UUID fallback is not repeated in the thread title or list', async 
 test('outbox names remain distinguishable and selected exact IDs stay secondary', async ({ page }) => {
   const ui = await open(page, [channel('me', 'a'), channel('me', 'b')]);
   await page.evaluate(() => { window.shares.outgoing = ['a', 'b'].map(id => ({
-    share_all_data: false, data_types: [`MomentAnnotation/${id}`], with_user_ids: ['peer'],
+    share_all_data: false, data_types: [`Event/${id}`], with_user_ids: ['peer'],
   })); });
   await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await ui.getByText('Delivery address', { exact: true }).click();
   const select = ui.locator('#thread-composer details select');
-  await expect(select.locator('option')).toHaveText(['Choose an outbox', 'Mesh Outbox (MomentAnnotation/a)', 'Mesh Outbox (MomentAnnotation/b)']);
-  await select.selectOption('MomentAnnotation/b');
-  await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/b');
+  await expect(select.locator('option')).toHaveText(['Choose an outbox', 'Mesh Outbox (Event/a)', 'Mesh Outbox (Event/b)']);
+  await select.selectOption('Event/b');
+  await expect(ui.locator('.outbox-id')).toHaveText('Event/b');
   await page.evaluate(() => { window.entries[1].name = 'Mesh Outbox: renamed'; });
   await page.clock.runFor(10000);
-  await expect(select).toHaveValue('MomentAnnotation/b');
+  await expect(select).toHaveValue('Event/b');
   await expect(select.locator('option:checked')).toHaveText('Mesh Outbox: renamed');
-  await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/b');
+  await expect(ui.locator('.outbox-id')).toHaveText('Event/b');
 });
 
 test('catalog label changes do not replace keyed rows or merge identically named sources', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'a'), channel('peer', 'b')]);
   await page.evaluate(() => {
-    window.rows['peer/MomentAnnotation/a'] = [{ id: 'same', note: 'first channel' }];
-    window.rows['peer/MomentAnnotation/b'] = [{ id: 'same', note: 'second channel' }];
+    window.rows['peer/Event/a'] = [{ id: 'same', note: 'first channel' }];
+    window.rows['peer/Event/b'] = [{ id: 'same', note: 'second channel' }];
   });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(2);
@@ -146,7 +146,7 @@ test('catalog label changes do not replace keyed rows or merge identically named
 
 test('refresh preserves focus, disclosures, pending attachment and last-good records with explicit stale state', async ({ page }) => {
   const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'first', note: 'last good' }]; });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'first', note: 'last good' }]; });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages')).toContainText('last good');
   const disclosure = ui.locator('#thread-composer .context-details summary'), tell = ui.getByRole('button', { name: 'talk with my agent about this thread', exact: true });
@@ -162,7 +162,7 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
   await tell.click();
   await expect.poll(() => page.evaluate(() => window.contexts.length)).toBe(1);
   const submitted = await page.evaluate(() => window.contexts[0].params);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'second', note: 'next good' }); });
+  await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'second', note: 'next good' }); });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages')).toContainText('next good');
   await expect(tell).toBeDisabled();
@@ -202,7 +202,7 @@ test('refresh preserves focus, disclosures, pending attachment and last-good rec
 
 test('two UTC calendar dates, top composer and both orders; polling never applies unsubmitted edits', async ({ page }) => {
   const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [
     { id: 'older', recorded_at: '2026-01-09T12:00:00Z', note: 'older body' },
     { id: 'newer', recorded_at: '2026-01-10T12:00:00Z', note: 'newer body' },
   ]; });
@@ -264,7 +264,7 @@ test('manual refresh coalesces, preserves keyed list focus and labels account na
 for (const focus of ['none', 'back button']) for (const visibility of ['below viewport', 'partly visible']) {
   test(`poll preserves page-top controls with ${focus} focused and first message ${visibility}`, async ({ page }) => {
     const ui = await open(page, [channel()]);
-    await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = Array.from({ length: 30 }, (_, i) => ({ id: `m${i}`, recorded_at: new Date(Date.UTC(2026, 0, 10, 0, i)).toISOString(), note: `Message ${i}\n` + 'History content. '.repeat(30) })); });
+    await page.evaluate(() => { window.rows['peer/Event/in'] = Array.from({ length: 30 }, (_, i) => ({ id: `m${i}`, recorded_at: new Date(Date.UTC(2026, 0, 10, 0, i)).toISOString(), note: `Message ${i}\n` + 'History content. '.repeat(30) })); });
     await ui.getByRole('button', { name: 'peer', exact: true }).click();
     await expect(ui.locator('#messages li')).toHaveCount(30);
     const frame = page.frames()[1];
@@ -303,7 +303,7 @@ for (const focus of ['none', 'back button']) for (const visibility of ['below vi
       expect(before.firstTop).toBeLessThan(before.height);
       expect(before.firstBottom).toBeGreaterThan(before.height);
     } else expect(before.firstTop).toBeGreaterThanOrEqual(before.height);
-    await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'New arrival' }); });
+    await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'New arrival' }); });
     await page.clock.runFor(10000);
     await expect(ui.locator('#messages li')).toHaveCount(31);
     const after = await geometry();
@@ -316,7 +316,7 @@ for (const focus of ['none', 'back button']) for (const visibility of ['below vi
 
 for (const expanded of [false, true]) for (const order of ['latest', 'oldest']) test(`preserves visible keyed message and offset in ${order} order (context ${expanded ? 'expanded' : 'collapsed'}); new activity follows latest edge`, async ({ page }) => {
   const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = Array.from({ length: 30 }, (_, i) => ({ id: `m${i}`, recorded_at: new Date(Date.UTC(2026, 0, 10, 0, i)).toISOString(), note: `Message ${i}\n` + 'History content. '.repeat(30) })); });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = Array.from({ length: 30 }, (_, i) => ({ id: `m${i}`, recorded_at: new Date(Date.UTC(2026, 0, 10, 0, i)).toISOString(), note: `Message ${i}\n` + 'History content. '.repeat(30) })); });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(30);
   await ui.getByLabel('Message order').selectOption(order);
@@ -324,7 +324,7 @@ for (const expanded of [false, true]) for (const order of ['latest', 'oldest']) 
   const row = ui.locator('#messages li').nth(14);
   await row.evaluate(el => { el.scrollIntoView(); scrollBy(0, 25); window.anchor = el; });
   const before = await row.evaluate(el => el.getBoundingClientRect().top);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'New arrival' }); });
+  await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'New arrival' }); });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages li')).toHaveCount(31);
   expect(await page.frames()[1].evaluate(() => window.anchor.isConnected)).toBe(true);
@@ -333,7 +333,7 @@ for (const expanded of [false, true]) for (const order of ['latest', 'oldest']) 
   const latest = order === 'latest' ? ui.locator('#messages li').first() : ui.locator('#messages li').last();
   await expect(latest).toBeInViewport();
   await expect(ui.getByRole('button', { name: 'New activity', exact: true })).toBeHidden();
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'new2', recorded_at: '2026-01-10T13:00:00Z', note: 'Followed arrival' }); });
+  await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'new2', recorded_at: '2026-01-10T13:00:00Z', note: 'Followed arrival' }); });
   await page.clock.runFor(10000);
   await expect(latest).toContainText('Followed arrival');
   await expect(latest).toBeInViewport();
@@ -387,7 +387,7 @@ test('hidden discovery drains without message reads; SDK teardown stops queued r
   await ui.getByRole('button', { name: 'Load messages', exact: true }).click();
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: 'teardown', method: 'ui/resource-teardown', params: {} }, '*'));
   await expect.poll(() => page.evaluate(() => window.teardownReply)).toBe(true);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'late', note: 'never render after teardown' }]; });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'late', note: 'never render after teardown' }]; });
   await release(page);
   await expect(busy(ui)).toBeHidden();
   await page.clock.runFor(160000);
@@ -418,8 +418,8 @@ test('all message calls drain on partial failure before coalesced manual rerun; 
 test('revoked source is removed even while a changed range fails; retained range and context remain honest', async ({ page }) => {
   const ui = await open(page, [channel('peer', 'one'), channel('peer', 'two')]);
   await page.evaluate(() => {
-    window.rows['peer/MomentAnnotation/one'] = [{ id: 'one', note: 'revoked content' }];
-    window.rows['peer/MomentAnnotation/two'] = [{ id: 'two', note: 'retained content' }];
+    window.rows['peer/Event/one'] = [{ id: 'one', note: 'revoked content' }];
+    window.rows['peer/Event/two'] = [{ id: 'two', note: 'retained content' }];
   });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(2);
@@ -472,7 +472,7 @@ test('discovery failure permits a previously loaded empty thread but not an unlo
 test('narrow retry status changes preserve the visible reader anchor and text selection', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 850 });
   const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = Array.from({ length: 20 }, (_, i) => ({ id: `m${i}`, note: 'Reading this message. '.repeat(12) })); });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = Array.from({ length: 20 }, (_, i) => ({ id: `m${i}`, note: 'Reading this message. '.repeat(12) })); });
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect(ui.locator('#messages li')).toHaveCount(20);
   await page.evaluate(() => { window.fail = ['get_records']; });
@@ -489,14 +489,14 @@ test('narrow retry status changes preserve the visible reader anchor and text se
   await page.clock.runFor(20000);
   await expect(ui.locator('#message-status')).toHaveText('Could not load messages. Retrying…');
   expect(Math.abs(await row.evaluate(el => el.getBoundingClientRect().top) - top)).toBeLessThan(2);
-  expect(await row.evaluate(() => getSelection().toString())).toBe('Unreco');
+  expect(await row.evaluate(() => getSelection().toString())).toBe('Readin');
   await visibility(page, 'hidden');
   expect(Math.abs(await row.evaluate(el => el.getBoundingClientRect().top) - top)).toBeLessThan(2);
 });
 
 test('new keyed rows animate once without moving layout; reorder preserves selection and hierarchy', async ({ page }) => {
   const ui = await open(page, [channel()]);
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [
     { id: 'one', recorded_at: '2026-01-10T01:00:00Z', note: 'first body' },
     { id: 'two', recorded_at: '2026-01-10T02:00:00Z', note: 'second body' },
   ]; });
@@ -526,14 +526,14 @@ test('new keyed rows animate once without moving layout; reorder preserves selec
   expect(await ui.locator('#messages').evaluate(el => ({
     text: getSelection().toString(), sameNode: getSelection().anchorNode === window.selectedNode,
     expected: window.selectedText, animations: el.getAnimations({ subtree: true }).filter(a => !window.animations.includes(a)).length,
-  }))).toEqual({ text: 'Unreco', expected: 'Unreco', sameNode: true, animations: 0 });
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'three', note: 'new body' }); });
+  }))).toEqual({ text: 'second', expected: 'second', sameNode: true, animations: 0 });
+  await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'three', note: 'new body' }); });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages li')).toHaveCount(3);
   expect(await ui.locator('#messages li').last().evaluate(el => el.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
   expect(await ui.locator('#messages').evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.effect.target.closest('li') !== el.lastChild && !window.animations.includes(a)).length)).toBe(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'].push({ id: 'four', note: 'reduced motion body' }); });
+  await page.evaluate(() => { window.rows['peer/Event/in'].push({ id: 'four', note: 'reduced motion body' }); });
   await page.clock.runFor(10000);
   await expect(ui.locator('#messages li')).toHaveCount(4);
   expect(await ui.locator('#messages li').last().evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
@@ -707,7 +707,7 @@ test('visible polling discovers first thread from empty, reads only selected pee
   await ui.getByRole('button', { name: 'peer', exact: true }).click();
   await expect.poll(() => reads(page)).toBe(1);
   await expect(ui.locator('#message-status')).toHaveText('No messages in this date range.');
-  await page.evaluate(() => { window.rows['peer/MomentAnnotation/in'] = [{ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'newly arrived' }]; window.hold = ['get_records']; });
+  await page.evaluate(() => { window.rows['peer/Event/in'] = [{ id: 'new', recorded_at: '2026-01-10T12:00:00Z', note: 'newly arrived' }]; window.hold = ['get_records']; });
   await page.clock.runFor(10000);
   await expect(busy(ui)).toBeHidden();
   await release(page);

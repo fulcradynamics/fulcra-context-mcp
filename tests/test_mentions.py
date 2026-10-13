@@ -11,6 +11,7 @@ from mcp.types import ResourceLink
 from mcp.shared.exceptions import McpError
 from fulcra_mcp.main import mcp
 from fulcra_mcp import mentions
+from fulcra_api.connections import CHANNEL_FIELDS
 
 LIST_ITEM = {"type": "resource_link", "uri": "mesh://threads",
              "name": "List Meshes", "title": "List Meshes", "mimeType": "application/json",
@@ -18,14 +19,21 @@ LIST_ITEM = {"type": "resource_link", "uri": "mesh://threads",
 
 
 def entry(id, owner=None):
-    return {"id": f"MomentAnnotation/{id}", "name": "Mesh Outbox same name",
+    return {"id": f"Event/{id}", "name": "Mesh Outbox same name",
             "api_version": "v1", **({"fulcra_userid": owner, "categories": ["shared_type"]} if owner else {})}
 
 
 def backend(fake, catalog, outgoing=(), incoming=()):
+    catalog = [dict(e, description='connect-agents-with-anyone channel\n' + (e.get('description') or '')) for e in catalog]
     fake.v1_catalog.return_value = catalog
-    fake.get_datashares.return_value = list(outgoing)
-    fake.get_shared_datasets.return_value = list(incoming)
+    fake.v1_catalog_schema.return_value = {'type':'object', **CHANNEL_FIELDS}
+    fake.get_datashares.return_value = [dict(s, datashare_name='connect-agents-with-anyone: test') for s in outgoing]
+    incoming = list(incoming)
+    for e in catalog:
+        if e.get('fulcra_userid'):
+            incoming.append(dict(sharing_fulcra_userid=e['fulcra_userid'], grant_type='user',
+                                 datashare_name='connect-agents-with-anyone: test', fulcra_data_types=[e['id']]))
+    fake.get_shared_datasets.return_value = incoming
 
 
 async def search(client, query=""):
@@ -52,7 +60,7 @@ async def test_search_includes_list_and_exact_peer_actions(query, expected, fake
         for item in items:
             assert ResourceLink.model_validate(item).mimeType == "application/json"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
-        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+        "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
 
 
 @pytest.mark.parametrize("description,title", [
@@ -72,7 +80,7 @@ async def test_mesh_identifier_labels_and_search(description, title, fake_fulcra
         assert descriptor["open_tool"]["arguments"] == {"peer_fulcra_userid": "peer"}
         assert await search(client, "tReEcLe") == (items if description and "Treecle" in description else items[:1])
     assert {c[0] for c in fake_fulcra.mock_calls} == {
-        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+        "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
 
 
 @pytest.mark.parametrize("sources,expected", [
@@ -113,7 +121,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
             assert "model" in tool.meta["ui"]["visibility"]
             assert (await client.read_resource(tool.meta["ui"]["resourceUri"]))[0].mimeType == "text/html;profile=mcp-app"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
-        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+        "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
 
 
 async def test_search_is_bounded_but_exact_peer_remains_searchable(fake_fulcra):
@@ -143,7 +151,7 @@ CASES = json.loads((Path(__file__).parent / "fixtures/mesh-discovery.json").read
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
 async def test_discovery_parity(case, fake_fulcra):
-    narrow = {"data_types": ["MomentAnnotation/a"], "with_user_ids": ["peer"], "share_all_data": False}
+    narrow = {"data_types": ["Event/a"], "with_user_ids": ["peer"], "share_all_data": False}
     outgoing = case.get("outgoing", [narrow])
     if "extra" in case:
         outgoing = outgoing + [narrow | case["extra"]]
@@ -155,7 +163,7 @@ async def test_discovery_parity(case, fake_fulcra):
             "group_permissions": [{"allowed_group_id": p} for p in s.get("with_group_ids", [])],
         }
     catalog = [e | {"api_version": "v1", "categories": ["shared_type"], "queryable": "group" not in case}
-               for e in case.get("catalog", [{"id": "MomentAnnotation/a", "name": "Mesh Outbox"}])]
+               for e in case.get("catalog", [{"id": "Event/a", "name": "Mesh Outbox"}])]
     fake_fulcra.get_fulcra_userid.return_value = "me"
     backend(fake_fulcra, catalog, [raw(s) for s in outgoing], [raw(s) for s in case.get("incoming", [])])
     assert list(await mentions._discover_threads()) == case["expected"]
@@ -176,7 +184,7 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
                 "open_tool": {"name": "mesh_conversation_open", "arguments": {"peer_fulcra_userid": peer}}}
             assert str(resource.uri) == uri
     assert {c[0] for c in fake_fulcra.mock_calls} == {
-        "v1_catalog", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
+        "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
     assert fake_fulcra.v1_catalog.call_count == 3
 
 
@@ -202,7 +210,7 @@ async def test_descriptor_discovery_failure_is_not_empty_success(failure, fake_f
 
 @pytest.mark.parametrize("change", ["revoked", "broad-grant", "different-user"])
 async def test_resource_rechecks_access_and_fails_closed(change, fake_fulcra):
-    narrow = {"fulcra_data_types": ["MomentAnnotation/a"], "share_all_data": False,
+    narrow = {"fulcra_data_types": ["Event/a"], "share_all_data": False,
               "permissions": [{"allowed_fulcra_userid": "peer"}]}
     backend(fake_fulcra, [entry("a")], outgoing=[narrow])
     async with Client(mcp) as client:

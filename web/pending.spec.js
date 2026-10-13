@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile, mkdir } from 'node:fs/promises';
 const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 
@@ -8,13 +8,13 @@ async function open(page, width, mixed = false) {
   await page.clock.pauseAt(new Date('2026-01-10T12:00:01Z'));
   await page.setContent('<style>body{margin:0}iframe{width:100%;height:900px;border:0}</style><iframe sandbox="allow-scripts"></iframe>');
   await page.evaluate(({ html, mixed }) => {
-    const entry = (id, owner, description) => ({ id: `MomentAnnotation/${id}`, name: 'Mesh Outbox same name', fulcra_userid: owner, description });
+    const entry = (id, owner, description) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', fulcra_userid: owner, description });
     window.entries = [entry('a', 'me', '[mesh_identifier: "<b>Travel</b>"]'), entry('a', 'me', '[mesh_identifier: "<b>Travel</b>"]'), entry('b', 'me'), entry('c', 'me', '[mesh_identifier: invalid]')];
     if (mixed) window.entries.push(entry('a', 'peer', '[mesh_identifier: "<b>Travel</b>"]'));
     window.shares = { own_fulcra_userid: 'me', outgoing: [], incoming: mixed ? [{ sharing_fulcra_userid: 'peer' }] : [] };
     window.requests = [];
     const frame = document.querySelector('iframe');
-    const reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    const reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
     addEventListener('message', ({ data: r, source }) => {
       if (source !== frame.contentWindow) return;
       window.requests.push(r);
@@ -49,7 +49,7 @@ test('polling reconciles exact pending sources without guessing peers or disrupt
   await expect(ui.locator('#message-status')).toContainText('No messages');
   const draft = ui.locator('#thread-composer textarea');
   await draft.fill('Keep this draft');
-  await page.evaluate(() => { window.shares.outgoing = ['a', 'b'].map(id => ({ share_all_data: false, data_types: [`MomentAnnotation/${id}`], with_user_ids: ['peer'] })); });
+  await page.evaluate(() => { window.shares.outgoing = ['a', 'b'].map(id => ({ share_all_data: false, data_types: [`Event/${id}`], with_user_ids: ['peer'] })); });
   await page.clock.runFor(10000);
   await expect(ui.locator('#pending-meshes li')).toHaveCount(1);
   await expect(ui.locator('#mesh-count')).toHaveText('1');
@@ -58,7 +58,7 @@ test('polling reconciles exact pending sources without guessing peers or disrupt
   await ui.getByRole('button', { name: 'Back to threads' }).click();
   expect(await ui.locator('#meshes button').evaluate(el => el.marker)).toBe(true);
   await expect(ui.locator('#meshes button')).toBeFocused();
-  await page.evaluate(() => { window.shares.outgoing.push({ share_all_data: false, data_types: ['MomentAnnotation/c'], with_user_ids: ['peer'] }); });
+  await page.evaluate(() => { window.shares.outgoing.push({ share_all_data: false, data_types: ['Event/c'], with_user_ids: ['peer'] }); });
   await ui.getByRole('button', { name: 'Refresh threads', exact: true }).click();
   await expect(ui.locator('#pending-section')).toBeHidden();
   await expect(ui.locator('#pending-meshes li')).toHaveCount(0);

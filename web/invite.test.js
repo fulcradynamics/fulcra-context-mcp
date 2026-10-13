@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupInvite } from './invite.js';
+import { getContextLifecycle } from './native-context.js';
 
 function ui() {
   return { button: { disabled: true, addEventListener(_, fn) { this.click = fn; } }, status: { textContent: '' } };
@@ -18,7 +19,7 @@ test('click sends only a user message requesting the mesh skill', async () => {
   await button.click();
   assert.equal(calls.length, 1);
   assert.equal(calls[0].role, 'user');
-  assert.match(calls[0].content[0].text, /fulcra-mesh/);
+  assert.match(calls[0].content[0].text, /connect-agents-with-anyone/);
   assert.match(calls[0].content[0].text, /invite another user/);
   assert.match(calls[0].content[0].text, /First show me a copyable invitation prompt/);
   assert.match(calls[0].content[0].text, /my own verified Fulcra user ID/);
@@ -35,10 +36,25 @@ test('disable while pending; rejection allows retry without claiming an invitati
   await setupInvite(host({ sendMessage: () => new Promise(resolve => { finish = resolve; }) }), button, status);
   const pending = button.click();
   assert.equal(button.disabled, true);
+  await new Promise(setImmediate);
   finish({ isError: true });
   await pending;
   assert.equal(button.disabled, false);
   assert.match(status.textContent, /Could not send/);
+});
+
+for (const denied of [false, true]) test(`invitation requires confirmed clearing of prior context (${denied})`, async () => {
+  const {button,status}=ui(), calls=[];
+  const app=host({
+    updateModelContext:async value=>{calls.push(['context',value]);return {isError:denied&&!value.content.length};},
+    sendMessage:async()=>{calls.push(['message']);return {};},
+  });
+  await setupInvite(app,button,status);
+  const lifecycle=getContextLifecycle(app,status);
+  await lifecycle.attach('previous peer history',lifecycle.token());
+  await button.click();
+  assert.deepEqual(calls[1],['context',{content:[]}]);
+  assert.equal(calls.filter(c=>c[0]==='message').length,denied?0:1);
 });
 
 test('unsupported host and failed connection leave button disabled', async () => {

@@ -33,8 +33,8 @@ def test_suffix_boundaries(case):
 def test_normalized_catalog_reaches_ui_without_repair():
     rows = []
     for case in CASES:
-        raw = 'Prose\n  folded. [mesh_identifier: "Trip"]' + case['suffix']
-        entry = {'id': 'MomentAnnotation/test', 'name': 'Mesh Outbox',
+        raw = 'connect-agents-with-anyone channel\nProse\n  folded. [mesh_identifier: "Trip"]' + case['suffix']
+        entry = {'id': 'Event/test', 'name': 'Connection',
                  'fulcra_userid': 'peer', 'categories': ['shared_type'], 'description': raw}
         rows.append({'entry': _slim_entry(entry), 'valid': case['valid']})
     script = r'''
@@ -42,6 +42,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { loadMeshes } from './web/meshes.js';
 for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
+  Object.assign(entry, JSON.parse(readFileSync('./tests/fixtures/connection-schema.json', 'utf8')));
   const rows = [], selected = [];
   const list = { replaceChildren() {}, append(row) { rows.push(row); },
     ownerDocument: { createElement: () => ({
@@ -50,7 +51,7 @@ for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
   await loadMeshes({ async callServerTool({ name }) {
     return { structuredContent: { result: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry] })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [], outgoing: [] }) } };
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',data_types:[entry.id]}], outgoing: [] }) } };
   } }, {}, list, thread => selected.push(thread));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].button.textContent, valid ? 'Trip (peer)' : 'peer');

@@ -9,7 +9,7 @@ const options = { timeout: 15000 };
 export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, orderField, view, changed, presentation) {
   const doc = container.ownerDocument;
   const label = doc.createElement('label'), caption = doc.createElement('span');
-  const input = doc.createElement('textarea'); input.rows = 2; input.maxLength = 24000;
+  const input = doc.createElement('textarea'); input.rows = 2; input.maxLength = 4000;
   input.value = draft.value; label.append(caption, input);
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
@@ -20,10 +20,10 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const outboxLabel = doc.createElement('label'); outboxLabel.textContent = 'Your outbox';
   const outbox = doc.createElement('select'); outboxLabel.append(outbox);
   const outboxId = doc.createElement('p'); outboxId.className = 'outbox-id identity-secondary';
-  const agentLabel = doc.createElement('label'); agentLabel.textContent = 'Recipient agent (exact name)';
-  const agent = doc.createElement('input'); agent.type = 'text'; agent.maxLength = 200; agentLabel.append(agent);
+  const agentLabel = doc.createElement('label'); agentLabel.textContent = 'Your sending agent name';
+  const agent = doc.createElement('input'); agent.type = 'text'; agent.maxLength = 128; agentLabel.append(agent);
   const addressHelp = doc.createElement('p');
-  addressHelp.textContent = 'Uses an existing outgoing channel only. Confirm the exact recipient agent if no unique address is available from displayed outgoing messages. No sharing is created.';
+  addressHelp.textContent = 'Uses an existing outgoing connection channel only. Everyone in this connection can read the message. No sharing is created.';
   address.append(addressTitle, outboxLabel, outboxId, agentLabel, addressHelp);
   let status = doc.querySelector('#send-status');
   if (!status) {
@@ -76,16 +76,16 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
     const peer = peerId(), mid = messageId(), startedAt = Date.now();
-    const envelope = { v: 1, mid, to: agent.value, to_user: peer, kind: 'directive', pri: 'P2', slug: 'mesh-message', body: input.value };
+    const envelope = { id: mid, sender: agent.value, kind: 'message', priority: 'P2', topic: 'chat', body: input.value };
     const { identifier: _identifier, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
-      record: { id: mid, recorded_at: new Date().toISOString(), note: JSON.stringify(envelope) } };
+      record: { ...envelope, start_time: new Date().toISOString() } };
     const report = text => { status.textContent = `Peer ${peer}, message ${mid}: ${text}`; };
     draft.posts.push(post); lifecycle.pending = true; changed(); update();
     report('Posting…');
     try {
       const response = await app.callServerTool({ name: 'mesh_send', arguments: {
-        peer_userid: peer, outbox: post.source.id, peer_agent: envelope.to, body: envelope.body, mid,
+        peer_userid: peer, outbox: post.source.id, sender: envelope.sender, body: envelope.body, mid,
       } }, { timeout: 30000 });
       const result = response.structuredContent ?? JSON.parse(response.content?.find(c => c.type === 'text')?.text ?? '{}');
       if (post.state === 'posted' || (!response.isError && result.status === 'posted' && result.mid === mid

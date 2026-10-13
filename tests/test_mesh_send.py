@@ -9,25 +9,24 @@ from fulcra_mcp import tools
 
 PEER = '00000000-0000-0000-0000-000000000002'
 OTHER = '00000000-0000-0000-0000-000000000003'
-OUTBOX = 'MomentAnnotation/00000000-0000-0000-0000-000000000004'
+OUTBOX = 'Event/00000000-0000-0000-0000-000000000004'
 MID = '00000000-0000-0000-0000-000000000005'
 GRANT = '00000000-0000-0000-0000-000000000006'
-ARGS = dict(peer_userid=PEER, outbox=OUTBOX, peer_agent='Hermes', body='  Hello\npeer  ', mid=MID)
-ENV = dict(v=1, mid=MID, to='Hermes', to_user=PEER, kind='directive', pri='P2', slug='mesh-message', body=ARGS['body'])
+ARGS = dict(peer_userid=PEER, outbox=OUTBOX, sender='Hermes', body='  Hello\npeer  ', mid=MID)
+ENV = dict(id=MID, sender='Hermes', kind='message', priority='P2', topic='chat', body=ARGS['body'])
 
 
 @pytest.fixture
 def backend(fake_fulcra, monkeypatch):
     fake_fulcra.resolve_data_type.return_value = [dict(id=OUTBOX, fulcra_userid=FAKE_USER_ID,
-        name='Mesh Outbox: ChatGPT', recordable=True, api_version='v1alpha1')]
-    fake_fulcra.get_datashares.return_value = [dict(id=GRANT, share_all_data=False,
+        name='ChatGPT connection', description='connect-agents-with-anyone channel', recordable=True, api_version='v1')]
+    fake_fulcra.get_datashares.return_value = [dict(id=GRANT, datashare_name='connect-agents-with-anyone: test', share_all_data=False,
         fulcra_data_types=[OUTBOX], permissions=[dict(allowed_fulcra_userid=PEER)], group_permissions=[])]
     fake_fulcra.validate_records.return_value = []
     rows = []
     monkeypatch.setattr(tools.records, 'get_records', lambda api, entry, start, end: deepcopy(rows))
     def write(target, data, version):
-        assert target == 'MomentAnnotation' and version == 'v1alpha1'
-        assert data[0]['sources'] == ['com.fulcradynamics.mcp', 'com.fulcradynamics.annotation.' + OUTBOX.split('/')[1]]
+        assert target == OUTBOX and version == 'v1'
         rows.extend(data)
         return {'upload_id': 'synthetic'}
     fake_fulcra.record_data_type.side_effect = write
@@ -39,7 +38,7 @@ async def test_verified_post_and_duplicate_readback(call, backend):
     result = json.loads(await call('mesh_send', ARGS))
     assert result['status'] == 'posted' and result['peer_acknowledged'] is False
     assert result['mid'] == MID and result['outbox'] == OUTBOX
-    assert json.loads(rows[0]['note']) == ENV
+    assert rows[0] == ENV
     again = json.loads(await call('mesh_send', ARGS))
     assert again['status'] == 'posted'
     assert fake.record_data_type.call_count == 1
@@ -48,8 +47,8 @@ async def test_verified_post_and_duplicate_readback(call, backend):
 
 
 @pytest.mark.parametrize('change', [
-    {'share_all_data': True}, {'fulcra_data_types': ['MomentAnnotation']},
-    {'fulcra_data_types': ['*']}, {'fulcra_data_types': ['MomentAnnotation/*']}, {'fulcra_data_types': [OUTBOX, 'StepCount']},
+    {'share_all_data': True}, {'fulcra_data_types': ['Event']},
+    {'fulcra_data_types': ['*']}, {'fulcra_data_types': ['Event/*']}, {'fulcra_data_types': [OUTBOX, 'StepCount']},
     {'permissions': [{'allowed_fulcra_userid': OTHER}]},
     {'permissions': [{'allowed_fulcra_userid': PEER}, {'allowed_fulcra_userid': OTHER}]},
     {'group_permissions': [{'allowed_group_id': OTHER}]}, {'group_id': OTHER},
@@ -79,7 +78,7 @@ async def test_refuses_unsafe_or_ambiguous_target(call, backend, case):
     if case == 'self': args['peer_userid'] = FAKE_USER_ID
     if case == 'malformed': args['outbox'] += ' '
     if case == 'blank': args['body'] = ' \n'
-    if case == 'conflict': rows.append({'note': json.dumps({**ENV, 'body': 'different'})})
+    if case == 'conflict': rows.append({**ENV, 'body': 'different'})
     assert json.loads(await call('mesh_send', args))['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
 
@@ -99,7 +98,7 @@ async def test_uncertainty_never_claims_posted_or_delivered(call, backend, monke
     assert result['status'] == 'uncertain'
     assert result['peer_acknowledged'] is False
     assert result['mid'] == MID
-    assert fake.record_data_type.call_count == 1
+    assert fake.record_data_type.call_count == (2 if failure == 'missing' else 1)
 
 
 async def test_registration_visible_to_model_and_app(client):

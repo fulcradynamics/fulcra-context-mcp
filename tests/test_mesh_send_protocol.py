@@ -20,8 +20,8 @@ async def test_send_http_auth_and_per_user_isolation(tmp_path, monkeypatch):
     for owner in owners:
         fake = create_autospec(FulcraAPI, instance=True)
         fake.get_fulcra_userid.return_value = owner
-        fake.resolve_data_type.return_value = [dict(id=OUTBOX, fulcra_userid=owners[0], name='Mesh Outbox', recordable=True, api_version='v1alpha1')]
-        fake.get_datashares.return_value = [dict(id=GRANT, share_all_data=False, fulcra_data_types=[OUTBOX], permissions=[dict(allowed_fulcra_userid=PEER)])]
+        fake.resolve_data_type.return_value = [dict(id=OUTBOX, fulcra_userid=owners[0], description='connect-agents-with-anyone channel', recordable=True, api_version='v1')]
+        fake.get_datashares.return_value = [dict(id=GRANT, datashare_name='connect-agents-with-anyone: test', share_all_data=False, fulcra_data_types=[OUTBOX], permissions=[dict(allowed_fulcra_userid=PEER)])]
         fake.validate_records.return_value = []
         saved[owner] = []
         def record(target, rows, version, owner=owner):
@@ -51,7 +51,7 @@ async def test_send_http_auth_and_per_user_isolation(tmp_path, monkeypatch):
         assert all(not fake.mock_calls for fake in clients.values())
         result = await rpc(owners[0])
         assert result['structuredContent']['status'] == 'posted'
-        assert json.loads(saved[owners[0]][0]['note']) == ENV
+        assert saved[owners[0]][0] == ENV
         result = await rpc(owners[1])
         assert result['structuredContent']['status'] == 'rejected'
         clients[owners[1]].record_data_type.assert_not_called()

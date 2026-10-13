@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile, mkdir } from 'node:fs/promises';
 const bundle = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 const peer = 'a1234567-1234-4234-8234-123456789abc';
@@ -13,7 +13,7 @@ for (const presentation of ['global', 'thread', 'threads', 'direct']) for (const
       const frame = document.querySelector('iframe');
       const mode = presentation === 'threads' || presentation === 'direct' ? 'threads' : presentation;
       window.requests = [];
-      const reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+      const reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
       addEventListener('message', ({ data: r, source }) => {
         if (source !== frame.contentWindow) return;
         window.requests.push(r);
@@ -22,9 +22,9 @@ for (const presentation of ['global', 'thread', 'threads', 'direct']) for (const
         if (r.method === 'ui/request-display-mode') reply(r.id, { mode: 'fullscreen' });
         if (r.method === 'tools/call') {
           const { name, arguments: args } = r.params;
-          const entry = (id, owner, label) => ({ id: `MomentAnnotation/${id}`, fulcra_userid: owner, name: 'Mesh Outbox — unchanged catalog name', description: label ? `Original prose [mesh_identifier: ${JSON.stringify(label)}]` : 'No marker' });
+          const entry = (id, owner, label) => ({ id: `Event/${id}`, fulcra_userid: owner, name: 'Mesh Outbox — unchanged catalog name', description: label ? `Original prose [mesh_identifier: ${JSON.stringify(label)}]` : 'No marker' });
           const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('own', 'me', 'Summer travel'), entry('in', peer, 'Different incoming label'), entry('in', other, 'Summer travel'), entry('fallback', 'c1234567-1234-4234-8234-123456789abc')] })
-            : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [{ share_all_data: false, data_types: ['MomentAnnotation/own'], with_user_ids: [peer] }], incoming: [{ sharing_fulcra_userid: peer, sharing_fulcra_user_name: 'Alex (account owner)' }] })
+            : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [{ share_all_data: false, data_types: ['Event/own'], with_user_ids: [peer] }], incoming: [{ sharing_fulcra_userid: peer, sharing_fulcra_user_name: 'Alex (account owner)' }] })
             : `Records for ${args.data_type} from start to end: ` + JSON.stringify([{ id: 'message', recorded_at: new Date().toISOString(), note: JSON.stringify({ v: 1, body: 'Shall we compare the travel options tomorrow?' }) }]);
           reply(r.id, { content: [{ type: 'text', text }] });
         }
@@ -60,7 +60,7 @@ for (const presentation of ['global', 'thread', 'threads', 'direct']) for (const
     await expect(ui.locator('#thread-composer > label .identity-secondary')).toHaveText(` (${peer})`);
     await ui.getByText('Delivery address', { exact: true }).click();
     await expect(ui.locator('#thread-composer details select option:checked')).toHaveText('Mesh Outbox — unchanged catalog name');
-    await expect(ui.locator('.outbox-id')).toHaveText('MomentAnnotation/own');
+    await expect(ui.locator('.outbox-id')).toHaveText('Event/own');
     await shot('detail');
     await ui.locator('#message-back').click();
     const fallback = 'c1234567-1234-4234-8234-123456789abc';
@@ -71,7 +71,7 @@ for (const presentation of ['global', 'thread', 'threads', 'direct']) for (const
     await shot('fallback');
     const calls = await page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').map(r => r.params));
     expect(calls.every(c => ['get_data_catalog', 'list_shares', 'get_records'].includes(c.name))).toBe(true);
-    expect(calls.filter(c => c.name === 'get_records').every(c => ['MomentAnnotation/own', 'MomentAnnotation/in', 'MomentAnnotation/fallback'].includes(c.arguments.data_type))).toBe(true);
+    expect(calls.filter(c => c.name === 'get_records').every(c => ['Event/own', 'Event/in', 'Event/fallback'].includes(c.arguments.data_type))).toBe(true);
     expect(await page.evaluate(() => window.requests.filter(r => ['ui/message', 'sampling/createMessage'].includes(r.method)))).toEqual([]);
   });
 }

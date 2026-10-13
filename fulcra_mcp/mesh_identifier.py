@@ -49,6 +49,8 @@ def parse_mesh_identifier(description: str | None) -> str | None:
 
 def normalize_catalog_description(description: str) -> str:
     """Fold prose whitespace without changing (or repairing) marker data."""
+    if description.startswith('connect-agents-with-anyone channel'):
+        return description  # Preserve line-delimited conversion provenance.
     try:
         marker = _marker(description)
     except ValueError:

@@ -1,4 +1,5 @@
 import { parseMeshIdentifier, threadIdentifier, threadTitle } from './mesh-identifier.js';
+import { compatibleSchema } from './connection-schema.js';
 
 const prefix = 'Available data types, grouped by compatible tool: ';
 
@@ -11,13 +12,31 @@ export function parseMeshes(result) {
     || !Object.values(catalog).every(Array.isArray)) throw new Error('Invalid catalog');
   const entries = Object.entries(catalog)
     .filter(([group]) => group.startsWith('data types usable with: ') && group.slice('data types usable with: '.length).split(' | ').includes('get_records'))
-    .flatMap(([, entries]) => entries);
+    .flatMap(([, entries]) => entries)
+    .map(e => e && e.name === undefined ? { ...e, name: e.id } : e);
   if (!entries.every(e => e && typeof e.id === 'string' && typeof e.name === 'string'
     && (e.fulcra_userid === undefined || typeof e.fulcra_userid === 'string'))) throw new Error('Invalid entry');
   return [...new Map(entries
-    .filter(e => e.id.startsWith('MomentAnnotation/') && /\bmesh outbox\b/i.test(e.name))
+    .filter(e => isConnection(e) || isLegacy(e))
     .map(e => [JSON.stringify([e.fulcra_userid ?? '', e.id]), e])).values()]
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const isConnection = e => e.id.startsWith('Event/') && e.description?.startsWith('connect-agents-with-anyone channel');
+const isLegacy = e => e.id.startsWith('MomentAnnotation/') && /\bmesh outbox\b/i.test(e.name);
+const namedShare = s => s.datashare_name?.startsWith('connect-agents-with-anyone');
+const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
+
+export function conversionSources(description, own, peer) {
+  const lines = (description ?? '').split('\n').filter(l => l.startsWith('converted_from_mesh: '));
+  if (lines.length !== 1) return [];
+  try {
+    const refs = JSON.parse(lines[0].slice('converted_from_mesh: '.length));
+    const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
+    if (!Array.isArray(refs) || refs.length > 32 || !refs.every(r => r && new RegExp('^MomentAnnotation/' + uuid + '$').test(r.id)
+      && [own, peer].includes(r.fulcra_userid))) return [];
+    return refs.map(({ id, fulcra_userid }) => ({ id, fulcra_userid }));
+  } catch { return []; }
 }
 
 function parseShares(result) {
@@ -34,7 +53,7 @@ function parseShares(result) {
 // _slim_share omits empty lists. Only exact, single-channel direct grants
 // establish outgoing recipients. Inspect ALL covering grants, not just narrow ones.
 function directRecipient(share) {
-  return share.share_all_data === false && !share.group_id
+  return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
     && Array.isArray(share.data_types) && share.data_types.length === 1
     && Array.isArray(share.with_user_ids) && share.with_user_ids.length === 1
@@ -44,13 +63,14 @@ function directRecipient(share) {
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_data_catalog', { name: 'Mesh Outbox' }).then(parseMeshes),
+    call('get_data_catalog', {}).then(parseMeshes),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
   if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
   const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
   const threads = new Map();
+  const legacy = new Map();
   const pending = [];
   const seen = new Set();
   let omitted = 0;
@@ -64,22 +84,34 @@ export async function discoverThreads(app) {
     const identifier = parseMeshIdentifier(entry.description);
     const source = { id: entry.id, name: entry.name, fulcra_userid: owner, direction,
       ...(identifier ? { identifier } : {}) };
+    const connection = isConnection(entry);
     if (owner === own) {
-      const covering = shares.outgoing.filter(s => s.share_all_data === true
-        || (Array.isArray(s.data_types) && s.data_types.includes(entry.id)));
+      const covering = shares.outgoing.filter(s => covers(s, entry.id));
       if (!covering.length) {
-        pending.push(source);
+        if (connection) pending.push(source);
         continue;
       }
-      const recipients = covering.map(directRecipient);
-      if (recipients.some(p => !p || p === own || p !== recipients[0])) {
+      const recipients = covering.map(s => s.data_types?.[0] === entry.id && directRecipient(s));
+      if (covering.length !== 1 || recipients.some(p => !p || p === own || p !== recipients[0])
+        || (connection && !covering.every(namedShare))) {
         omitted++;
         continue;
       }
       [peer] = recipients;
+    } else if (!shares.incoming.some(s => s.sharing_fulcra_userid === owner
+      && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
+      && s.data_types?.length === 1 && s.data_types[0] === entry.id)) {
+      omitted++; continue;
     }
-    if (!threads.has(peer)) threads.set(peer, { peer, sources: [], warnings: [] });
-    threads.get(peer).sources.push(source);
+    if (connection) {
+      const exact = entry.fields ? [entry] : parseMeshes(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
+      const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
+      if (!schema || !compatibleSchema(schema)) { omitted++; continue; }
+      source.conversionClaims = conversionSources(entry.description, own, peer);
+    }
+    const collection = connection ? threads : legacy;
+    if (!collection.has(peer)) collection.set(peer, { peer, sources: [], warnings: [] });
+    collection.get(peer).sources.push(source);
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
   for (const thread of threads.values()) {
@@ -95,7 +127,21 @@ export async function discoverThreads(app) {
       if (!thread.sources.some(s => s.direction === direction)) thread.warnings.push(`Conversation incomplete — missing ${direction.toLowerCase()} channel for this peer.`);
     }
   }
-  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), pending, warnings };
+  for (const thread of threads.values()) {
+    const old = legacy.get(thread.peer);
+    // A description is only a claim. Verify owner/type and this exact peer's
+    // legacy relationship before exposing history or suppressing conversion.
+    for (const source of thread.sources) {
+      const verified = source.conversionClaims.filter(r => old?.sources.some(s => s.id === r.id && s.fulcra_userid === r.fulcra_userid));
+      if (verified.length) source.convertedFrom = verified;
+      delete source.conversionClaims;
+    }
+    thread.convertedFrom = thread.sources.flatMap(s => s.convertedFrom ?? []);
+    const converted = new Set(thread.sources.filter(s => s.direction === 'Outgoing')
+      .flatMap(s => s.convertedFrom ?? []).map(r => JSON.stringify([r.fulcra_userid,r.id])));
+    if (old && old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id])))) legacy.delete(thread.peer);
+  }
+  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
 }
 
 export async function loadMeshes(app, status, list, onSelect) {

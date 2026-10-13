@@ -1,4 +1,5 @@
 import { discoverThreads } from './meshes.js';
+import { legacyHandoff } from './legacy-handoff.js';
 import { renderIdentity } from './identity.js';
 import { setupMessages } from './messages.js';
 import { createRefreshScheduler } from './refresh.js';
@@ -11,6 +12,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const pendingSection = doc.querySelector('#pending-section');
   const pendingList = doc.querySelector('#pending-meshes');
   const pendingRows = new Map();
+  const legacySection = doc.createElement('section');
+  const legacyTitle = doc.createElement('h2'); legacyTitle.textContent = 'Legacy meshes';
+  const legacyList = doc.createElement('ul'); legacyList.id = 'legacy-meshes';
+  legacySection.append(legacyTitle, legacyList); pendingSection.after(legacySection);
+  legacySection.hidden = true;
+  const legacyRows = new Map();
 
   let disposed = false, disposal, lastSuccess, nextRow = 0;
   const rows = new Map();
@@ -110,6 +117,24 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
         for (const [key, entry] of pendingRows) if (!pendingKeys.has(key)) { entry.row.remove(); pendingRows.delete(key); }
         pendingSection.hidden = pendingRows.size === 0;
+        const legacyPeers = new Set(discovery.legacy.map(t => t.peer));
+        for (const [peer, entry] of legacyRows) if (!legacyPeers.has(peer)) { entry.row.remove(); legacyRows.delete(peer); }
+        for (const thread of discovery.legacy) {
+          let entry = legacyRows.get(thread.peer);
+          if (!entry) {
+            const row = doc.createElement('li'), label = doc.createElement('p'), button = doc.createElement('button');
+            label.textContent = thread.peer; button.textContent = 'Convert to Contact'; button.type = 'button';
+            entry = {row, thread};
+            entry.refresh = legacyHandoff(app, button, status,
+              'Convert this legacy mesh to a Contact using connect-agents-with-anyone. Create and share a new Event channel with this exact peer, preserve the old records, record converted_from_mesh provenance, and send the authorized final legacy upgrade notice using the legacy instructions. Do not delete old records.',
+              () => ({peer_fulcra_userid:entry.thread.peer, legacy_sources:entry.thread.sources.map(({id,fulcra_userid})=>({id,fulcra_userid}))}),
+              {lifecycle:detail.contextLifecycle,isCurrent:()=>!disposed && row.isConnected && !list.closest('[hidden]')});
+            row.append(label, button); legacyList.append(row); legacyRows.set(thread.peer, entry);
+          }
+          entry.thread = thread;
+          entry.refresh();
+        }
+        legacySection.hidden = legacyRows.size === 0;
         if (launchPending) {
           launchPending = false;
           const matches = discovery.threads.filter(t => t.peer === requestedPeer);

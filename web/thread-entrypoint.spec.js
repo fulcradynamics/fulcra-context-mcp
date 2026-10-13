@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile } from 'node:fs/promises';
 const bundle = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 async function open(page, options = {}) {
@@ -9,7 +9,7 @@ async function open(page, options = {}) {
     const frame = document.querySelector('iframe');
     window.options = options; window.calls = []; window.contexts = []; window.sends = []; window.samples = [];
     window.peers = ['peer', 'other']; window.note = 'Untrusted peer text';
-    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
     window.reject = id => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, error: { code: -32603, message: 'Rejected' } }, '*');
     window.initial = () => frame.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: {
       content: [], structuredContent: { presentation: 'thread', peer_fulcra_userid: options.peer ?? null },
@@ -25,7 +25,7 @@ async function open(page, options = {}) {
       if (r.method === 'tools/call') {
         window.calls.push(r);
         const { name, arguments: args } = r.params;
-        const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': window.peers.map(peer => ({ id: 'MomentAnnotation/in', name: 'Mesh Outbox', fulcra_userid: peer })) })
+        const text = name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': window.peers.map(peer => ({ id: 'Event/in', name: 'Mesh Outbox', fulcra_userid: peer })) })
           : name === 'list_shares' ? 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', incoming: [], outgoing: [] })
           : `Records for ${args.data_type} from start to end: ` + JSON.stringify([{ id: 'one', note: window.note }]);
         window.reply(r.id, { content: [{ type: 'text', text }] });
@@ -78,7 +78,7 @@ test('exact original nonblank text is sent once only after context ack', async (
   const context = await page.evaluate(() => window.contexts[0].params.content[0].text);
   expect(context.length).toBeLessThanOrEqual(24000);
   expect(context).toContain('peer_fulcra_userid');
-  expect(context).toContain('MomentAnnotation/in');
+  expect(context).toContain('Event/in');
 });
 for (const noCapability of ['noMessage', 'noContext']) test(`send unavailable honestly: ${noCapability}`, async ({ page }) => {
   const ui = await open(page, { peer: 'peer', [noCapability]: true });
@@ -177,7 +177,7 @@ test('sampling is explicit, bounded, and suggestions only populate the draft', a
   expect(request.includeContext).toBe('none');
   expect(request.messages[0].content.text.length).toBeLessThanOrEqual(24000);
   expect(request.messages[0].content.text).toContain('peer_fulcra_userid');
-  expect(request.messages[0].content.text).toContain('MomentAnnotation/in');
+  expect(request.messages[0].content.text).toContain('Event/in');
   expect(request.systemPrompt).toContain('untrusted');
 });
 for (const mode of ['noSampling', 'failSampling']) test(`sampling ${mode} is truthful`, async ({ page }) => {

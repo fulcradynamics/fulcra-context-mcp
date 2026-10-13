@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile } from 'node:fs/promises';
 const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
-const own = { id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox Same' };
-const peer = { id: 'MomentAnnotation/00000000-0000-0000-0000-000000000002', name: 'Mesh Outbox Same', fulcra_userid: 'peer-user' };
-const second = { ...own, id: 'MomentAnnotation/00000000-0000-0000-0000-000000000003' };
+const own = { id: 'Event/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox Same' };
+const peer = { id: 'Event/00000000-0000-0000-0000-000000000002', name: 'Mesh Outbox Same', fulcra_userid: 'peer-user' };
+const second = { ...own, id: 'Event/00000000-0000-0000-0000-000000000003' };
 const other = { ...peer, fulcra_userid: 'other-user' };
 async function open(page, { paired = true, multiple = false, outgoingOnly = false, supported = true, peerId = 'peer-user', safeAreaInsets } = {}) {
   await page.setContent('<iframe sandbox="allow-scripts"></iframe>');
@@ -12,13 +12,13 @@ async function open(page, { paired = true, multiple = false, outgoingOnly = fals
     const grant = id => ({ data_types: [id], with_user_ids: [peerId], share_all_data: false });
     window.entries = [own, ...(outgoingOnly ? [] : [peer, peer]), other, ...(multiple ? [second] : [])];
     window.discovery = [];
-    window.shares = { own_fulcra_userid: 'me', outgoing: paired ? [grant(own.id), grant(own.id), ...(multiple ? [grant(second.id)] : [])] : [], incoming: [] };
+    window.shares = { own_fulcra_userid: 'me', outgoing: paired ? [grant(own.id), ...(multiple ? [grant(second.id)] : [])] : [], incoming: [] };
     window.reads = [];
     window.agentRequests = [];
     window.contexts = [];
     window.resizeNotifications = [];
     const frame = document.querySelector('iframe');
-    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    window.reply = (id, result) => frame.contentWindow.postMessage({ jsonrpc: '2.0', id, result:window.connectionResult(result) }, '*');
     window.addEventListener('message', event => {
       if (event.source !== frame.contentWindow) return;
       const message = event.data;
@@ -285,7 +285,7 @@ test('one row per exact peer, all same-peer channels latest first, one top compo
   await expect(rows.last().locator('p').first()).toHaveText(`Incoming (${peer.name})`);
   await expect(rows.nth(1).locator('p').first()).toHaveText('Outgoing');
   await expect(rows.first().locator('p').first()).toHaveText('Outgoing');
-  await expect(ui.locator('#messages')).not.toContainText('MomentAnnotation/');
+  await expect(ui.locator('#messages')).not.toContainText('Event/');
   await expect(rows.last().locator('pre')).toHaveText('<img src=x onerror=alert(1)>unacked reply');
   await expect(ui.locator('#messages img')).toHaveCount(0);
   await expect(tell(ui)).toHaveCount(1);

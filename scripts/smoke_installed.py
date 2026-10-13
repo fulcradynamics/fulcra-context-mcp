@@ -1,0 +1,48 @@
+"""Run with an isolated wheel installation's Python, never an editable checkout.
+
+Only metadata, readiness tools and packaged resources are requested. No account
+credentials or backend requests are needed. The child receives isolated HOME/XDG.
+"""
+import asyncio
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+import fulcra_mcp
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+
+async def main():
+    installed = Path(fulcra_mcp.__file__).resolve()
+    assert 'site-packages' in str(installed), installed
+    with tempfile.TemporaryDirectory(prefix='wheel-smoke-') as home:
+        env = {**os.environ, 'HOME': home, 'XDG_CONFIG_HOME': home,
+               'FULCRA_ENVIRONMENT': 'stdio'}
+        params = StdioServerParameters(command=str(Path(sys.executable).parent / 'fulcra-context-mcp'), env=env, cwd=home)
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                tools = {t.name:t for t in (await client.list_tools()).tools}
+                schema = tools['mesh_send'].inputSchema
+                assert {'sender','body','mid','outbox','peer_userid'} <= set(schema['required'])
+                assert 'peer_agent' not in schema['properties']
+                assert 'send_agent_message' in tools
+                assert 'start_time' not in tools['get_records'].inputSchema['required']
+                for name, uri, marker in (
+                    ('aicq_open', 'ui://fulcra/mesh/v29.html', 'global'),
+                    ('mesh_threads_open', 'ui://fulcra/mesh/threads/v29.html', 'threads'),
+                    ('mesh_conversation_open', 'ui://fulcra/mesh/thread/v29.html', 'thread'),
+                ):
+                    opened = await client.call_tool(name, {})
+                    assert not opened.isError
+                    text = (await client.read_resource(uri)).contents[0].text
+                    assert f'name="mesh-presentation" content="{marker}"' in text
+                    for value in ('connect-agents-with-anyone', 'Converted from mesh', 'Convert to Contact', 'chat about old messages'):
+                        assert value in text, value
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v29 entrypoints/resources verified.')
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

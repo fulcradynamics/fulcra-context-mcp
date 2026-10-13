@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './presentation-fixtures.js';
 import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
 
 for (const scenario of [
   { name: 'empty', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: {}' }] }, expected: '0 threads' },
-  { name: 'populated', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [{ id: 'MomentAnnotation/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox Same', fulcra_userid: '<b>peer-id</b>' }] }) }] }, expected: '1 threads' },
+  { name: 'populated', result: { content: [{ type: 'text', text: 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [{ id: 'Event/00000000-0000-0000-0000-000000000001', name: 'Mesh Outbox Same', fulcra_userid: '<b>peer-id</b>' }] }) }] }, expected: '1 threads' },
   { name: 'error', result: { isError: true, content: [{ type: 'text', text: 'Access denied' }] }, expected: 'Could not load' },
 ]) {
 test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`, async ({ page }) => {
@@ -36,9 +36,9 @@ test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`,
   await expect.poll(() => page.evaluate(() => window.requests.filter(r => r.method === 'tools/call').length)).toBe(2);
   await page.evaluate((result) => {
     const request = window.requests.find(r => r.method === 'tools/call' && r.params.name === 'get_data_catalog');
-    document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: request.id, result }, '*');
+    document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: request.id, result:window.connectionResult(result) }, '*');
     const shares = window.requests.find(r => r.method === 'tools/call' && r.params.name === 'list_shares');
-    document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: shares.id, result: { content: [{ type: 'text', text: 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [], incoming: [] }) }] } }, '*');
+    document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', id: shares.id, result: window.connectionResult({ content: [{ type: 'text', text: 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [], incoming: [] }) }] }) }, '*');
   }, scenario.result);
   await expect(ui.locator('#mesh-status')).toContainText(scenario.expected);
   if (scenario.name === 'populated') {
@@ -51,7 +51,7 @@ test(`real SDK loads meshes (${scenario.name}) on open; invitation still works`,
   const messages = await page.evaluate(() => window.requests.filter(r => r.method === 'ui/message'));
   expect(messages).toHaveLength(1);
   expect(messages[0].params.role).toBe('user');
-  expect(messages[0].params.content[0].text).toContain('fulcra-mesh');
+  expect(messages[0].params.content[0].text).toContain('connect-agents-with-anyone');
   expect(messages[0].params.content[0].text).toContain('First show me a copyable invitation prompt');
   expect(messages[0].params.content[0].text).toContain("Do not ask for the other user's ID");
   expect(messages[0].params.content[0].text).toContain('optional context');

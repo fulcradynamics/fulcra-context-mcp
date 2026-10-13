@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { discoverThreads, loadMeshes, parseMeshes } from './meshes.js';
+import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 test('identifier is display only, outgoing preferred, stable type-ID tie break and fallback', async () => {
   const labeled = (id, owner, label) => ({ ...entry(id, owner), description: `Prose [mesh_identifier: ${JSON.stringify(label)}]` });
@@ -11,7 +12,7 @@ test('identifier is display only, outgoing preferred, stable type-ID tie break a
     assert.deepEqual(result.rows.map(r => r.button.textContent), ['<b>Trip</b> (other)', '<b>Trip</b> (peer)', 'unknown']);
     assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer', 'unknown']);
     assert.equal(result.selections[1].sources.length, 3);
-    assert.equal(result.selections[1].sources.find(s => s.id === 'MomentAnnotation/a').name, 'Mesh Outbox same name');
+    assert.equal(result.selections[1].sources.find(s => s.id === 'Event/a').name, 'Mesh Outbox same name');
     assert.deepEqual(result.calls.map(c => c.name), ['get_data_catalog', 'list_shares']);
   }
   catalog[1].description = '[mesh_identifier: "Renamed"]';
@@ -37,8 +38,9 @@ test('failed discovery drains both requests before releasing the scheduler', asy
 
 test('sharing account names are labeled without inventing agent names or grouping by name', async () => {
   const result = await discoverThreads({ async callServerTool({ name }) {
-    return text(name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')] })
+    return text(name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')].map(channelFixture) })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [], incoming: [
+        ...incomingFixtures([entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')]),
         { sharing_fulcra_userid: 'peer', sharing_fulcra_user_name: 'Alex' },
         { sharing_fulcra_userid: 'other', sharing_fulcra_user_name: 'Alex' },
       ] }));
@@ -46,8 +48,8 @@ test('sharing account names are labeled without inventing agent names or groupin
   assert.deepEqual(result.threads.map(t => [t.peer, t.accountName]), [['other', 'Alex'], ['peer', 'Alex'], ['unknown', undefined]]);
 });
 
-const entry = (id, owner) => ({ id: `MomentAnnotation/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
-const grant = (id, peer = 'peer') => ({ data_types: [`MomentAnnotation/${id}`], with_user_ids: [peer], share_all_data: false });
+const entry = (id, owner) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
+const grant = (id, peer = 'peer') => ({ data_types: [`Event/${id}`], with_user_ids: [peer], share_all_data: false });
 const text = result => ({ structuredContent: { result } });
 async function load(catalog, outgoing = [], own = 'me') {
   const rows = [], selections = [], calls = [], status = {};
@@ -55,15 +57,15 @@ async function load(catalog, outgoing = [], own = 'me') {
   await loadMeshes({ async callServerTool(call) {
     calls.push(call);
     return text(call.name === 'get_data_catalog'
-      ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, outgoing, incoming: [] }));
+      ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) })
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, outgoing:outgoing.map(shareFixture), incoming: incomingFixtures(catalog, own) }));
   } }, status, list, thread => selections.push(thread));
   for (const row of rows) row.button.click();
   return { rows, selections, calls, status: status.textContent };
 }
 
 test('one exact peer row deduplicates both sides and multiple narrow channels; names do not group peers', async () => {
-  const result = await load([entry('own'), entry('own'), entry('second'), entry('same', 'peer'), entry('same', 'peer'), entry('same', 'other')], [grant('own'), grant('own'), grant('second')]);
+  const result = await load([entry('own'), entry('own'), entry('second'), entry('same', 'peer'), entry('same', 'peer'), entry('same', 'other')], [grant('own'), grant('second')]);
   assert.match(result.status, /2 threads/);
   assert.deepEqual(result.rows.map(r => r.button.textContent), ['other', 'peer']);
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
@@ -78,7 +80,7 @@ test('only catalog groups compatible with get_records are readable', () => {
 test('orphans and self do not become threads; broad/mixed grants cannot hide behind a narrow grant', async () => {
   for (const extra of [
     { ...grant('own'), with_user_ids: ['peer', 'other'] },
-    { ...grant('own'), data_types: ['MomentAnnotation/own', 'StepCount'] },
+    { ...grant('own'), data_types: ['Event/own', 'StepCount'] },
     { share_all_data: true },
     { ...grant('own'), with_group_ids: ['group'] },
     { ...grant('own'), file_paths: ['/'] },

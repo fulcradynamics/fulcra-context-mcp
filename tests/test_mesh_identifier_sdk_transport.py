@@ -119,7 +119,7 @@ async def test_stale_readback(backend):
 
 @pytest.mark.parametrize('value', [TYPE_ID.upper(), 'MomentAnnotation/' + TYPE_ID.split('/')[1].upper(), TYPE_ID + '/..', TYPE_ID + '?x=1', TYPE_ID + '%2f', TYPE_ID + '\n'])
 async def test_noncanonical_id_no_requests(backend, value):
-    assert 'exact MomentAnnotation' in await tools.set_mesh_identifier(value, 'Travel')
+    assert 'exact Event/<uuid> or MomentAnnotation/<uuid>' in await tools.set_mesh_identifier(value, 'Travel')
     assert backend['calls'] == []
 
 

@@ -1,4 +1,10 @@
 const options = { timeout: 15000 };
+const lifecycles = new WeakMap();
+
+export function getContextLifecycle(app, status, presentation = 'global') {
+  if (!lifecycles.has(app)) lifecycles.set(app, createContextLifecycle(app, status, presentation));
+  return lifecycles.get(app);
+}
 
 // One queue for the app, not one per peer: an old attach must settle before its
 // empty replacement, and before a new peer can attach. No poll reattaches data.
@@ -18,7 +24,8 @@ export function createContextLifecycle(app, status, presentation = 'global') {
     clearing = enqueue(async () => {
       try {
         // SDK content is an array; empty content replaces the previous context.
-        await app.updateModelContext({ content: [] }, options);
+        const result = await app.updateModelContext({ content: [] }, options);
+        if (result?.isError) throw new Error('Context clear rejected');
         dirty = false;
         report('Thread context cleared. The next chat handoff will attach the current display before sending.');
       } catch {
@@ -29,6 +36,8 @@ export function createContextLifecycle(app, status, presentation = 'global') {
   }
   return {
     pending: false,
+    handoffLocks: new Set(),
+    isClear: () => !dirty,
     requestSequence: 0,
     samplingPending: false,
     onChange: () => {},
@@ -38,7 +47,8 @@ export function createContextLifecycle(app, status, presentation = 'global') {
       return enqueue(async () => {
         if (disposed || epoch !== token) return false;
         dirty = true; // Even a timeout is not proof of nondelivery.
-        await app.updateModelContext({ content: [{ type: 'text', text }] }, options);
+        const result = await app.updateModelContext({ content: [{ type: 'text', text }] }, options);
+        if (result?.isError) throw new Error('Context attach rejected');
         return !disposed && epoch === token;
       });
     },

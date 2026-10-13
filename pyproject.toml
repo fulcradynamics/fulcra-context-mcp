@@ -45,4 +45,4 @@ fulcra-context-mcp = "fulcra_mcp.main:main"
 include = ["fulcra_mcp*"]
 
 [tool.setuptools.package-data]
-fulcra_mcp = ["ui/*.html", "static/icon.png", "static/.well-known/*.json"]
+fulcra_mcp = ["ui/*.html", "static/icon.png", "static/*.json", "static/.well-known/*.json"]

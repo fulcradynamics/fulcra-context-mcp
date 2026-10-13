@@ -18,15 +18,15 @@ test('errors and malformed results are not empty history', () => {
   }
 });
 
-test('recognized v1 notes display only the existing body, without generated metadata', () => {
+test('Event messages display only literal body, without generated metadata', () => {
   const body = '  <b>Hello</b>\nkind: literal body text\n';
-  assert.equal(messageText({ note: JSON.stringify({ v: 1, mid: 'm', to: 'chatgpt', to_user: 'peer', kind: 'directive', slug: 'hello', body }) }), body);
-  assert.equal(messageText({ note: JSON.stringify({ v: 1, body: '' }) }), '');
+  assert.equal(messageText({sender:'peer',kind:'message',body}), body);
+  assert.equal(messageText({sender:'peer',kind:'ack',body:''}), '');
 });
 
-test('unknown raw notes stay intact without new parsing or normalization', () => {
+test('legacy notes are not rendered by connection UI', () => {
   for (const note of ['not JSON', '  kind: note\n\nraw body  ', '{"v":2,"body":"future"}', '{"v":1,"body":42}', 'null']) {
-    assert.equal(messageText({ note }), `Unrecognized mesh envelope — raw note:\n${note}`);
+    assert.equal(messageText({ note }), 'Unrecognized connection record.');
   }
-  assert.match(messageText({}), /no note/i);
+  assert.equal(messageText({}), 'Unrecognized connection record.');
 });

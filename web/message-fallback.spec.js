@@ -22,7 +22,7 @@ for (const name of [undefined, '', '  ', 42]) test(`missing catalog label (${JSO
   }, name);
   await expect(page.locator('#messages li > p').first()).toHaveText('Incoming (Catalog name unavailable)');
   await expect(page.locator('.message-date')).toHaveText('Timestamp unavailable');
-  expect(await page.locator('#messages pre').textContent()).toBe('Unrecognized mesh envelope — raw note:\n  raw note\nkind: leave this alone  ');
+  expect(await page.locator('#messages pre').textContent()).toBe('Unrecognized connection record.');
   await expect(page.locator('#thread-context')).toContainText('exact-peer');
   await expect(page.locator('#thread-context')).toContainText('MomentAnnotation/exact-type');
 });

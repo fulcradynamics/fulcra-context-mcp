@@ -1,17 +1,13 @@
-const fields = ['v', 'mid', 'to', 'to_user', 'kind', 'pri', 'slug', 'body'];
-function envelope(record) {
-  try { const value = JSON.parse(record.note); return value?.v === 1 ? value : {}; } catch { return {}; }
-}
+const fields = ['id', 'sender', 'kind', 'body', 'recipients', 'topic', 'priority', 'in_reply_to', 'artifacts'];
 const sameSource = (a, b) => a.id === b.id && a.fulcra_userid === b.fulcra_userid;
 export function recipientAgent(messages, source, peer) {
   const names = new Set(messages.filter(m => m.direction === 'Outgoing' && sameSource(m.source, source))
-    .map(m => envelope(m.record)).filter(e => e.to_user === peer && typeof e.to === 'string' && e.to.trim()).map(e => e.to));
-  return names.size === 1 ? [...names][0] : '';
+    .map(m => m.record.sender).filter(s => typeof s === 'string' && s.trim()));
+  return names.size === 1 ? [...names][0] : 'chatgpt';
 }
 export function matchesPost(message, post) {
-  const env = envelope(message.record);
   return message.direction === 'Outgoing' && sameSource(message.source, post.source)
-    && Object.keys(env).length === fields.length && fields.every(k => env[k] === post.envelope[k]);
+    && fields.every(k => JSON.stringify(message.record[k]) === JSON.stringify(post.envelope[k]));
 }
 export function clearPostedDraft(draft, post) {
   if (draft.version === post.version) { draft.value = ''; draft.version++; }

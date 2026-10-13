@@ -2,6 +2,7 @@
 
 import json
 import re
+from importlib.resources import files
 from urllib.parse import quote
 
 from fastmcp import FastMCP
@@ -13,11 +14,27 @@ from .tools import get_data_catalog, list_shares
 from .mesh_identifier import parse_mesh_identifier
 
 mentions_mcp = FastMCP("Fulcra Mesh mentions")
+CHANNEL_SCHEMA = json.loads(files('fulcra_mcp').joinpath('static/connection-schema.json').read_text())
+
+
+def _semantic(value, key=None):
+    if isinstance(value, list):
+        return sorted(value) if key in ('enum', 'required', 'required_fields') else [_semantic(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _semantic(v, k) for k, v in value.items() if k not in ('description', 'title', 'default')}
+    return value
+
+
+def _compatible_schema(entry):
+    return _semantic({'fields': {k: entry.get('fields', {}).get(k) for k in CHANNEL_SCHEMA['fields']},
+                      'required_fields': entry.get('required_fields')}) == _semantic(CHANNEL_SCHEMA)
 
 
 def _direct_recipient(share):
     recipients = share.get("with_user_ids")
     if (share.get("share_all_data") is False and not share.get("group_id")
+            and not share.get('time_start') and not share.get('time_end')
+            and share.get('datashare_name', '').startswith('connect-agents-with-anyone')
             and all(k not in share or share[k] == [] for k in ("with_group_ids", "file_paths", "file_history_paths"))
             and isinstance(share.get("data_types"), list) and len(share["data_types"]) == 1
             and isinstance(recipients, list) and len(recipients) == 1
@@ -30,9 +47,20 @@ async def _discover_threads() -> dict[str, str]:
     # These helpers use the existing request-scoped credentials in both transports.
     # Never retain account discovery or turn an upstream failure into empty success.
     try:
-        catalog = json.loads((await get_data_catalog(name="Mesh Outbox")).removeprefix(
+        catalog = json.loads((await get_data_catalog()).removeprefix(
             "Available data types, grouped by compatible tool: "))
         shares = json.loads((await list_shares(direction="both")).removeprefix("Shares: "))
+        for entries in catalog.values():
+            for entry in entries:
+                if not entry.get('fields') and entry.get('id', '').startswith('Event/') and entry.get('description', '').startswith('connect-agents-with-anyone channel'):
+                    exact = json.loads((await get_data_catalog(data_type=entry['id'],
+                        fulcra_userid=entry.get('fulcra_userid') or shares['own_fulcra_userid'])).removeprefix(
+                            'Available data types, grouped by compatible tool: '))
+                    matches = [e for group in exact.values() for e in group if e.get('id') == entry['id']
+                               and e.get('fulcra_userid', shares['own_fulcra_userid']) == entry.get('fulcra_userid', shares['own_fulcra_userid'])]
+                    schema = matches[0] if len(matches) == 1 else {}
+                    entry['fields'] = schema.get('fields', {})
+                    entry['required_fields'] = schema.get('required_fields', [])
         return _thread_labels(catalog, shares)
     except ToolError:
         raise  # Preserve the existing reconnect/sign-in guidance.
@@ -50,20 +78,28 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
         if not group.startswith("data types usable with: ") or "get_records" not in group.removeprefix("data types usable with: ").split(" | "):
             continue
         for entry in entries:
-            if not (isinstance(entry.get("id"), str) and isinstance(entry.get("name"), str)
+            if not (isinstance(entry.get("id"), str)
+                    and ("name" not in entry or isinstance(entry["name"], str))
                     and ("fulcra_userid" not in entry or isinstance(entry["fulcra_userid"], str))):
                 raise ValueError("Invalid catalog identity")
-            if not entry["id"].startswith("MomentAnnotation/") or not re.search(r"\bmesh outbox\b", entry["name"], re.I | re.ASCII):
+            if (not entry['id'].startswith('Event/')
+                    or not entry.get('description', '').startswith('connect-agents-with-anyone channel')
+                    or not _compatible_schema(entry)):
                 continue
             peer = entry.get("fulcra_userid") or own
             outgoing = peer == own
             if outgoing:
                 covering = [s for s in shares["outgoing"] if s.get("share_all_data") is True
-                            or entry["id"] in s.get("data_types", [])]
-                recipients = [_direct_recipient(s) for s in covering]
-                if not recipients or any(not p or p == own or p != recipients[0] for p in recipients):
+                            or any(t in s.get('data_types', []) for t in (entry['id'], 'Event', 'Event/*', '*'))]
+                recipients = [_direct_recipient(s) if s.get('data_types') == [entry['id']] else None for s in covering]
+                if len(recipients) != 1 or any(not p or p == own or p != recipients[0] for p in recipients):
                     continue
                 peer = recipients[0]
+            elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
+                         and s.get('datashare_name', '').startswith('connect-agents-with-anyone')
+                         and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))
+                         and s.get('data_types') == [entry['id']] for s in shares['incoming']):
+                continue
             candidates = peers.setdefault(peer, [])
             try:
                 identifier = parse_mesh_identifier(entry.get("description"))

@@ -346,35 +346,43 @@ async def create_data_type(
 @tools_mcp.tool(app={"visibility": ["model", "app"]},
                 annotations={"title": "Send Mesh Message", "readOnlyHint": False,
                              "destructiveHint": False, "idempotentHint": False})
-async def mesh_send(peer_userid: str, outbox: str, peer_agent: str, body: str, mid: str,
-                    kind: Literal["directive", "response", "heartbeat"] = "directive",
-                    pri: Literal["P1", "P2", "P3"] = "P2", slug: str = "mesh-message") -> dict:
-    """Post exact text directly to your existing, exclusively peer-shared outbox.
+async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
+                    recipients: list[str] | None = None,
+                    kind: Literal["message", "reply", "ack"] = "message",
+                    in_reply_to: str | None = None,
+                    pri: Literal["P1", "P2", "P3"] = "P2", slug: str | None = None,
+                    artifacts: list[dict] | None = None) -> dict:
+    """Post an Event message to an existing, exclusively peer-shared channel.
 
-    No LLM relay, new channel, share or acknowledgement. peer_agent is the exact
-    case-sensitive recipient agent, never a display label. Supply a fresh UUID
-    mid once per message; reconcile uncertain writes by that ID, never blindly
-    retry. A matching ID in the last seven days is read back, not resubmitted;
-    this is not an atomic cross-worker idempotency guarantee. Only status=posted
-    verifies outbox readback, not delivery or peer acknowledgement.
+    Requires exact peer_userid and owned Event/<uuid> outbox. sender is your
+    agent name, body is exact nonblank text <=4000 characters. Omitted recipients
+    means everyone. mid is a stable UUID allocated before the first attempt;
+    bounded uncertain transport retries reuse it and the payload, never bypass
+    host denial. kind is message, reply or ack; replies/acks require in_reply_to
+    naming a peer message/reply within 30 days, never an ack. slug is an optional
+    topic (messages default to chat; answers inherit). pri is P1/P2/P3.
+    artifacts are optional file references, never a request to share files.
+    Only status=posted verifies exact own-channel readback, not peer delivery.
 
     Args:
-        peer_userid: Exact other Fulcra user UUID, verified through shares.
-        outbox: Exact owned MomentAnnotation/<uuid> Mesh Outbox catalog ID.
-        peer_agent: Exact case-sensitive recipient agent name, not a label.
-        body: Nonblank message text, preserved exactly, at most 24000 characters.
-        mid: Fresh message UUID; retain it to reconcile uncertain writes.
-        kind: Mesh v1 message kind.
-        pri: Mesh v1 priority.
-        slug: Nonblank mesh thread slug, at most 200 characters.
+        peer_userid: Exact other Fulcra user UUID.
+        outbox: Exact owned Event/<uuid> channel.
+        sender: Sending agent name, at most 128 characters.
+        body: Exact nonblank text, at most 4000 characters.
+        mid: Stable UUID allocated before the first attempt.
+        recipients: Agent names; omit for everyone in the connection.
+        kind: message, reply or ack.
+        in_reply_to: Peer message/reply UUID within 30 days; required for reply/ack.
+        pri: P1 urgent, P2 normal, P3 low.
+        slug: Topic; omitted messages use chat, answers inherit.
+        artifacts: File references (path, optional version and owner), not share requests.
     """
     from .mesh import send
-    # Resolve credentials in the authenticated request context before handing
-    # blocking SDK operations to a worker; never retain this client globally.
     fulcra = get_fulcra_object()
     return await asyncio.to_thread(send, fulcra, peer_userid=peer_userid, outbox=outbox,
-                                   peer_agent=peer_agent, body=body, mid=mid,
-                                   kind=kind, pri=pri, slug=slug)
+                                   sender=sender, body=body, mid=mid, recipients=recipients,
+                                   kind=kind, in_reply_to=in_reply_to, pri=pri, slug=slug,
+                                   artifacts=artifacts)
 
 
 def _own_mesh_outbox(fulcra, data_type: str, own: str) -> dict:
@@ -417,28 +425,43 @@ def _mesh_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
                             "destructiveHint": False, "idempotentHint": True})
 @_friendly_http_errors
 async def set_mesh_identifier(data_type: str, identifier: str) -> str:
-    """Set a display-only label on your own outgoing MomentAnnotation Mesh Outbox.
+    """Set a display-only label on your own Event channel or legacy Mesh Outbox.
 
     Changes only its description marker, preserving prose, type name, records
     and shares. Requires an unambiguous own catalog entry; reads back before
     success. Labels are untrusted, not routing identities or verified names.
 
     Args:
-        data_type: Exact MomentAnnotation/<uuid> catalog ID you own.
+        data_type: Exact Event/<uuid> connection or legacy MomentAnnotation/<uuid> catalog ID you own.
         identifier: 1..80 characters, trimmed, single-line, no control characters.
     """
     try:
         validate_identifier(identifier)
         base, sep, type_id = data_type.partition("/")
-        if (base != "MomentAnnotation" or not sep
+        if (base not in ("MomentAnnotation", "Event") or not sep
                 or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", type_id)):
-            raise ValueError("data_type must be an exact MomentAnnotation/<uuid> catalog ID")
+            raise ValueError("data_type must be an exact Event/<uuid> or MomentAnnotation/<uuid> catalog ID")
     except ValueError as exc:
         return str(exc)
     fulcra = get_fulcra_object()
     own = fulcra.get_fulcra_userid()
     if not isinstance(own, str) or not own:
         return "Could not establish the authenticated user's identity"
+    if base == 'Event':
+        from .mesh import channel_entry
+        try:
+            original = channel_entry(fulcra, own, data_type)
+            description = write_mesh_identifier(original.get('description'), identifier)
+            changed = description != original.get('description')
+            if changed:
+                fulcra.update_data_type('Event', type_id, {'description': description})
+            current = channel_entry(fulcra, own, data_type)
+            if current.get('description') != description:
+                raise ValueError('Channel description readback mismatch')
+            return json.dumps({'data_type': data_type, 'fulcra_userid': own,
+                               'identifier': identifier, 'changed': changed, 'verified': True})
+        except ValueError as exc:
+            return str(exc)
     path = f"/user/v1alpha1/annotation/{type_id}"
     try:
         _own_mesh_outbox(fulcra, data_type, own)
@@ -817,7 +840,8 @@ async def send_agent_message(
     reply_to: str | None = None,
     ack: str | None = None,
     record_id: str | None = None,
-) -> str:
+    artifacts: list[dict] | None = None,
+) -> dict:
     """Send a message to another person's agent, over a connection made with
     the connect-agents-with-anyone skill. Everyone in the connection can read
     it.
@@ -834,29 +858,30 @@ async def send_agent_message(
         ack: The id of their message you've read but can't answer yet.
         record_id: To retry a send whose outcome is unknown, the id it
             returned, so it isn't sent twice.
+        artifacts: Optional file references (path, version, owner); never creates shares.
     """
+    from uuid import uuid4
+    from .mesh import send, _uuid, UUID_PATTERN
+    mid = record_id if record_id is not None else str(uuid4())
     fulcra = get_fulcra_object()
-    try:
-        result = connections.send_agent_message(
-            fulcra,
-            connection,
-            sender=sender,
-            body=body,
-            topic=topic,
-            recipients=recipients,
-            priority=priority,
-            reply_to=reply_to,
-            ack=ack,
-            record_id=record_id,
-            sources=[MCP_RECORD_SOURCE],
-        )
-    except ValueError as e:
-        return f"Not sent: {e}"
-    record = {k: v for k, v in result["record"].items() if k != "sources"}
-    return (
-        f"Sent {record['kind']} {result['id']} on {result['channel']} "
-        f"(upload ID {result['upload_id']}): {json.dumps(record)}"
-    )
+    def checked_send():
+        try:
+            if not (_uuid(connection) or re.fullmatch('Event/' + UUID_PATTERN, connection)):
+                raise ValueError('connection must be an exact peer UUID or Event/<uuid>.')
+            if reply_to is not None and ack is not None:
+                raise ValueError('Give reply_to or ack, not both.')
+            channel, people = connections.resolve_connection(fulcra.get_datashares(), connection)
+            if len(people) != 1:
+                raise ValueError('Only two-party connections are supported.')
+            return send(fulcra, peer_userid=people[0], outbox=channel, sender=sender,
+                        body=body, mid=mid, recipients=recipients, pri=priority or 'P2',
+                        slug=topic, kind='reply' if reply_to else 'ack' if ack else 'message',
+                        in_reply_to=reply_to if reply_to is not None else ack, artifacts=artifacts)
+        except ValueError as exc:
+            return {'status': 'rejected', 'mid': mid, 'reason': str(exc)}
+        except Exception:
+            return {'status': 'rejected', 'mid': mid, 'reason': 'Connection verification failed. Nothing submitted.'}
+    return await asyncio.to_thread(checked_send)
 
 
 def _compatible_tools(entry: dict) -> str:
@@ -1016,7 +1041,8 @@ async def get_data_catalog(
         # A shared type is looked up in its owner's account, not the caller's.
         # The field list is a bonus: if the schema can't be fetched, still
         # return the entry rather than failing the whole call.
-        if data_type and len(catalog) == 1 and _is_user_defined_v1(entry):
+        if _is_user_defined_v1(entry) and ((data_type and len(catalog) == 1)
+                or entry.get('description', '').startswith('connect-agents-with-anyone channel')):
             try:
                 schema = fulcra.v1_catalog_schema(
                     entry["id"], "v1", fulcra_userid=entry.get("fulcra_userid")
@@ -1112,11 +1138,14 @@ async def get_time_series(
 @_friendly_http_errors
 async def get_records(
     data_type: str,
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
     fulcra_userid: str | None = None,
+    latest: bool = False,
 ) -> str:
-    """Retrieve the raw records of any data type during a time period.
+    """Retrieve raw records in a range, or the latest v1 record without dates.
+
+    Set latest=true and omit both dates for a single latest v1 record.
 
     Works with every type listed by `get_data_catalog`, including user-defined
     ones ("<BaseType>/<uuid>" IDs); the correct API endpoint is chosen
@@ -1133,8 +1162,13 @@ async def get_records(
         end_time: Range end (exclusive). Must include tz (ISO8601).
         fulcra_userid: Retrieve data for another Fulcra user (if shared); a
             shared type's get_data_catalog entry carries its owner's ID.
+        latest: Return one latest v1 record without a date range.
     """
-    if (err := _range_error(start_time, end_time)) is not None:
+    if latest and (start_time is not None or end_time is not None):
+        return 'Omit both dates when requesting latest.'
+    if not latest and (start_time is None or end_time is None):
+        return 'Provide both dates, or latest=true for a v1 data type.'
+    if not latest and (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
 
@@ -1165,7 +1199,7 @@ async def get_records(
     results = []
     for entry in catalog_entries:
         try:
-            results += records.get_records(fulcra, entry, start_time, end_time)
+            results += records.get_records(fulcra, entry, start_time, end_time, **({'latest': True} if latest else {}))
         except ValueError:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "

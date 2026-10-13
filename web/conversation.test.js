@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readConversation } from './conversation.js';
 import { discoverThreads } from './meshes.js';
+import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 test('refresh reuses discovery, retains failed-source last-good records as stale and removes revoked sources', async () => {
   const h = harness({ rows: { [`me:${own.id}`]: [{ id: 'one', note: 'good' }], [`peer:${peer.id}`]: [{ id: 'two', note: 'peer good' }] } });
@@ -23,8 +24,8 @@ test('refresh reuses discovery, retains failed-source last-good records as stale
   assert.deepEqual(revoked.messages, []);
 });
 
-const own = { id: 'MomentAnnotation/own', name: 'Mesh Outbox Same name' };
-const peer = { id: 'MomentAnnotation/peer', name: 'Mesh Outbox Same name', fulcra_userid: 'peer' };
+const own = { id: 'Event/own', name: 'Mesh Outbox Same name' };
+const peer = { id: 'Event/peer', name: 'Mesh Outbox Same name', fulcra_userid: 'peer' };
 const outgoing = (id = own.id, recipient = 'peer') => ({ data_types: [id], with_user_ids: [recipient], share_all_data: false });
 const range = { start_time: '2026-01-01T00:00:00.000Z', end_time: '2026-02-01T00:00:00.000Z' };
 const text = result => ({ structuredContent: { result } });
@@ -33,8 +34,8 @@ function harness({ catalog = [own, peer], shares = { own_fulcra_userid: 'me', ou
   const app = { async callServerTool(call) {
     calls.push(call);
     if (fail.includes(call.name)) throw new Error('offline');
-    if (call.name === 'get_data_catalog') return text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog }));
-    if (call.name === 'list_shares') return text('Shares: ' + JSON.stringify(shares));
+    if (call.name === 'get_data_catalog') return text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) }));
+    if (call.name === 'list_shares') return text('Shares: ' + JSON.stringify({...shares, outgoing:shares.outgoing.map(shareFixture), incoming:[...shares.incoming, ...incomingFixtures(catalog)]}));
     assert.equal(call.name, 'get_records', 'no writes, sends or acknowledgement tools');
     const key = `${call.arguments.fulcra_userid ?? 'me'}:${call.arguments.data_type}`;
     if (fail.includes(key)) return { isError: true };
@@ -44,13 +45,13 @@ function harness({ catalog = [own, peer], shares = { own_fulcra_userid: 'me', ou
 }
 
 test('loads all deduplicated channels for exact peer, not other peers; chronological with original source', async () => {
-  const second = { ...own, id: 'MomentAnnotation/second' };
+  const second = { ...own, id: 'Event/second' };
   const h = harness({ catalog: [own, peer, peer, second, { ...peer, fulcra_userid: 'other' }], rows: {
     [`me:${own.id}`]: [{ recorded_at: '2026-01-02T00:00:00Z', note: 'outgoing' }],
     [`me:${second.id}`]: [{ recorded_at: '2026-01-03T00:00:00Z', note: 'second outgoing' }],
     [`peer:${peer.id}`]: [{ recorded_at: '2026-01-01T00:00:00Z', note: '{"v":1,"body":"unacked incoming","to_user":"other"}' }],
   } });
-  h.shares.outgoing.push(outgoing(second.id), outgoing());
+  h.shares.outgoing.push(outgoing(second.id));
   const result = await readConversation(h.app, { peer: 'peer' }, range);
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.messages.map(m => m.direction), ['Incoming', 'Outgoing', 'Outgoing']);
@@ -95,8 +96,8 @@ test('per-source failure and truncation retain other results and provenance in w
   const h = harness({ fail: [`me:${own.id}`], rows: { [`peer:${peer.id}`]: [{ note: 'preserved' }] }, truncated: [`peer:${peer.id}`] });
   const result = await readConversation(h.app, { peer: 'peer' }, range);
   assert.equal(result.messages[0].record.note, 'preserved');
-  assert.match(result.warnings.join(' '), /Could not load messages — Outgoing \(me \/ MomentAnnotation\/own\)/);
-  assert.match(result.warnings.join(' '), /Partial result — Incoming \(peer \/ MomentAnnotation\/peer\)/);
+  assert.match(result.warnings.join(' '), /Could not load messages — Outgoing \(me \/ Event\/own\)/);
+  assert.match(result.warnings.join(' '), /Partial result — Incoming \(peer \/ Event\/peer\)/);
   const failed = await readConversation(harness({ fail: [`me:${own.id}`, `peer:${peer.id}`] }).app, { peer: 'peer' }, range);
   assert.equal(failed.messages.length, 0);
   assert.equal(failed.warnings.length, 2);
