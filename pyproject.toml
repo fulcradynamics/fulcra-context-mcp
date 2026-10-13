@@ -14,6 +14,7 @@ dependencies = [
     "fulcra-api>=0.1.51",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.3",
+    "openpyxl>=3.1",
     "structlog>=25.4.0",
 ]
 
