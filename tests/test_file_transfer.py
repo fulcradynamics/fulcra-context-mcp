@@ -563,6 +563,9 @@ async def test_write_file_hands_out_an_upload_link(call, fake_fulcra, hosted):
     text = await call("write_file", {"path": "/reports/q3.xlsx", "encoding": "upload_link"})
 
     assert "curl -sS -T <local file> 'https://mcp.example/files/upload/" in text
+    # what to do if the sandbox blocks the server: names the link's own host
+    assert "the sandbox is blocking mcp.example." in text
+    assert "Settings > Capabilities > Domain allowlist" in text
     token = text.split("/files/upload/")[1].split("'")[0]
     record = ft._load_record("upload_links", token)
     assert record["path"] == "/reports/q3.xlsx" and record["grant_id"] == "grant-1"

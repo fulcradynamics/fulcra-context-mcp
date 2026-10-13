@@ -6,6 +6,7 @@ import functools
 import json
 import re
 import urllib.error
+import urllib.parse
 from enum import Enum
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
@@ -1739,7 +1740,13 @@ async def write_file(
             "an existing file there gets a new version):\n"
             f"curl -sS -T <local file> '{url}'\n"
             "It replies with the saved file's details. The link saves one file; "
-            "sending to it again returns the same result."
+            "sending to it again returns the same result.\n"
+            f"If curl can't connect (e.g. \"Could not resolve host\" or a 403 from a "
+            f"proxy), the sandbox is blocking {urllib.parse.urlsplit(url).hostname}. In "
+            "Claude, the user can add it under Settings > Capabilities > Domain "
+            "allowlist, or ask their organization's admin. Until then, use "
+            "encoding=\"base64\" for files up to 5 MB, or open_file_manager so the "
+            "user can upload the file."
         )
     if encoding == "base64":
         try:
