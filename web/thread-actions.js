@@ -1,5 +1,5 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
-import { renderIdentity } from './identity.js';
+import { renderThreadIdentity } from './identity.js';
 import { clearPostedDraft, matchesPost, messageId, recipientAgent } from './mesh-send.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
@@ -50,7 +50,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   draft.posts ??= []; draft.agents ??= {};
   const update = () => {
     const current = view();
-    renderIdentity(caption, current.thread?.identifier, current.thread?.peer ?? peerId() ?? 'this thread', 'Talk to ');
+    renderThreadIdentity(caption, current.thread, 'Talk to ');
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
@@ -63,7 +63,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         option.textContent = s.name ? `${s.name}${duplicate ? ` (${s.id})` : ''}` : s.id;
         outbox.append(option);
       }
-      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox : outgoing.length === 1 ? outgoing[0].id : '';
+      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
+        : draft.outbox === undefined && outgoing.length === 1 ? outgoing[0].id : '';
       outbox.value = draft.outbox;
     }
     const selected = outgoing.find(s => s.id === outbox.value);
@@ -97,7 +98,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
-    const peer = peerId(), mid = messageId(), startedAt = Date.now();
+    const audience = view().thread?.expectedPeerUserids;
+    const peer = audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: agent.value, kind: 'message', priority: 'P2', topic: 'chat', body: input.value };
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
@@ -109,6 +111,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     try {
       const response = await app.callServerTool({ name: 'mesh_send', arguments: {
         peer_userid: peer, outbox: post.source.id, sender: envelope.sender, body: envelope.body, mid,
+        ...(audience ? { expected_peer_userids: audience } : {}),
       } }, { timeout: 30000 });
       const result = response.structuredContent ?? JSON.parse(response.content?.find(c => c.type === 'text')?.text ?? '{}');
       if (post.state === 'posted' || (!response.isError && result.status === 'posted' && result.mid === mid

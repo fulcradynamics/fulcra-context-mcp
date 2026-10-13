@@ -54,12 +54,13 @@ function parseShares(result) {
 
 // _slim_share omits empty lists. Only exact, single-channel direct grants
 // establish outgoing recipients. Inspect ALL covering grants, not just narrow ones.
-function directRecipient(share) {
+function directRecipients(share) {
   return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
     && Array.isArray(share.data_types) && share.data_types.length === 1
-    && Array.isArray(share.with_user_ids) && share.with_user_ids.length === 1
-    && typeof share.with_user_ids[0] === 'string' && share.with_user_ids[0];
+    && Array.isArray(share.with_user_ids) && share.with_user_ids.length > 0
+    && share.with_user_ids.every(p => typeof p === 'string' && p)
+    && share.with_user_ids;
 }
 
 export async function discoverThreads(app) {
@@ -93,13 +94,19 @@ export async function discoverThreads(app) {
         if (connection) pending.push(source);
         continue;
       }
-      const recipients = covering.map(s => s.data_types?.[0] === entry.id && directRecipient(s));
-      if (covering.length !== 1 || recipients.some(p => !p || p === own || p !== recipients[0])
+      const grants = covering.map(s => s.data_types?.[0] === entry.id && directRecipients(s));
+      const recipients = [...new Set(grants.flat())].sort();
+      if (recipients.some(p => !p || p === own) || recipients.length > 32
+        || (!connection && recipients.length !== 1)
         || (connection && !covering.every(namedShare))) {
         omitted++;
         continue;
       }
       [peer] = recipients;
+      if (connection && recipients.length > 1) {
+        source.expectedPeerUserids = recipients;
+        peer = 'connection:' + JSON.stringify([own, ...recipients].sort());
+      }
     } else if (!shares.incoming.some(s => s.sharing_fulcra_userid === owner
       && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
       && s.data_types?.length === 1 && s.data_types[0] === entry.id)) {
@@ -117,10 +124,29 @@ export async function discoverThreads(app) {
     const collection = connection ? threads : legacy;
     if (!collection.has(peer)) collection.set(peer, { peer, sources: [], warnings: [] });
     collection.get(peer).sources.push(source);
+    if (source.expectedPeerUserids) {
+      const thread = collection.get(peer);
+      thread.participants = [own, ...source.expectedPeerUserids].sort().map(id => {
+        const names = new Set(shares.incoming.filter(s => s.sharing_fulcra_userid === id)
+          .map(s => s.sharing_fulcra_user_name).filter(n => typeof n === 'string' && n.trim()));
+        return { id, name: id === own ? 'You' : names.size === 1 ? [...names][0] : id };
+      });
+      thread.expectedPeerUserids = source.expectedPeerUserids;
+    }
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
+  // Own audience bounds discovery. Incoming grants prove readable owner/type,
+  // not association or remote audiences; never follow their outgoing audiences.
   for (const thread of threads.values()) {
-    const identifier = threadIdentifier(thread.sources);
+    if (!thread.expectedPeerUserids) continue;
+    for (const member of thread.expectedPeerUserids) {
+      for (const source of threads.get(member)?.sources ?? []) {
+        if (source.direction === 'Incoming') thread.sources.push({ ...source, association: 'unverified' });
+      }
+    }
+  }
+  for (const thread of threads.values()) {
+    const identifier = threadIdentifier(thread.participants ? thread.sources.filter(s => s.direction === 'Outgoing') : thread.sources);
     thread.assessment = aggregateStatus(thread.sources);
     if (identifier) thread.identifier = identifier;
     // tools.py _slim_share exposes an account-owner name, not an agent name.
@@ -129,6 +155,8 @@ export async function discoverThreads(app) {
       .map(s => s.sharing_fulcra_user_name));
     if (names.size === 1) thread.accountName = [...names][0];
     thread.warnings.push(...warnings);
+    if (thread.participants) thread.warnings.push('Own audience only. Available incoming channels from these owners are shared with us; their association and remote audiences are not verified. Select which incoming channels to read below. Matching names are not proof.');
+    else if (thread.sources.some(s => s.direction === 'Incoming')) thread.warnings.push('Incoming channel co-recipients are not disclosed by the service; this is not a verified complete roster.');
     for (const direction of ['Incoming', 'Outgoing']) {
       if (!thread.sources.some(s => s.direction === direction)) thread.warnings.push(`Conversation incomplete — missing ${direction.toLowerCase()} channel for this peer.`);
     }
@@ -138,7 +166,7 @@ export async function discoverThreads(app) {
     // A description is only a claim. Verify owner/type and this exact peer's
     // legacy relationship before exposing history or suppressing conversion.
     for (const source of thread.sources) {
-      const verified = source.conversionClaims.filter(r => old?.sources.some(s => s.id === r.id && s.fulcra_userid === r.fulcra_userid));
+      const verified = (source.conversionClaims ?? []).filter(r => old?.sources.some(s => s.id === r.id && s.fulcra_userid === r.fulcra_userid));
       if (verified.length) source.convertedFrom = verified;
       delete source.conversionClaims;
     }

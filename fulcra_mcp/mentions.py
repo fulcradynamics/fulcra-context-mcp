@@ -37,9 +37,9 @@ def _direct_recipient(share):
             and share.get('datashare_name', '').startswith('connect-agents-with-anyone')
             and all(k not in share or share[k] == [] for k in ("with_group_ids", "file_paths", "file_history_paths"))
             and isinstance(share.get("data_types"), list) and len(share["data_types"]) == 1
-            and isinstance(recipients, list) and len(recipients) == 1
-            and isinstance(recipients[0], str)):
-        return recipients[0]
+            and isinstance(recipients, list) and recipients
+            and all(isinstance(p, str) and p for p in recipients)):
+        return recipients
     return None
 
 
@@ -91,10 +91,13 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
             if outgoing:
                 covering = [s for s in shares["outgoing"] if s.get("share_all_data") is True
                             or any(t in s.get('data_types', []) for t in (entry['id'], 'Event', 'Event/*', '*'))]
-                recipients = [_direct_recipient(s) if s.get('data_types') == [entry['id']] else None for s in covering]
-                if len(recipients) != 1 or any(not p or p == own or p != recipients[0] for p in recipients):
+                grants = [_direct_recipient(s) if s.get('data_types') == [entry['id']] else None for s in covering]
+                if not grants or any(not g for g in grants):
                     continue
-                peer = recipients[0]
+                recipients = sorted({p for g in grants for p in g})
+                if own in recipients or len(recipients) > 32:
+                    continue
+                peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
             elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
                          and s.get('datashare_name', '').startswith('connect-agents-with-anyone')
                          and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))
@@ -111,7 +114,17 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
     for peer in sorted(peers):
         # Match web/mesh-identifier.js: own/outgoing first, then exact type ID.
         identifier = min(peers[peer], key=lambda candidate: candidate[:2])[2] if peers[peer] else None
-        threads[peer] = f"{identifier} ({peer})" if identifier else peer
+        if peer.startswith('connection:'):
+            people = json.loads(peer.removeprefix('connection:'))
+            labels = []
+            for person in people:
+                names = {s.get('sharing_fulcra_user_name') for s in shares['incoming']
+                         if s.get('sharing_fulcra_userid') == person and isinstance(s.get('sharing_fulcra_user_name'), str) and s['sharing_fulcra_user_name'].strip()}
+                name = 'You' if person == own else next(iter(names)) if len(names) == 1 else person
+                labels.append(f'{name} ({person})' if name != person else person)
+            threads[peer] = (f'{identifier} — ' if identifier else 'Multiparty — ') + ', '.join(labels)
+        else:
+            threads[peer] = f"{identifier} ({peer})" if identifier else peer
     return threads
 
 
@@ -130,7 +143,7 @@ async def mesh_mentions_search(query: str) -> ToolResult:
         {"type": "resource_link", "uri": "mesh://threads/id-" + quote(peer, safe=""),
          "name": f"Open Mesh: {title}", "title": f"Open Mesh: {title}",
          "mimeType": "application/json",
-         "description": "Open this exact peer's thread with mesh_conversation_open; resolve this reference for its peer ID."}
+         "description": "Open this exact thread with mesh_conversation_open; resolve this reference for its peer ID or multiparty thread_id."}
         for peer, title in threads.items() if query.strip().casefold() in title.casefold()
     ][:20]
     return ToolResult(content=[], structured_content={"items": items})
@@ -151,8 +164,8 @@ async def mesh_thread_descriptor(peer: str) -> ResourceResult:
     if peer not in threads:
         raise ResourceError("Mesh thread is not available to this account.")
     return ResourceResult([ResourceContent(
-        json.dumps({"peer_fulcra_userid": peer, "title": threads[peer],
+        json.dumps({"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer, "title": threads[peer],
                     "open_tool": {"name": "mesh_conversation_open",
-                                  "arguments": {"peer_fulcra_userid": peer}}}),
+                                  "arguments": {"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer}}}),
         mime_type="application/json",
     )])
