@@ -58,6 +58,18 @@ async def test_a_file_is_served_as_a_blob_resource(client, fake_fulcra):
     )
 
 
+async def test_a_resource_path_is_decoded_once(client, fake_fulcra):
+    # A file literally named "literal%20name.txt" is encoded as %2520.
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="literal%20name.txt", size=2)]
+    _download_returns(fake_fulcra, b"hi")
+
+    await client.read_resource(ft.file_resource_uri("/docs/literal%20name.txt"))
+
+    fake_fulcra.resolve_filepath.assert_called_once_with(
+        "/docs/literal%20name.txt", fulcra_userid=None
+    )
+
+
 async def test_a_shared_file_resource_reads_as_that_user(client, fake_fulcra):
     fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="a.txt", size=2)]
     _download_returns(fake_fulcra, b"hi")

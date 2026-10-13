@@ -154,7 +154,8 @@ def _delete_record(kind: str, key: str) -> None:
 
 def _read_file(path: str, fulcra_userid: str | None) -> list[ResourceContent]:
     fulcra = tools.get_fulcra_object()
-    path = _file_path(urllib.parse.unquote(path))
+    # FastMCP has already percent-decoded the template's path.
+    path = _file_path(path)
     try:
         record = fulcra.resolve_filepath(path, fulcra_userid=fulcra_userid)[0]
     except Exception:
