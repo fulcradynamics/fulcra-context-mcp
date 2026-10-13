@@ -4,6 +4,13 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Native mesh check status (unreleased)
+
+Replaces the dedicated settings action/modal with read-only group-title status
+and plain chat instructions. Pair with plugin 0.4.1 and refresh server discovery.
+No Mesh UI resource change or schedule/checkpoint mutation. Exact native title
+rendering and same-task chat updates need [host acceptance](docs/mesh-settings.md).
+
 ### Latest-message window (UI v34)
 
 Threads open on a window anchored to the latest incoming and outgoing messages,
