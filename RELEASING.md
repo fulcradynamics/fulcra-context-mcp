@@ -4,7 +4,7 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
-### Latest-message window (UI v32)
+### Latest-message window (UI v33)
 
 Threads open on a window anchored to the latest incoming and outgoing messages,
 replacing the date picker; **Load more** adds two weeks. The thread list previews

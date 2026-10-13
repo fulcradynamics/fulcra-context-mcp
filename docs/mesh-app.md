@@ -6,8 +6,8 @@ mention IDs remain compatible; their active conversations now use the
 `connect-agents-with-anyone` Event protocol, not legacy note envelopes.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v32.html`, `ui://fulcra/mesh/thread/v32.html`, and
-`ui://fulcra/mesh/threads/v32.html`. The direct-list resource adds
+`ui://fulcra/mesh/v33.html`, `ui://fulcra/mesh/thread/v33.html`, and
+`ui://fulcra/mesh/threads/v33.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 

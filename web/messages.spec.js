@@ -199,7 +199,7 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   });
   await expect(ui.getByRole('heading', { name: 'Fulcra Mesh', exact: true })).toBeVisible();
   await expect(ui.locator('body')).not.toContainText(/hello world|proof of concept|served by|demo/i);
-  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '172px');
+  await expect(ui.locator('body')).toHaveCSS('padding-bottom', '244px');
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= innerWidth)).toBe(true);
   await ui.getByRole('button', { name: peerId, exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.reads.length)).toBe(2);
@@ -211,18 +211,22 @@ for (const width of [1120, 320]) test(`Fulcra branding, keyboard and host footer
   await assertNoOverflow();
   expect(await ui.locator('body').evaluate(el => getComputedStyle(el).fontFamily)).toContain('Rubik');
   expect(await frame.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(font => font.family === 'Rubik' && font.status === 'loaded'); })).toBe(true);
-  expect(await ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(160);
+  expect(await ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(232);
   // SDK host context notifications update insets; unrelated updates preserve them.
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { safeAreaInsets: { top: 0, right: 0, bottom: 24, left: 0 } } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(256);
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } }, '*'));
-  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(184);
+  await expect.poll(() => ui.locator('body').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(256);
   const aboveOverlay = async locator => {
     await locator.evaluate(el => el.scrollIntoView({ block: 'center' }));
     const box = await locator.boundingBox();
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThanOrEqual(740);
   };
+  // Scrolled fully down, Load more clears the host's floating composer (~232px).
+  await frame.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const more = await ui.getByRole('button', { name: 'Load more', exact: true }).boundingBox();
+  expect(more.y + more.height).toBeLessThanOrEqual(900 - 232);
   await ui.locator('.reading-details summary').focus();
   await page.keyboard.press('Tab');
   await expect(ui.locator('textarea')).toBeFocused();
