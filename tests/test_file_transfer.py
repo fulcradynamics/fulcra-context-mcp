@@ -226,6 +226,30 @@ async def test_a_resent_chunk_is_harmless(client, fake_fulcra, put_chunks):
     assert again["received"] == ft.UPLOAD_GRANULE and len(put_chunks) == 1
 
 
+async def test_resending_the_last_chunk_returns_the_same_result(client, fake_fulcra, put_chunks):
+    _start(fake_fulcra, 3)
+    started = await _structured(client, "start_file_upload", {"path": "/a.bin", "size": 3})
+    last = {"upload_id": started["upload_id"], "offset": 0, "data": base64.b64encode(b"abc").decode()}
+
+    first = await _structured(client, "upload_file_chunk", last)
+    again = await _structured(client, "upload_file_chunk", last)
+
+    assert first["done"] and again == first
+    assert len(put_chunks) == 1  # stored once
+
+
+async def test_resending_an_empty_files_only_chunk_returns_the_same_result(client, fake_fulcra, put_chunks):
+    _start(fake_fulcra, 0)
+    started = await _structured(client, "start_file_upload", {"path": "/empty.txt", "size": 0})
+    only = {"upload_id": started["upload_id"], "offset": 0, "data": ""}
+
+    first = await _structured(client, "upload_file_chunk", only)
+    again = await _structured(client, "upload_file_chunk", only)
+
+    assert first["done"] and again == first
+    assert len(put_chunks) == 1
+
+
 async def test_an_empty_file_uploads(client, fake_fulcra, put_chunks):
     _start(fake_fulcra, 0)
     started = await _structured(client, "start_file_upload", {"path": "/empty.txt", "size": 0})
@@ -339,9 +363,119 @@ async def test_read_file_returns_a_spreadsheet_as_csv(call, fake_fulcra):
 
     text = await call("read_file", {"path": "/reports/q3.xlsx"})
 
-    assert "(as CSV)" in text
+    assert "(as CSV" in text
     assert "# Sheet: Totals\nregion,sales\nwest,12" in text
     assert '"say ""hi"", ok"' in text
+
+
+class LimitedResponse(io.BytesIO):
+    """A download that records how much was asked of it."""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.asked = []
+
+    def read(self, size=-1):
+        self.asked.append(size)
+        return super().read(size)
+
+
+def _sparse_xlsx(far_cell: str) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet["A1"] = "first"
+    sheet[far_cell] = "last"
+    out = io.BytesIO()
+    workbook.save(out)
+    return out.getvalue()
+
+
+async def test_a_workbook_spanning_the_whole_grid_converts_within_bounds(call, fake_fulcra):
+    data = _sparse_xlsx("XFD1048576")  # Excel's last cell
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, size=len(data))]
+    _download_returns(fake_fulcra, data)
+
+    started = time.monotonic()
+    text = await call("read_file", {"path": "/reports/q3.xlsx", "max_bytes": 5000})
+
+    assert time.monotonic() - started < 10
+    assert len(text) < 5500
+    assert text.count("\n") < 50  # empty rows and trailing cells are left out
+    assert "only the first 200 columns" in text
+    assert "stopped after" in text
+
+
+def test_conversion_stops_at_the_text_limit():
+    workbook = Workbook()
+    for i in range(5000):
+        workbook.active.append([f"row {i}", i])
+    out = io.BytesIO()
+    workbook.save(out)
+
+    text = ft.spreadsheet_as_csv(out.getvalue(), 1000)
+
+    assert "row 0,0" in text and "row 4999" not in text
+    assert "stopped after the text limit" in text
+    assert len(text) < 1100
+
+
+async def test_a_large_spreadsheet_is_refused_before_downloading(call, fake_fulcra):
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, size=ft.MAX_SPREADSHEET_FILE_BYTES + 1)]
+
+    text = await call("read_file", {"path": "/reports/q3.xlsx"})
+
+    assert "too large to convert" in text and "get_file_download_link" in text
+    fake_fulcra.download_file.assert_not_called()
+
+
+async def test_conversion_runs_off_the_event_loop(call, fake_fulcra, monkeypatch):
+    import fulcra_mcp.tools as tools_module
+
+    fake_fulcra.resolve_filepath.return_value = [FILE]
+    _download_returns(fake_fulcra, _xlsx())
+    ran = []
+    real = tools_module.asyncio.to_thread
+
+    async def recording(func, *args):
+        ran.append(func.__name__)
+        return await real(func, *args)
+
+    monkeypatch.setattr(tools_module.asyncio, "to_thread", recording)
+    await call("read_file", {"path": "/reports/q3.xlsx"})
+
+    assert ran == ["spreadsheet_as_csv"]
+
+
+async def test_text_is_read_only_as_far_as_max_bytes(call, fake_fulcra):
+    response = LimitedResponse("é".encode() * 50_000)  # 100,000 bytes
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="a.txt", size=100_000)]
+    fake_fulcra.download_file.return_value = response
+
+    text = await call("read_file", {"path": "/a.txt", "max_bytes": 1001})
+
+    assert response.asked == [1005]
+    assert "truncated to the first 1001 bytes of 100000 bytes" in text
+    # the character cut in half at the limit is dropped, not garbled
+    assert text.endswith("é" * 500)
+
+
+async def test_max_bytes_is_capped(call, fake_fulcra):
+    response = LimitedResponse(b"x" * 10)
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="a.txt", size=10)]
+    fake_fulcra.download_file.return_value = response
+
+    await call("read_file", {"path": "/a.txt", "max_bytes": 10**12})
+
+    assert response.asked == [ft.MAX_RESOURCE_BYTES + 4]
+
+
+async def test_large_binary_with_include_binary_is_refused_before_downloading(call, fake_fulcra):
+    fake_fulcra.resolve_filepath.return_value = [dict(FILE, name="a.bin", size=1_000_000)]
+
+    text = await call("read_file", {"path": "/a.bin", "include_binary": True})
+
+    assert "exceeding max_bytes" in text and "get_file_download_link" in text
+    fake_fulcra.download_file.assert_not_called()
 
 
 async def test_read_file_on_other_binaries_says_what_to_do(call, fake_fulcra):

@@ -88,12 +88,27 @@ def guess_content_type(name: str, default: str = "application/octet-stream") -> 
 
 SPREADSHEET_SUFFIXES = (".xlsx", ".xlsm")
 
+# A spreadsheet is a zip file, so read_file has to fetch all of it.
+MAX_SPREADSHEET_FILE_BYTES = 20 * 1024**2
+# Bounds on converting one: the cells read cost time even when they're empty,
+# and a few kilobytes of workbook can span Excel's whole grid.
+MAX_SPREADSHEET_COLUMNS = 200
+MAX_SPREADSHEET_CELLS = 1_000_000
 
-def spreadsheet_as_csv(path: str, data: bytes) -> str | None:
+
+def is_spreadsheet(path: str) -> bool:
+    return path.lower().endswith(SPREADSHEET_SUFFIXES)
+
+
+def spreadsheet_as_csv(data: bytes, max_chars: int) -> str | None:
     """An Excel workbook as CSV text, one section per sheet; ``None`` if ``data``
-    isn't one. Cells hold their last computed values, not formulas."""
-    if not path.lower().endswith(SPREADSHEET_SUFFIXES):
-        return None
+    isn't one. Cells hold their last computed values, not formulas.
+
+    Bounded however large the workbook says it is: it stops after ``max_chars``
+    characters or ``MAX_SPREADSHEET_CELLS`` cells read, and reads at most
+    ``MAX_SPREADSHEET_COLUMNS`` columns. Empty rows and trailing empty cells are
+    left out. When it stops early, the last line says why.
+    """
     import csv
     import io
 
@@ -105,15 +120,36 @@ def spreadsheet_as_csv(path: str, data: bytes) -> str | None:
         return None
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
+    cells_left = MAX_SPREADSHEET_CELLS
+    stopped = None
     try:
         for sheet in workbook.worksheets:
             out.write(f"# Sheet: {sheet.title}\n")
-            for row in sheet.iter_rows(values_only=True):
-                writer.writerow(["" if v is None else v for v in row])
+            columns = min(sheet.max_column or MAX_SPREADSHEET_COLUMNS, MAX_SPREADSHEET_COLUMNS)
+            if (sheet.max_column or 0) > MAX_SPREADSHEET_COLUMNS:
+                out.write(f"# (only the first {MAX_SPREADSHEET_COLUMNS} columns)\n")
+            for row in sheet.iter_rows(max_col=columns, values_only=True):
+                cells_left -= len(row)
+                values = list(row)
+                while values and values[-1] is None:
+                    values.pop()
+                if values:
+                    writer.writerow(["" if v is None else v for v in values])
+                if out.tell() > max_chars:
+                    stopped = "the text limit"
+                    break
+                if cells_left <= 0:
+                    stopped = f"{MAX_SPREADSHEET_CELLS} cells"
+                    break
+            if stopped:
+                break
             out.write("\n")
     finally:
         workbook.close()
-    return out.getvalue()
+    text = out.getvalue()[:max_chars]
+    if stopped:
+        text += f"\n# (stopped after {stopped}; the rest of the workbook isn't shown)\n"
+    return text
 
 
 # ---------------------------------------------------------------- state store
@@ -389,6 +425,10 @@ async def upload_file_chunk(upload_id: str, offset: int, data: str) -> dict:
             f"No upload {upload_id!r} in progress; it may have expired. Start "
             "again with start_file_upload."
         )
+    if record.get("done"):
+        # Already complete: the caller missed the reply to the last chunk.
+        # Answer it again rather than letting a retry start a second upload.
+        return record["result"]
     try:
         chunk = base64.b64decode(data, validate=True)
     except (binascii.Error, ValueError):
@@ -413,9 +453,7 @@ async def upload_file_chunk(upload_id: str, offset: int, data: str) -> dict:
 
     committed = _put_chunk(record["url"], chunk, offset, size)
     if committed >= size:
-        _delete_record("uploads", upload_id)
-        logger.info("file_upload_finished", path=record["path"], size=size)
-        return {
+        result = {
             "upload_id": upload_id,
             "received": size,
             "size": size,
@@ -424,6 +462,12 @@ async def upload_file_chunk(upload_id: str, offset: int, data: str) -> dict:
             "file": record["file"],
             "resource_uri": file_resource_uri(record["path"]),
         }
+        # Kept until the record expires, so a resent last chunk gets this
+        # answer again instead of an unknown upload.
+        record.update(received=size, done=True, result=result)
+        _save_record("uploads", upload_id, record)
+        logger.info("file_upload_finished", path=record["path"], size=size)
+        return result
     record["received"] = committed
     _save_record("uploads", upload_id, record)
     return {"upload_id": upload_id, "received": committed, "size": size, "done": False}

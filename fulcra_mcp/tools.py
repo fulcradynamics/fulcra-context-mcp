@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import codecs
 from datetime import datetime
 import functools
 import json
@@ -1587,7 +1588,13 @@ async def read_file(
         The file's text content (possibly truncated), or its base64-encoded
         content for binary files.
     """
-    from .file_transfer import file_resource_uri, spreadsheet_as_csv
+    from .file_transfer import (
+        MAX_RESOURCE_BYTES,
+        MAX_SPREADSHEET_FILE_BYTES,
+        file_resource_uri,
+        is_spreadsheet,
+        spreadsheet_as_csv,
+    )
 
     fulcra = get_fulcra_object()
     path = _file_path(path)
@@ -1597,39 +1604,78 @@ async def read_file(
         if fulcra_userid:
             return _not_shared_message(path, fulcra_userid)
         return f"No file found at {path!r}. Use list_files to see available files."
-    data = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid).read()
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        text = None
-        if not include_binary:
-            text = spreadsheet_as_csv(path, data)
-            if text is None:
-                return (
-                    f"{path} is a binary file ({len(data)} bytes). To give it to "
-                    "the user, call get_file_download_link. Clients that read MCP "
-                    f"resources can fetch it as {file_resource_uri(path, fulcra_userid)}. "
-                    "Pass include_binary=true to receive it base64-encoded here; "
-                    "that uses a lot of context."
-                )
-            path = f"{path} (as CSV)"
-        else:
-            encoded = base64.b64encode(data).decode("ascii")
-            if len(encoded) > max_bytes:
-                return (
-                    f"{path} is a binary file ({len(data)} bytes, {len(encoded)} "
-                    f"base64 characters), exceeding max_bytes={max_bytes}. Binary "
-                    f"content is not truncated; pass max_bytes={len(encoded)} or "
-                    "more if you truly need it, or use get_file_download_link to "
-                    "give it to the user."
-                )
-            return f"Content of {path} (base64-encoded binary): {encoded}"
-    encoded_text = text.encode("utf-8")
-    if len(encoded_text) > max_bytes:
-        truncated = encoded_text[:max_bytes].decode("utf-8", errors="ignore")
+    # Never more than this, however large max_bytes is: the whole of what's
+    # read is held in memory.
+    max_bytes = max(1, min(max_bytes, MAX_RESOURCE_BYTES))
+    size = file_record.get("size")
+    size_text = f"{size} bytes" if size is not None else "size unknown"
+    link_hint = (
+        "To give it to the user, call get_file_download_link. Clients that read "
+        f"MCP resources can fetch it as {file_resource_uri(path, fulcra_userid)}."
+    )
+
+    if is_spreadsheet(path) and not include_binary:
+        # A spreadsheet is a zip file: it has to be read whole to convert it.
+        if size is not None and size > MAX_SPREADSHEET_FILE_BYTES:
+            return (
+                f"{path} is a {size}-byte spreadsheet, too large to convert here "
+                f"(the most is {MAX_SPREADSHEET_FILE_BYTES}). {link_hint}"
+            )
+        response = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid)
+        data = response.read(MAX_SPREADSHEET_FILE_BYTES + 1)
+        if len(data) > MAX_SPREADSHEET_FILE_BYTES:
+            return (
+                f"{path} is too large to convert here (more than "
+                f"{MAX_SPREADSHEET_FILE_BYTES} bytes). {link_hint}"
+            )
+        # Converting takes a while for a big workbook; keep it off the event
+        # loop so other requests aren't held up.
+        text = await asyncio.to_thread(spreadsheet_as_csv, data, max_bytes)
+        if text is not None:
+            return f"Content of {path} (as CSV, {size_text}): {text}"
+        return f"{path} looks like a spreadsheet but couldn't be read as one. {link_hint}"
+
+    if include_binary and size is not None and (size + 2) // 3 * 4 > max_bytes:
         return (
-            f"Content of {path} (truncated to the first {max_bytes} of "
-            f"{len(encoded_text)} bytes; pass a larger max_bytes for more): {truncated}"
+            f"{path} is {size} bytes, {(size + 2) // 3 * 4} base64 characters, "
+            f"exceeding max_bytes={max_bytes}. Binary content is not truncated. "
+            + link_hint
+        )
+
+    # Read only as much as can be returned, plus a little to tell whether
+    # there's more and to complete a character cut off at the end.
+    response = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid)
+    data = response.read(max_bytes + 4)
+    more = len(data) > max_bytes or (size is not None and size > len(data))
+    head = data[:max_bytes]
+    try:
+        text = codecs.getincrementaldecoder("utf-8")().decode(head, final=not more)
+    except UnicodeDecodeError:
+        if not include_binary:
+            return (
+                f"{path} is a binary file ({size_text}). {link_hint} Pass "
+                "include_binary=true to receive it base64-encoded here; that uses "
+                "a lot of context."
+            )
+        if more:
+            return (
+                f"{path} is a binary file larger than max_bytes={max_bytes}. "
+                f"Binary content is not truncated. {link_hint}"
+            )
+        encoded = base64.b64encode(data).decode("ascii")
+        if len(encoded) > max_bytes:
+            return (
+                f"{path} is a binary file ({len(data)} bytes, {len(encoded)} "
+                f"base64 characters), exceeding max_bytes={max_bytes}. Binary "
+                f"content is not truncated; pass max_bytes={len(encoded)} or "
+                "more if you truly need it, or use get_file_download_link to "
+                "give it to the user."
+            )
+        return f"Content of {path} (base64-encoded binary): {encoded}"
+    if more:
+        return (
+            f"Content of {path} (truncated to the first {max_bytes} bytes of "
+            f"{size_text}; pass a larger max_bytes for more): {text}"
         )
     return f"Content of {path}: {text}"
 

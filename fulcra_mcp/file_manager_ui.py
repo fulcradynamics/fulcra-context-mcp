@@ -214,6 +214,26 @@ function resourceUri(path) {
   return "fulcra://files/" + path.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 }
 
+// Show a download link for the user to click or copy.
+function showLink(file, url, note) {
+  const status = document.getElementById("status");
+  status.className = "status";
+  status.replaceChildren(`${note ? note + " " : ""}Download ${file.name} (link works for 10 minutes): `);
+  const a = document.createElement("a");
+  a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = url;
+  status.append(a);
+}
+
+// The host answers some requests with {isError: true} rather than an error.
+async function hostSucceeded(method, params) {
+  try {
+    const result = await request(method, params);
+    return !(result && result.isError);
+  } catch (e) {
+    return false;
+  }
+}
+
 async function downloadFile(path, file) {
   setStatus(`Preparing ${file.name}…`);
   try {
@@ -221,7 +241,7 @@ async function downloadFile(path, file) {
     if (caps.downloadFile && caps.serverResources && (file.size || 0) <= MAX_INLINE_DOWNLOAD) {
       const read = await request("resources/read", { uri: resourceUri(path) });
       const content = read.contents[0];
-      await request("ui/download-file", {
+      const saved = await hostSucceeded("ui/download-file", {
         contents: [{
           type: "resource",
           resource: {
@@ -231,7 +251,15 @@ async function downloadFile(path, file) {
           },
         }],
       });
-      setStatus(`Downloaded ${file.name}.`);
+      if (saved) {
+        setStatus(`Downloaded ${file.name}.`);
+        return;
+      }
+      // The user may have cancelled, or the host refused: offer a link to
+      // click rather than opening one unasked.
+      const link = await callTool("get_file_download_link", { path });
+      if (link.saved_to) setStatus(`Saved ${file.name} to ${link.saved_to}.`);
+      else showLink(file, link.url, "The download didn't complete.");
       return;
     }
     // The host can't save files for us, or the file is too large for one
@@ -240,16 +268,10 @@ async function downloadFile(path, file) {
     if (link.saved_to) {
       // A server running on the user's computer saves the file there instead.
       setStatus(`Saved ${file.name} to ${link.saved_to}.`);
-    } else if (caps.openLinks) {
-      await request("ui/open-link", { url: link.url });
+    } else if (caps.openLinks && await hostSucceeded("ui/open-link", { url: link.url })) {
       setStatus(`Opened a download link for ${file.name}.`);
     } else {
-      const status = document.getElementById("status");
-      status.className = "status";
-      status.replaceChildren(`Download ${file.name} (link works for 10 minutes): `);
-      const a = document.createElement("a");
-      a.href = link.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = link.url;
-      status.append(a);
+      showLink(file, link.url, caps.openLinks ? "The link couldn't be opened here." : "");
     }
   } catch (e) {
     setStatus(`Couldn't download ${file.name}: ${e.message}`, true);
