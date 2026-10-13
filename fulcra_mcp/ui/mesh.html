@@ -128,21 +128,26 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   --teal-tint-hover: rgba(86, 214, 183, 0.18);
   --violet-tint: rgba(123, 97, 255, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
-  /* The host's floating composer is separate from device safe-area insets. */
-  --footer-clearance: calc(232px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px));
+  /* Bottom breathing room (symmetric with the top) plus whatever the host
+     reports it needs reserved for its input bar. max() avoids double-counting
+     when the device safe area is exposed via both env() and the host context. */
+  --footer-clearance: calc(24px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body {
-  margin: 0;
-  padding: calc(24px + var(--host-safe-top, 0px))
-    calc(24px + var(--host-safe-right, 0px)) 0
-    calc(24px + var(--host-safe-left, 0px));
-  overflow-wrap: anywhere;
+body { margin: 0; overflow-wrap: anywhere; }
+/* Edge spacing lives on <main>, not <body>: some hosts reset body padding,
+   which left content flush against the top of the viewport. max() avoids
+   double-counting the device safe area (env() vs the host context var). */
+main {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: calc(24px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px)))
+    calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
+    calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
 }
-main { max-width: 760px; margin-inline: auto; }
 /* An in-flow spacer, not body padding, reserves room for the host's floating
    composer: it always counts toward scroll height and the reported app height. */
 .footer-spacer { height: var(--footer-clearance); }
@@ -314,14 +319,14 @@ html { overflow-anchor: none; }
 }
 
 /* Inline launch has no floating host composer to clear until a panel opens. */
-.compact-threads { --footer-clearance: calc(16px + env(safe-area-inset-bottom, 0px) + var(--host-safe-bottom, 0px)); }
+.compact-threads { --footer-clearance: calc(16px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); }
 .compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
 .compact-threads .invite-section > p:not([role='status']) { display: none; }
 .compact-threads #meshes > li { padding: 10px 16px; }
 .compact-threads #mesh-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
-  body { padding-left: calc(16px + var(--host-safe-left, 0px)); padding-right: calc(16px + var(--host-safe-right, 0px)); }
+  main { padding-left: calc(16px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px))); padding-right: calc(16px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))); }
   .invite-section { margin-bottom: 24px; }
   .section-header h2 { font-size: 11px; }
 }
