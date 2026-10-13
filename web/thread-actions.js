@@ -1,6 +1,7 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
-import { renderIdentity } from './identity.js';
-import { clearPostedDraft, matchesPost, messageId, recipientAgent } from './mesh-send.js';
+import { renderThreadIdentity } from './identity.js';
+import { clearPostedDraft, matchesPost, messageId, postRecord, recipientAgent } from './mesh-send.js';
+import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
 const options = { timeout: 15000 };
@@ -47,10 +48,28 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct mesh Send remains available.';
   let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
-  draft.posts ??= []; draft.agents ??= {};
+  draft.posts ??= []; draft.agents ??= {}; draft.acks ??= new Set();
+  // Acknowledge each target once; a failure returns it to unread for another try.
+  async function ack(targets, body) {
+    const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = agent.value;
+    if (!outboxId || !sender.trim()) return false;
+    targets = targets.filter(m => !draft.acks.has(m.record.id));
+    targets.forEach(m => draft.acks.add(m.record.id)); changed();
+    let failed = 0;
+    for (const m of targets) {
+      try {
+        const { response, result } = await postRecord(app, { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body,
+          mid: messageId(), kind: 'ack', in_reply_to: m.record.id, ...(audience ? { expected_peer_userids: audience } : {}) });
+        if (response.isError || result.status !== 'posted') throw new Error('Not posted');
+      } catch { draft.acks.delete(m.record.id); failed++; }
+    }
+    if (failed) status.textContent = `Could not mark ${failed} message${failed === 1 ? '' : 's'} read. Try again.`;
+    changed();
+    return true;
+  }
   const update = () => {
     const current = view();
-    renderIdentity(caption, current.thread?.identifier, current.thread?.peer ?? peerId() ?? 'this thread', 'Talk to ');
+    renderThreadIdentity(caption, current.thread, 'Talk to ');
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
@@ -63,7 +82,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         option.textContent = s.name ? `${s.name}${duplicate ? ` (${s.id})` : ''}` : s.id;
         outbox.append(option);
       }
-      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox : outgoing.length === 1 ? outgoing[0].id : '';
+      draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
+        : draft.outbox === undefined && outgoing.length === 1 ? outgoing[0].id : '';
       outbox.value = draft.outbox;
     }
     const selected = outgoing.find(s => s.id === outbox.value);
@@ -97,8 +117,17 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
-    const peer = peerId(), mid = messageId(), startedAt = Date.now();
-    const envelope = { id: mid, sender: agent.value, kind: 'message', priority: 'P2', topic: 'chat', body: input.value };
+    // Sending answers the newest unread message and acknowledges the rest.
+    // Answers name the target's sender; the server finds targets on their channel.
+    const audience = view().thread?.expectedPeerUserids;
+    const unread = unreadMessages(view().result?.messages ?? [], draft.acks), target = unread.at(-1);
+    const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
+    const envelope = { id: mid, sender: agent.value, kind: target ? 'reply' : 'message', priority: 'P2',
+      topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
+    const posted = () => {
+      report('Posted to your outbox; not confirmed delivered or read by the peer.');
+      ack(unread.slice(0, -1), 'Read; see my reply.');
+    };
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
@@ -107,16 +136,15 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     draft.posts.push(post); lifecycle.pending = true; changed(); update();
     report('Posting…');
     try {
-      const response = await app.callServerTool({ name: 'mesh_send', arguments: {
-        peer_userid: peer, outbox: post.source.id, sender: envelope.sender, body: envelope.body, mid,
-      } }, { timeout: 30000 });
-      const result = response.structuredContent ?? JSON.parse(response.content?.find(c => c.type === 'text')?.text ?? '{}');
+      const { response, result } = await postRecord(app, { peer_userid: peer, outbox: post.source.id,
+        sender: envelope.sender, body: envelope.body, mid, ...(target ? { kind: 'reply', in_reply_to: target.record.id } : {}),
+        ...(audience ? { expected_peer_userids: audience } : {}) });
       if (post.state === 'posted' || (!response.isError && result.status === 'posted' && result.mid === mid
           && result.outbox === post.source.id && result.peer_userid === peer
           && result.record && matchesPost({ ...post, record: result.record }, post))) {
         post.state = 'posted'; if (result.record) post.record = result.record;
         clearPostedDraft(draft, post);
-        report('Posted to your outbox; not confirmed delivered or read by the peer.');
+        posted();
       } else if (!response.isError && result.status === 'rejected' && result.mid === mid && result.outbox === post.source.id) {
         draft.posts = draft.posts.filter(p => p !== post);
         if (draft.version === post.version) draft.value = envelope.body;
@@ -124,7 +152,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       } else throw new Error('Unconfirmed');
     } catch {
       // Polling may prove the exact write even while its response is lost.
-      if (post.state === 'posted') report('Posted to your outbox; not confirmed delivered or read by the peer.');
+      if (post.state === 'posted') posted();
       else {
         report('Sending… Waiting for confirmation.');
         const waitingStatus = status.textContent;
@@ -188,5 +216,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     } finally { lifecycle.pending = false; lifecycle.onChange(); }
   });
   update();
+  update.markRead = messages => ack(messages, 'Read.');
   return update;
 }

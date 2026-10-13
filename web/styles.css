@@ -165,7 +165,16 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .message-row .row-tile { grid-column: 1; grid-row: 1 / 3; align-self: center; }
 .message-row .message-header { grid-column: 2; grid-row: 1; }
 .message-row .message-date { grid-column: 2; grid-row: 2; }
-.message-row .message-body { grid-column: 2; grid-row: 3; }
+.message-row .message-recipients { grid-column: 2; grid-row: 3; }
+.message-row .message-source { grid-column: 2; grid-row: 4; }
+.message-row .message-body { grid-column: 2; grid-row: 5; }
+.message-recipients, .message-source, .addressing-help { margin: 4px 0; color: var(--muted); font-size: 12px; }
+.message-row.addressed-to-viewer { border-left: 3px solid var(--teal); }
+.message-row.addressed-to-viewer .message-recipients { color: var(--teal-soft); }
+.message-row.addressed-to-others .message-title, .message-row.addressed-to-others pre { color: #b0b0b5; font-weight: 400; }
+.incoming-sources label { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; }
+.incoming-sources input { width: 18px; min-height: 18px; flex: none; }
+#viewing-agent { max-width: 280px; }
 .message-header { margin: 0; font-weight: 700; font-size: 16px; line-height: 1.2; }
 .message-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .message-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
@@ -187,6 +196,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
    is right-aligned with its caption beneath the select. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+/* Unread: an incoming message nobody on your side has acknowledged or answered. */
+.unread-badge { color: var(--teal); font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+.message-row.unread .row-tile { box-shadow: inset 0 0 0 1px var(--teal); }
+.message-row .mark-read { grid-column: 2; justify-self: start; min-height: 32px; margin-top: 8px; padding: 4px 10px; font-size: 12px; }
+#mark-all-read { min-height: 32px; margin: 0 0 8px; padding: 4px 10px; font-size: 12px; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 .composer-actions .order-field { margin-left: auto; }
 .order-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
@@ -203,7 +217,14 @@ details[open] > summary { color: var(--violet); }
 .invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 
 .refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--teal); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
+/* Spinner to the right of "Load more history"; its space is always reserved
+   (visibility, not display) so showing it never moves the button. */
+.more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
+/* Prominent initial-load state: a large centered spinner with a label. */
+#message-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
+#message-loading .refresh-spinner { width: 40px; height: 40px; border-width: 3px; }
 #new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); border: 1px solid var(--divider); }
 #new-activity:hover:not(:disabled) { background: var(--raised); }
 /* Reading position is restored explicitly by keyed message identity. */

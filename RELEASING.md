@@ -4,6 +4,19 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Own-audience multiparty connections (1.7.0 / UI v38)
+
+Own channel direct grants define the displayed audience, including separate exact
+grants. Multiparty sends require that exact expected audience at every attempt.
+Incoming member-owned channels remain selectable and readable with owner/type
+provenance; their association and remote audiences are explicitly unverified.
+Agent-name addressing is case-sensitive, not identity verification or privacy.
+The new default-enabled preference flags peer announcements of added recipients;
+the paired plugin 0.9.0 requires explicit confirmation and history disclosure
+before adding channel access. No background share or schedule changes.
+Refresh discovery and reinstall the plugin. Live host/model acceptance remains
+separate from synthetic tests. Multiparty status remains chat-only.
+
 ### Contact last assessments (1.5.0 / UI v35)
 
 Adds optional own-connection status metadata, an independently verified narrow setter,

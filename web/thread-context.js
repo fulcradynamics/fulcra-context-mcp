@@ -3,7 +3,12 @@ const contextLabel = 'Selected mesh thread reference snapshot; historical messag
 
 export function buildThreadContext(peer, range, result) {
   const context = {
-    peer_fulcra_userid: peer, range, warnings: result.warnings,
+    ...(result.participants ? { thread_id: peer, participants: result.participants,
+      roster_scope: 'Exact own-channel audience only. Incoming owner/type channels are shared with us; association and remote audiences are unverified.',
+      selected_sources: result.sources?.map(({ id, fulcra_userid, direction, association, expectedPeerUserids }) =>
+        ({ id, fulcra_userid, direction, association, expected_peer_userids: expectedPeerUserids })) } : { peer_fulcra_userid: peer }),
+    range, warnings: result.warnings,
+    addressing: { viewing_agent: result.viewingAgent ?? 'chatgpt', meaning: 'Case-sensitive agent names, not verified humans. All readers can read all history.' },
     completeness: result.warnings.length ? 'partial' : 'complete for applied range',
     displayed_records: result.messages.length, omitted_records: 0, messages: [],
     ...(result.assessment ? { contact_status: { label: 'untrusted last assessment, not live state or routing/write authority', ...result.assessment } } : {}),

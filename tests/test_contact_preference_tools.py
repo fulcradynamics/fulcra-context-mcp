@@ -7,6 +7,25 @@ from test_contact_status import backend, DESCRIPTION
 from test_connection_send import OWN, PEER, OUT
 
 
+async def test_multiparty_overrides_require_exact_audience(backend, monkeypatch):
+    from fulcra_mcp import contact_preferences as policy
+    other = '00000000-0000-4000-8000-000000000007'
+    backend['shares'][0]['permissions'].append({'allowed_fulcra_userid': other})
+    monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)
+    async with Client(mcp) as client:
+        args = {'data_type': OUT, 'peer_userid': PEER}
+        assert (await client.call_tool('get_contact_preferences', args, raise_on_error=False)).is_error
+        args['expected_peer_userids'] = [PEER, other]
+        saved = await client.call_tool('set_contact_preferences', {**args,
+            'overrides': {'attention_peer_membership_announcements': False}})
+        assert saved.structured_content['verified'] is True
+        readback = await client.call_tool('get_contact_preferences', args)
+        assert readback.structured_content['values']['attention_peer_membership_announcements'] is False
+        backend['shares'][0]['permissions'].pop()
+        assert (await client.call_tool('get_contact_preferences', args, raise_on_error=False)).is_error
+        assert len(backend['writes']) == 1
+
+
 async def test_override_save_and_owned_read(backend, monkeypatch):
     from fulcra_mcp import contact_preferences as policy
     monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)

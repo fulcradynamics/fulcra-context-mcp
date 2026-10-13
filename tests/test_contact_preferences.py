@@ -54,6 +54,18 @@ async def test_invalid_updates_do_not_write(storage, changes):
     api.upload_file.assert_not_called()
 
 
+async def test_peer_membership_notification_default_and_persistence(storage):
+    api, _ = storage
+    async with Client(mcp) as client:
+        initial = (await client.call_tool('aicq_settings_read', {})).structured_content
+        assert initial['values']['attention_peer_membership_announcements'] is True
+        result = await client.call_tool('aicq_settings_update', {'set': {'attention_peer_membership_announcements': False}})
+        assert result.structured_content['verified'] is True
+        current = (await client.call_tool('aicq_settings_read', {})).structured_content
+        assert current['values']['attention_peer_membership_announcements'] is False
+        assert current['values']['autonomous_replies'] is False
+
+
 async def test_preserve_unrelated_fields_and_fresh_reads(storage):
     api, files = storage
     from fulcra_mcp import contact_preferences as policy

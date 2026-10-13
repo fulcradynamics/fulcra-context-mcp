@@ -23,8 +23,7 @@ test('covering grants exclude broad, group, self and ambiguous outboxes from pen
     [{ ...grant('a'), with_group_ids: ['group'] }],
     [{ ...grant('a'), group_id: 'group' }],
     [{ ...grant('a'), data_types: ['Event/a', 'StepCount'] }],
-    [{ ...grant('a'), with_user_ids: ['peer', 'other'] }],
-    [grant('a', 'me')], [grant('a'), grant('a', 'other')],
+    [grant('a', 'me')],
     [grant('a'), { share_all_data: true }],
   ]) {
     const result = await discover([entry('a')], covering);

@@ -53,7 +53,7 @@ test('loads all deduplicated channels for exact peer, not other peers; chronolog
   } });
   h.shares.outgoing.push(outgoing(second.id));
   const result = await readConversation(h.app, { peer: 'peer' }, range);
-  assert.deepEqual(result.warnings, []);
+  assert.match(result.warnings.join(' '), /co-recipients.*not a verified complete roster/);
   assert.deepEqual(result.messages.map(m => m.direction), ['Incoming', 'Outgoing', 'Outgoing']);
   assert.deepEqual(result.messages.map(m => m.source), [
     { id: peer.id, name: peer.name, fulcra_userid: 'peer' }, { id: own.id, name: own.name, fulcra_userid: 'me' }, { id: second.id, name: second.name, fulcra_userid: 'me' },
@@ -66,16 +66,18 @@ test('every load refreshes discovery, adding new channels and removing newly uns
   const h = harness({ catalog: [own] });
   assert.match((await readConversation(h.app, { peer: 'peer' }, range)).warnings.join(' '), /missing incoming/i);
   h.catalog.push(peer);
-  assert.deepEqual((await readConversation(h.app, { peer: 'peer' }, range)).warnings, []);
+  assert.match((await readConversation(h.app, { peer: 'peer' }, range)).warnings.join(' '), /co-recipients/);
   h.shares.outgoing.push(outgoing(own.id, 'other'));
   const result = await readConversation(h.app, { peer: 'peer' }, range);
-  assert.match(result.warnings.join(' '), /omitted.*missing outgoing/is);
+  assert.match(result.warnings.join(' '), /missing outgoing/is);
   assert.equal(h.calls.at(-1).arguments.fulcra_userid, 'peer');
   assert.equal(h.calls.filter(c => c.name === 'list_shares').length, 3);
 });
 
 test('incoming-only/outgoing-only and empty complete reads remain usable', async () => {
-  assert.deepEqual(await readConversation(harness().app, { peer: 'peer' }, range), { messages: [], warnings: [] });
+  const empty = await readConversation(harness().app, { peer: 'peer' }, range);
+  assert.deepEqual(empty.messages, []);
+  assert.match(empty.warnings.join(' '), /co-recipients/);
   for (const catalog of [[own], [peer]]) {
     const result = await readConversation(harness({ catalog }).app, { peer: 'peer' }, range);
     assert.deepEqual(result.messages, []);
@@ -100,7 +102,7 @@ test('per-source failure and truncation retain other results and provenance in w
   assert.match(result.warnings.join(' '), /Partial result — Incoming \(peer \/ Event\/peer\)/);
   const failed = await readConversation(harness({ fail: [`me:${own.id}`, `peer:${peer.id}`] }).app, { peer: 'peer' }, range);
   assert.equal(failed.messages.length, 0);
-  assert.equal(failed.warnings.length, 2);
+  assert.equal(failed.warnings.filter(w => w.startsWith('Could not load messages')).length, 2);
 });
 
 for (const tool of ['get_data_catalog', 'list_shares']) test(`${tool} failure never reads cached channels`, async () => {
