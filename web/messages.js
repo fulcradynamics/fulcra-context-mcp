@@ -22,10 +22,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
   const more = doc.querySelector('#message-more');
+  const moreSpinner = doc.querySelector('#more-spinner');
+  more.prepend(icon(History, 'btn-icon'));
+  let loadingMore = false;
+  // The spinner sits to the right of the button; toggling visibility (not
+  // display) keeps its space reserved so the button never shifts.
+  const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
   const back = doc.querySelector('#message-back');
   const order = doc.querySelector('#message-order');
   const orderField = doc.querySelector('#message-order-field');
-  more.prepend(icon(History, 'btn-icon'));
   back.prepend(icon(ArrowLeft, 'btn-icon'));
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'), presentation);
   const drafts = new Map();
@@ -199,7 +204,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
     } finally {
-      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); }
+      if (generation === requestGeneration) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
     }
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
@@ -212,6 +217,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (!start || requestedStart) return;
     requestedStart = new Date(Date.parse(start) - 14 * DAY).toISOString();
     more.disabled = true;
+    loadingMore = true; updateMore();
     requestRefresh();
   };
   const onOrder = () => { if (displayed) render(displayed, ready); };
@@ -258,7 +264,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
       () => { if (selected && displayed) render(displayed, ready); });
     setTitle(thread);
-    history.hidden = true; more.disabled = false;
+    history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();

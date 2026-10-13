@@ -63,7 +63,10 @@
         <ol id="messages"></ol>
         <div id="message-history" hidden>
           <p id="message-through" class="meta" role="status"></p>
-          <button id="message-more" type="button">Load more history</button>
+          <div class="more-row">
+            <button id="message-more" type="button">Load more history</button>
+            <span id="more-spinner" class="refresh-spinner more-spinner" aria-hidden="true"></span>
+          </div>
         </div>
       </div>
     </section>

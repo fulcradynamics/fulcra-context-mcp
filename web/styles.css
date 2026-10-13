@@ -203,7 +203,14 @@ details[open] > summary { color: var(--violet); }
 .invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 
 .refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--teal); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
+/* Spinner to the right of "Load more history"; its space is always reserved
+   (visibility, not display) so showing it never moves the button. */
+.more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
+/* Prominent initial-load state: a large centered spinner with a label. */
+#message-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
+#message-loading .refresh-spinner { width: 40px; height: 40px; border-width: 3px; }
 #new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); border: 1px solid var(--divider); }
 #new-activity:hover:not(:disabled) { background: var(--raised); }
 /* Reading position is restored explicitly by keyed message identity. */
