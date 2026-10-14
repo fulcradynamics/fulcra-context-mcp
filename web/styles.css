@@ -102,7 +102,11 @@ select { width: fit-content; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 /* Compact, rounded reply input (native-chat feel); grows with content (JS-capped). */
-.composer-input { border-radius: 20px; padding: 10px 16px; resize: none; overflow-y: hidden; line-height: 1.4; }
+/* The input is borderless/transparent; the border + rounding live on the whole
+   floating composer area. min-height keeps it ~1 line (no squish on load). */
+.composer-input { border: 0; background: transparent; padding: 8px 10px; resize: none; overflow-y: hidden; line-height: 1.45; min-height: 40px; }
+.composer-input::placeholder { color: #6a6a70; }
+.composer-input:focus-visible { outline-width: 1px; outline-offset: 2px; }
 #message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; }
 #message-through { margin: 0; }
 #message-status { margin-block: 20px; }
@@ -199,10 +203,12 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* Reply composer reads as a message-to-contact box (purple Send + hint). */
 .composer-primary.send-to-peer:not(:disabled) { background: var(--outgoing); color: #fff; }
 .composer-primary.send-to-peer:hover:not(:disabled) { background: #6b4fe0; }
+/* Disabled Send stays recognizably purple, just dimmed (not harshly dark). */
+.composer-primary.send-to-peer:disabled { background: rgba(90, 63, 208, .45); color: rgba(255, 255, 255, .7); }
 /* Gray secondary action (the host-chat handoff) so it doesn't read as primary. */
-.composer-actions .btn-secondary:not(:disabled) { background: var(--raised); color: #fff; }
+.composer-actions .btn-secondary:not(:disabled) { background: var(--raised); color: #fff; font-weight: 400; }
 .composer-actions .btn-secondary:hover:not(:disabled) { background: #2d2d34; }
-.composer-hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.composer-hint { margin: 8px 0 0; font-size: 12px; color: #6a6a70; }
 /* Multiparty-only detail lines, kept subtle. */
 .message-recipients, .message-source, .addressing-help { color: var(--muted); font-size: 11px; }
 .message-row.addressed-to-viewer .bubble { box-shadow: 0 0 0 2px var(--teal); }
@@ -222,10 +228,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 
 /* Floating reply composer: sticks to the top so it stays reachable while the
    newest messages (at the bottom) are in view. */
-#thread-composer { position: sticky; top: 0; z-index: 3; background: #000; }
-#thread-composer:not(:empty) { padding: 10px 0; border-bottom: 1px solid var(--divider); }
+#thread-composer { position: sticky; top: 0; z-index: 3; }
+#thread-composer:not(:empty) { background: #000; border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; }
 #thread-composer label { display: block; }
-#thread-composer .composer-actions { margin-top: 8px; }
+#thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */
 #thread-composer .composer-actions .composer-primary { margin-left: auto; }
 details { margin-block: 16px; }

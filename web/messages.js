@@ -1,5 +1,4 @@
 import { createThreadComposer } from './thread-composer.js';
-import { renderIdentity, renderThreadIdentity } from './identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
@@ -56,7 +55,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // technical/debug sections and multiparty controls (PLAT-719).
   const advanced = doc.querySelector('#advanced-panel');
   const advancedToggle = doc.querySelector('#advanced-toggle');
-  advanced.append(rosterWarning, incoming.element, readingOptions);
+  const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
+  advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
   const onAdvanced = () => {
     const expand = advanced.hidden;
     advanced.hidden = !expand;
@@ -173,12 +173,18 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => {
-    const label = thread.identifier || thread.accountName || thread.peer || '?';
-    headerAvatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
+    // Clean header: just the contact's name + avatar. The exact ID / account go
+    // to the Advanced panel, and the assessment shows only when it needs attention.
+    const name = thread.participants ? (thread.identifier || 'Group conversation')
+      : (thread.identifier || thread.peer || 'Agent Contact');
+    title.textContent = name;
+    headerAvatar.textContent = [...String(name).trim()][0]?.toUpperCase() || '?';
     renderAssessment(assessment, thread.assessment);
-    if (thread.participants) renderThreadIdentity(title, thread, 'Agent Contact with ');
-    else renderIdentity(title, thread.identifier, thread.peer, 'Agent Contact with ',
-      thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
+    assessment.hidden = thread.assessment?.attention !== true;
+    const account = thread.accountName && thread.accountName !== thread.identifier ? ` · Account: ${thread.accountName}` : '';
+    contactMeta.textContent = thread.participants
+      ? `Participants: ${thread.participants.map(p => p.id).join(', ')}`
+      : `Contact ID: ${thread.peer}${account}`;
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;

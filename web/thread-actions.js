@@ -87,7 +87,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const placeholder = `Message ${contactName}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = app.getHostVersion()?.name;
-    const hintText = `Goes straight to ${contactName} — not your ${host || 'main'} chat.`;
+    const hintText = `Send replies to ${contactName}; Discuss opens it in ${host || 'chat'}.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
