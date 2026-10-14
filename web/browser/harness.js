@@ -51,7 +51,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    }
    const respond=()=>reply(r.id,{content:[{type:'text',text}]});
    if(discovery && window.holdDiscovery)window.heldDiscovery.push(respond);
-   else if(name==='get_records' && window.holdReads)window.heldReads.push(respond);
+   else if(name==='get_records' && (window.holdReads === true
+     || window.holdReads === (a.fulcra_userid ? 'incoming' : 'outgoing')
+     || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
   }); frame.srcdoc=bundle;
  },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords});
