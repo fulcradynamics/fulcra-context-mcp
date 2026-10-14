@@ -178,7 +178,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const dateText = timestamp && Number.isFinite(+timestamp)
-        ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
+        ? timestamp.toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
       const bodyText = messageText(record);
       if (body.textContent !== bodyText) body.textContent = bodyText;
