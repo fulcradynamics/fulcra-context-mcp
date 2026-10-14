@@ -159,9 +159,11 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .thread-text .contact-status { margin: 2px 0 0; }
 .contact-status.attention { color: #c79448; }
 .thread-preview { margin: 2px 0 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Last-activity time as a compact dark pill with lighter text. */
-.thread-time { flex: none; margin-left: auto; align-self: center; padding: 2px 7px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+/* Last-activity time as a compact dark pill with lighter text; holds a small
+   spinner until the thread's latest-message read resolves. */
+.thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .thread-time:empty { display: none; }
+.thread-time .refresh-spinner { width: 10px; height: 10px; --spinner-thickness: 1.5px; }
 
 /* Conversation: a familiar chat layout. Bubbles align by direction — incoming
    left (gray), outgoing right (green) — with the date beneath each bubble. */

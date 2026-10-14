@@ -123,6 +123,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             textCol.append(name, id, assessment, preview);
             const time = doc.createElement('span'); time.className = 'thread-time';
+            // Spinner until this thread's latest-message read resolves its time/unread state.
+            const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
+            time.append(timeSpin);
             button.append(avatarWrap, textCol, time);
             entry = { row, button, name, id, avatar, assessment, preview, dot, time, thread };
             button.addEventListener('click', () => choose(entry));
@@ -195,15 +198,14 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         count.textContent = String(discovery.threads.length);
         status.textContent = discovery.warnings.join(' ');
         if (doc.visibilityState !== 'visible') return true;
-        if (listPanel.hidden) {
-          // Detail panel is showing; still prime and sort the hidden list behind it.
-          if (firstLoad) void finishFirstLoad(refreshPreviews());
-          return await detail.refresh(discovery);
-        }
-        const previews = refreshPreviews();
-        if (firstLoad) await finishFirstLoad(previews);
-        else void previews.then(sortRows);
-        return true;
+        // Reveal the contacts as soon as discovery returns — the per-thread reads
+        // that inform unread state and timestamps fill in after, with a small
+        // spinner in each time badge until they land, then an animated re-sort.
+        const wasFirst = firstLoad;
+        if (firstLoad) { firstLoad = false; loadingEl.hidden = true; list.hidden = false; }
+        if (!listPanel.hidden) { void refreshPreviews().then(sortRows); return true; }
+        if (wasFirst) void refreshPreviews().then(sortRows); // prime the hidden list behind the detail panel
+        return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; list.hidden = false; }
@@ -220,7 +222,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       const thread = entry.thread;
       let latest;
       entry.reading = true;
-      try { latest = await readLatest(app, thread.sources); } catch { return; }
+      try { latest = await readLatest(app, thread.sources); }
+      catch { if (!entry.resolved) entry.time.textContent = ''; return; } // drop the badge spinner on a failed first read
       finally { entry.reading = false; }
       if (disposed || rows.get(thread.peer) !== entry
         || JSON.stringify(entry.thread.sources) !== JSON.stringify(thread.sources)) return;
@@ -232,27 +235,39 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       entry.dot.classList.toggle('on', Boolean(summary) && !summary.acknowledged);
       const at = message?.record?.recorded_at;
       entry.lastAt = at ? Date.parse(at) : NaN;
+      entry.resolved = true;
+      // Replaces the badge spinner (set at row creation) with the time, or clears it.
       entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
     }));
   }
   // Order rows like a chat list: most recent activity first, threads without a
-  // readable message last. Re-appending existing <li>s reorders them in place.
+  // readable message last. Animates the reorder with a FLIP transform.
   function sortRows() {
     const ordered = [...rows.values()].sort((a, b) =>
       (Number.isFinite(b.lastAt) ? b.lastAt : -Infinity) - (Number.isFinite(a.lastAt) ? a.lastAt : -Infinity));
     // No-op when the DOM already matches, so a steady auto-refresh doesn't move
     // (and repaint) rows for no reason.
-    const current = list.children;
+    const current = [...list.children];
     if (ordered.length === current.length && ordered.every((e, i) => e.row === current[i])) return;
+    const animate = list.offsetParent !== null && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const firstTops = animate && new Map(current.map(li => [li, li.getBoundingClientRect().top]));
     for (const entry of ordered) list.append(entry.row);
-  }
-  async function finishFirstLoad(previews) {
-    await previews;
-    if (disposed) return;
-    sortRows();
-    firstLoad = false;
-    loadingEl.hidden = true;
-    list.hidden = false;
+    if (!animate) return;
+    for (const entry of ordered) {
+      const li = entry.row, prev = firstTops.get(li);
+      const delta = prev === undefined ? 0 : prev - li.getBoundingClientRect().top;
+      if (!delta) continue;
+      li.style.transition = 'none';
+      li.style.transform = `translateY(${delta}px)`;
+      li.addEventListener('transitionend', () => { li.style.transition = ''; li.style.transform = ''; }, { once: true });
+    }
+    requestAnimationFrame(() => {
+      for (const entry of ordered) {
+        if (!entry.row.style.transform) continue;
+        entry.row.style.transition = 'transform .32s cubic-bezier(.16, 1, .3, 1)';
+        entry.row.style.transform = '';
+      }
+    });
   }
   const stopHost = entrypoint.observeHost?.(context => {
     hostContext = { ...hostContext, ...context };
