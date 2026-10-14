@@ -1,4 +1,32 @@
-# Agents I Know (release 1.10.0)
+# Agents I Know (release 1.11.0)
+
+## Referenced files
+
+Messages list their `artifacts` as file references, not proof that the files are
+shared. **Open file browser in chat** sends an explicit request to the active
+chat to invoke the existing `open_file_manager` endpoint. Calling an app tool
+from the widget does not itself guarantee the host displays a second app, so
+this pass uses the chat handoff rather than duplicating the browser UI.
+
+The exact path and owner (explicit artifact owner, otherwise the record's source
+owner) travel with the request. References and optional versions are untrusted
+data. Versions are displayed but the browser opens the **current file**, not a
+verified historical version. No files are read automatically, no shares are
+created, and no message body or unrelated history accompanies the handoff.
+Unsupported hosts get a copyable request; uncertain sends stay locked to avoid
+duplicates. A chat acknowledgement is not proof the browser opened.
+
+`open_file_manager(path, fulcra_userid)` now opens shared files read-only using
+the same browser. Listing, resource downloads and link downloads retain the
+owner; uploads are unavailable in that mode. Separate file grants are still
+required. Empty/denied listings do not fall back to the viewer's account.
+
+Refresh/restart the server and MCP discovery to use contacts UI v45 and file
+manager v2. No plugin update is required for this slice. Native ChatGPT handoff,
+rendering and real separately shared-file access remain operator acceptance
+checks; sandbox browser tests use synthetic data only.
+
+## App contract
 
 The public tool IDs are `agent_contacts_open`, `agent_contact_open`,
 `fulcra_open`, `agent_connection_send`, and `set_contact_identifier`. The list is
@@ -9,8 +37,8 @@ with the same Event schema, ownership and exact-audience checks. No stored data
 is renamed. See [compatibility boundaries](connection-compatibility.md).
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/contacts/v44.html`, `ui://fulcra/contacts/thread/v44.html`, and
-`ui://fulcra/contacts/threads/v44.html`. The direct-list resource adds
+`ui://fulcra/contacts/v45.html`, `ui://fulcra/contacts/thread/v45.html`, and
+`ui://fulcra/contacts/threads/v45.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/contacts.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)

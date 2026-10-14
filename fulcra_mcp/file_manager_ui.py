@@ -163,6 +163,7 @@ let nextId = 1;
 const pending = new Map();
 let host = {};
 let currentPath = "/";
+let currentOwner = null;
 
 // Simple inline icons, so the panel loads nothing but its font.
 const ICONS = {
@@ -224,8 +225,12 @@ window.addEventListener("message", (event) => {
     return;
   }
   if (msg.method === "ui/notifications/tool-input") {
-    const path = msg.params && msg.params.arguments && msg.params.arguments.path;
-    if (path) currentPath = normalize(path);
+    const args = msg.params?.arguments || {};
+    currentPath = normalize(args.path || "/");
+    currentOwner = args.fulcra_userid || null;
+    document.getElementById("drop").style.display = currentOwner ? "none" : "";
+    document.getElementById("uploads").hidden = !!currentOwner;
+    setStatus(currentOwner ? `Shared files — read-only. Owner: ${currentOwner}` : "");
     refresh();
   } else if (msg.method === "ui/notifications/host-context-changed") {
     applyStyles(msg.params);
@@ -299,10 +304,11 @@ async function refresh() {
   // Rows act on the folder they were listed from, and a listing that arrives
   // after a newer one was asked for is dropped.
   const folderPath = currentPath;
+  const owner = currentOwner;
   const generation = ++refreshes;
   const list = document.getElementById("listing");
   try {
-    const listing = await callTool("list_files", { path: folderPath });
+    const listing = await callTool("list_files", { path: folderPath, ...(owner ? {fulcra_userid: owner} : {}) });
     if (generation !== refreshes) return;
     list.replaceChildren();
     let index = 0;
@@ -319,13 +325,18 @@ async function refresh() {
       download.innerHTML = ICONS.download;
       download.title = "Download";
       download.setAttribute("aria-label", "Download " + file.name);
-      download.onclick = () => downloadFile(join(folderPath, file.name), file);
+      const path = file.full_name || (folderPath.split("/").pop() === file.name ? folderPath : join(folderPath, file.name));
+      download.onclick = () => downloadFile(path, file, owner);
       const when = file.uploaded_at || file.created_at;
       const main = el("div", "main", null, el("div", "name", file.name));
       if (when) main.append(el("div", "sub", "Uploaded " + formatDate(when)));
       list.append(rise(el("li", null, null, tile("file"), main, stat("Size", formatSize(file.size)), download), index++));
     }
     if (!list.children.length) {
+      if (owner) {
+        list.append(el("li", "state", "No shared files available here. The file may not be shared or may have been removed."));
+        return;
+      }
       const upload = el("button", "pill");
       upload.innerHTML = ICONS.upload;
       upload.append(" Upload");
@@ -341,8 +352,8 @@ async function refresh() {
 }
 
 // --- downloading --------------------------------------------------------------
-function resourceUri(path) {
-  return "fulcra://files/" + path.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+function resourceUri(path, owner) {
+  return (owner ? "fulcra://users/" + encodeURIComponent(owner) + "/files/" : "fulcra://files/") + path.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 }
 
 // Show a download link for the user to click or copy.
@@ -365,12 +376,12 @@ async function hostSucceeded(method, params) {
   }
 }
 
-async function downloadFile(path, file) {
+async function downloadFile(path, file, owner) {
   setStatus(`Preparing ${file.name}…`);
   try {
     const caps = host.hostCapabilities || {};
     if (caps.downloadFile && caps.serverResources && (file.size || 0) <= MAX_INLINE_DOWNLOAD) {
-      const read = await request("resources/read", { uri: resourceUri(path) });
+      const read = await request("resources/read", { uri: resourceUri(path, owner) });
       const content = read.contents[0];
       const saved = await hostSucceeded("ui/download-file", {
         contents: [{
@@ -388,14 +399,14 @@ async function downloadFile(path, file) {
       }
       // The user may have cancelled, or the host refused: offer a link to
       // click rather than opening one unasked.
-      const link = await callTool("read_file", { path, as_link: true });
+      const link = await callTool("read_file", { path, as_link: true, ...(owner ? {fulcra_userid: owner} : {}) });
       if (link.saved_to) setStatus(`Saved ${file.name} to ${link.saved_to}.`);
       else showLink(file, link.url, "The download didn't complete.");
       return;
     }
     // The host can't save files for us, or the file is too large for one
     // message: fall back to a short-lived link.
-    const link = await callTool("read_file", { path, as_link: true });
+    const link = await callTool("read_file", { path, as_link: true, ...(owner ? {fulcra_userid: owner} : {}) });
     if (link.saved_to) {
       // A server running on the user's computer saves the file there instead.
       setStatus(`Saved ${file.name} to ${link.saved_to}.`);
@@ -451,6 +462,7 @@ async function uploadFile(file, folder) {
 }
 
 async function uploadAll(files) {
+  if (currentOwner) return;
   // The folder when the files were dropped or picked, even if the user browses
   // elsewhere while they upload.
   const folder = currentPath;
@@ -494,7 +506,6 @@ if (window.ResizeObserver) {
     setStatus("This client couldn't start the file manager: " + e.message, true);
   }
   notify("ui/notifications/initialized", {});
-  refresh();
 })();
 </script>
 </body>

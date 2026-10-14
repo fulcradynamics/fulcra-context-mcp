@@ -4,6 +4,7 @@ import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
 import { readConversation, readLatest } from './conversation.js';
 import { createMessageList } from './message-list.js';
+import { renderArtifacts } from './artifacts.js';
 import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
@@ -190,6 +191,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (date.textContent !== dateText) date.textContent = dateText;
       const bodyText = messageText(record);
       if (body.textContent !== bodyText) body.textContent = bodyText;
+      let artifacts = item.querySelector('.message-artifacts');
+      if (!artifacts) { artifacts = doc.createElement('div'); artifacts.className = 'message-artifacts'; bubble.append(artifacts); }
+      const renderedGeneration = generation;
+      renderArtifacts(artifacts, record, source, app, contextLifecycle,
+        () => renderedGeneration === generation && !unavailable && selected?.sources.some(s => s.id === source.id && s.fulcra_userid === source.fulcra_userid));
     });
   const setTitle = thread => {
     // Clean header: just the contact's name + avatar. The exact ID / account go
