@@ -2,7 +2,7 @@ import { buildThreadContext } from './thread-context.js';
 import { setupThreadActions } from './thread-actions.js';
 
 // Mounted once per peer, never on a refresh, preserving focus and disclosure.
-export function createThreadComposer(app, container, isCurrent, lifecycle, presentation = 'global', draft, orderField, view, changed) {
+export function createThreadComposer(app, container, isCurrent, lifecycle, presentation = 'global', draft, view, changed) {
   const doc = container.ownerDocument;
   const help = presentation === 'thread' ? doc.createElement('p') : doc.querySelector('#thread-help');
   help.textContent = '';
@@ -14,8 +14,8 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   let context, identity, peerId, usable = false;
   container.replaceChildren();
   const currentContext = () => usable ? context : undefined;
-  const update = setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, orderField, view, changed, presentation);
-  // Context preview + handoff help live in the single Advanced panel (PLAT-719),
+  const update = setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, view, changed, presentation);
+  // Context preview + handoff help live in the single Advanced panel,
   // not inline in the composer. Replace any prior copy on re-mount.
   const advanced = doc.querySelector('#advanced-panel');
   advanced?.querySelector('.context-details')?.remove();

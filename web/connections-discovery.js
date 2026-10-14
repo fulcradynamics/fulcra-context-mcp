@@ -1,4 +1,4 @@
-import { parseContactIdentifier, threadIdentifier, threadTitle } from './contact-identifier.js';
+import { parseContactIdentifier, threadIdentifier } from './contact-identifier.js';
 import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX, CONNECTION_PREFIXES } from './connection-compatibility.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
@@ -177,25 +177,4 @@ export async function discoverThreads(app) {
     if (old && old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id])))) legacy.delete(thread.peer);
   }
   return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
-}
-
-export async function loadConnections(app, status, list, onSelect) {
-  status.textContent = 'Loading Agent Contacts — calling get_data_catalog/list_shares…';
-  list.replaceChildren();
-  try {
-    const { threads, warnings } = await discoverThreads(app);
-    for (const thread of threads) {
-      const row = list.ownerDocument.createElement('li');
-      const button = list.ownerDocument.createElement('button');
-      button.type = 'button';
-      button.textContent = threadTitle(thread);
-      button.addEventListener('click', () => onSelect(thread));
-      row.append(button);
-      list.append(row);
-    }
-    status.textContent = `get_data_catalog/list_shares completed — ${threads.length} Agent Contacts returned.${warnings.length ? ' ' + warnings.join(' ') : ''}`;
-  } catch {
-    list.replaceChildren();
-    status.textContent = 'Could not load Agent Contacts (get_data_catalog/list_shares failed, invalid result, or missing own user ID). Reopen the app to retry.';
-  }
 }

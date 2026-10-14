@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverThreads, loadConnections, parseConnections } from './connections-discovery.js';
+import { discoverThreads, parseConnections } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 test('identifier is display only, outgoing preferred, stable type-ID tie break and fallback', async () => {
@@ -9,7 +9,7 @@ test('identifier is display only, outgoing preferred, stable type-ID tie break a
     labeled('incoming', 'peer', 'Incoming label'), labeled('same', 'other', '<b>Trip</b>'), entry('none', 'unknown')];
   for (const items of [catalog, [...catalog].reverse()]) {
     const result = await load(items, [grant('z'), grant('a')]);
-    assert.deepEqual(result.rows.map(r => r.button.textContent), ['<b>Trip</b> (other)', '<b>Trip</b> (peer)', 'unknown']);
+    assert.deepEqual(result.selections.map(t => t.identifier), ['<b>Trip</b>', '<b>Trip</b>', undefined]);
     assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer', 'unknown']);
     assert.equal(result.selections[1].sources.length, 3);
     assert.equal(result.selections[1].sources.find(s => s.id === 'Event/a').name, 'Mesh Outbox same name');
@@ -17,10 +17,10 @@ test('identifier is display only, outgoing preferred, stable type-ID tie break a
   }
   catalog[1].description = '[mesh_identifier: "Renamed"]';
   const renamed = await load(catalog, [grant('z'), grant('a')]);
-  assert.equal(renamed.rows[1].button.textContent, 'Renamed (peer)');
+  assert.equal(renamed.selections[1].identifier, 'Renamed');
   catalog[1].description = '[mesh_identifier: bad]';
   catalog[0].description = 'no marker';
-  assert.equal((await load(catalog, [grant('z'), grant('a')])).rows[1].button.textContent, 'Incoming label (peer)');
+  assert.equal((await load(catalog, [grant('z'), grant('a')])).selections[1].identifier, 'Incoming label');
 });
 
 test('failed discovery drains both requests before releasing the scheduler', async () => {
@@ -75,22 +75,19 @@ test('assessment uses only verified own channels, never peer-authored status', a
 });
 const text = result => ({ structuredContent: { result } });
 async function load(catalog, outgoing = [], own = 'me') {
-  const rows = [], selections = [], calls = [], status = {};
-  const list = { replaceChildren() {}, ownerDocument: { createElement: () => ({ addEventListener(_, fn) { this.click = fn; }, append(button) { this.button = button; } }) }, append: row => rows.push(row) };
-  await loadConnections({ async callServerTool(call) {
+  const calls = [];
+  const result = await discoverThreads({ async callServerTool(call) {
     calls.push(call);
     return text(call.name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, outgoing:outgoing.map(shareFixture), incoming: incomingFixtures(catalog, own) }));
-  } }, status, list, thread => selections.push(thread));
-  for (const row of rows) row.button.click();
-  return { rows, selections, calls, status: status.textContent };
+  } });
+  return { selections: result.threads, calls, warnings: result.warnings };
 }
 
 test('one exact peer row deduplicates both sides and multiple narrow channels; names do not group peers', async () => {
   const result = await load([entry('own'), entry('own'), entry('second'), entry('same', 'peer'), entry('same', 'peer'), entry('same', 'other')], [grant('own'), grant('second')]);
-  assert.match(result.status, /2 Agent Contacts/);
-  assert.deepEqual(result.rows.map(r => r.button.textContent), ['other', 'peer']);
+  assert.equal(result.selections.length, 2);
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.equal(result.selections[1].sources.length, 3);
   assert.deepEqual(result.calls.map(c => c.name), ['get_data_catalog', 'list_shares']);
@@ -112,7 +109,7 @@ test('orphans and self do not become threads; broad/mixed grants cannot hide beh
     const result = await load([entry('own'), entry('orphan'), entry('self', 'me'), entry('incoming', 'peer')], [grant('own'), extra, grant('self', 'me')]);
     assert.deepEqual(result.selections.map(t => t.peer), ['peer']);
     assert.equal(result.selections[0].sources.length, 1);
-    assert.match(result.status, new RegExp(`${extra.share_all_data ? 3 : 2} own outboxes omitted`));
+    assert.match(result.warnings.join(' '), new RegExp(`${extra.share_all_data ? 3 : 2} own outboxes omitted`));
     assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   }
 });
@@ -122,16 +119,13 @@ test('outgoing-only and incoming-only are usable, with explicit missing-side not
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   assert.match(result.selections[1].warnings.join(' '), /missing incoming/i);
-  assert.equal((await load([])).status, 'get_data_catalog/list_shares completed — 0 Agent Contacts returned.');
+  assert.deepEqual((await load([])).selections, []);
 });
 
-test('failed, malformed, and timed-out discovery shows errors, never zero', async () => {
+test('failed, malformed, and timed-out discovery rejects, never returns empty history', async () => {
   for (const result of [{ isError: true }, text('Error: unauthorized'), text('Available data types, grouped by compatible tool: []'), new Error('timeout')]) {
-    const status = {};
-    await loadConnections({ callServerTool: async () => { if (result instanceof Error) throw result; return result; } }, status, { replaceChildren() {} });
-    assert.match(status.textContent, /Could not load/);
-    assert.doesNotMatch(status.textContent, /0 Agent Contacts/);
+    await assert.rejects(discoverThreads({ callServerTool: async () => { if (result instanceof Error) throw result; return result; } }), /Thread discovery failed/);
   }
-  assert.match((await load([entry('own')], [grant('own')], undefined)).status, /Agent Contacts/);
-  assert.match((await load([entry('own')], [grant('own')], '')).status, /Could not load/);
+  assert.equal((await load([entry('own')], [grant('own')])).selections.length, 1);
+  await assert.rejects(load([entry('own')], [grant('own')], ''), /Thread discovery failed/);
 });

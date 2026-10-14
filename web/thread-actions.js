@@ -7,7 +7,7 @@ const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
 // Drafts/posts belong to the peer; in-flight host operations belong to the app.
-export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, orderField, view, changed, presentation) {
+export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, view, changed, presentation) {
   const doc = container.ownerDocument;
   const label = doc.createElement('label');
   const input = doc.createElement('textarea'); input.rows = 1; input.maxLength = 4000; input.className = 'composer-input';
@@ -53,7 +53,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   }
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(handoff, send);
-  if (orderField) actions.append(orderField);
   container.append(label, actions, hint);
   // Delivery address (and any setup-session handoff) lives in the Advanced panel.
   const advanced = doc.querySelector('#advanced-panel');

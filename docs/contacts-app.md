@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.11.0 / contacts UI v45 / file manager v2 pairs with plugin 0.14.0.
+Server 1.11.0 / contacts UI v46 / file manager v2 pairs with plugin 0.14.0.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v45.html`, `ui://fulcra/contacts/threads/v45.html` and
-`ui://fulcra/contacts/thread/v45.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v46.html`, `ui://fulcra/contacts/threads/v46.html` and
+`ui://fulcra/contacts/thread/v46.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**.
 

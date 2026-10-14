@@ -57,7 +57,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     requestRefresh();
   });
   // Single "Advanced" panel (toggled from the contact header) collects the
-  // technical/debug sections and multiparty controls (PLAT-719).
+  // technical/debug sections and multiparty controls.
   const advanced = doc.querySelector('#advanced-panel');
   const advancedToggle = doc.querySelector('#advanced-toggle');
   advancedToggle.prepend(icon(Settings, 'btn-icon'));
@@ -80,11 +80,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // display) keeps its space reserved so the button never shifts.
   const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
   const back = doc.querySelector('#message-back');
-  // Messages show oldest-first (newest at the bottom), like a chat thread; the
-  // order toggle was removed.
-  const order = { value: 'oldest' };
   back.prepend(icon(ArrowLeft, 'btn-icon'));
-  const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'), presentation);
+  const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'));
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
@@ -124,7 +121,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     } else if (displayed && !displayed.messages.length) text = 'No messages yet.';
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
-  const messageList = createMessageList(messages, order,
+  const messageList = createMessageList(messages,
     (item, { record, source, direction, state }) => {
       const incoming = direction === 'Incoming';
       let avatar, bubble, body, date, meta, sender;
@@ -240,15 +237,14 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
     result = { ...result, assessment: selected.assessment, participants: selected.participants,
-      viewingAgent: activeViewer, sources: selected.sources, messages: [...result.messages, ...posts] };
-
-    result = { ...result, messages: [...result.messages].sort((a, b) => {
-      const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
-      const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
-      if (!Number.isFinite(at)) return Number.isFinite(bt) ? 1 : 0;
-      if (!Number.isFinite(bt)) return -1;
-      return order.value === 'latest' ? bt - at : at - bt;
-    }) };
+      viewingAgent: activeViewer, sources: selected.sources,
+      messages: [...result.messages, ...posts].sort((a, b) => {
+        const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
+        const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
+        if (!Number.isFinite(at)) return Number.isFinite(bt) ? 1 : 0;
+        if (!Number.isFinite(bt)) return -1;
+        return at - bt;
+      }) };
     const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
       || (record.body != null && (typeof record.body !== 'string'
         || (record.body.trim() && record.body.trim().toLowerCase() !== 'ack'))));
@@ -344,7 +340,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   function placeMore() {
     history.hidden = !attemptedStart;
     if (attemptedStart) through.textContent = `Showing messages through ${new Date(attemptedStart).toLocaleDateString()}`;
-    if (order.value === 'oldest') messages.before(history); else messages.after(history);
+    messages.before(history);
   }
   const onMore = () => {
     if (!start || requestedStart) return;
@@ -386,7 +382,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), undefined,
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     setTitle(thread);
@@ -402,7 +398,6 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     dispose() {
     generation++; selected = undefined;
     clearTimeout(statusTimer); loading.hidden = true;
-    messageList.dispose();
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);

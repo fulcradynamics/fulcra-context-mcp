@@ -40,24 +40,18 @@ def test_normalized_catalog_reaches_ui_without_repair():
     script = r'''
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { loadConnections } from './web/connections-discovery.js';
+import { discoverThreads } from './web/connections-discovery.js';
 for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
   Object.assign(entry, JSON.parse(readFileSync('./tests/fixtures/connection-schema.json', 'utf8')));
-  const rows = [], selected = [];
-  const list = { replaceChildren() {}, append(row) { rows.push(row); },
-    ownerDocument: { createElement: () => ({
-      addEventListener(_, fn) { this.click = fn; }, append(button) { this.button = button; }
-    }) } };
-  await loadConnections({ async callServerTool({ name }) {
+  const { threads } = await discoverThreads({ async callServerTool({ name }) {
     return { structuredContent: { result: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry] })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',data_types:[entry.id]}], outgoing: [] }) } };
-  } }, {}, list, thread => selected.push(thread));
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].button.textContent, valid ? 'Trip (peer)' : 'peer');
-  rows[0].button.click();
-  assert.equal(selected[0].peer, 'peer');
-  assert.equal(selected[0].sources[0].id, entry.id);
+  } });
+  assert.equal(threads.length, 1);
+  assert.equal(threads[0].identifier, valid ? 'Trip' : undefined);
+  assert.equal(threads[0].peer, 'peer');
+  assert.equal(threads[0].sources[0].id, entry.id);
 }
 '''
     subprocess.run(['node', '--input-type=module', '-e', script], cwd=ROOT,
