@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
 from . import tools
+from .connection import owned_connection
 from .connection_compatibility import CHECK_STATE_ROOT
 
 settings_mcp = FastMCP("Agent Contact check settings")
@@ -122,22 +123,6 @@ def fulcra_settings_update(set: dict) -> dict:
         raise ToolError("Preferences not verified. Reload before retrying; no schedule was changed.") from None
 
 
-def _owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
-    from . import connection
-    from .mentions import _compatible_schema
-    if not re.fullmatch('Event/' + connection.UUID_PATTERN, data_type) or not connection._uuid(peer_userid):
-        raise ValueError('Exact Event channel and peer UUID required.')
-    own = api.get_fulcra_userid()
-    if not connection._uuid(own) or own == peer_userid:
-        raise ValueError('Distinct authenticated owner required.')
-    entry = connection._authorize(api, own, peer_userid, data_type, expected_peer_userids)
-    fields, required = tools._user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
-    if (entry.get('record_spec', {}).get('type') != 'event'
-            or not _compatible_schema({'fields': fields, 'required_fields': required})):
-        raise ValueError('Event connection schema required.')
-    return own, entry
-
-
 @settings_mcp.tool(annotations=READ_ONLY)
 def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_userids: list[str] | None = None) -> dict:
     """Read effective preferences for one of your own connections and peer.
@@ -148,7 +133,7 @@ def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_user
     from . import contact_preferences as policy
     try:
         api = tools.get_fulcra_object()
-        _owned_connection(api, data_type, peer_userid, expected_peer_userids)
+        owned_connection(api, data_type, peer_userid, expected_peer_userids)
         values, overrides = policy.contact(api, policy.scope(data_type, peer_userid))
         return {'data_type': data_type, 'peer_userid': peer_userid,
                 'values': values, 'overrides': overrides}
@@ -168,7 +153,7 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
     try:
         policy.validate(overrides)
         api = tools.get_fulcra_object()
-        _owned_connection(api, data_type, peer_userid, expected_peer_userids)
+        owned_connection(api, data_type, peer_userid, expected_peer_userids)
         policy.set_overrides(api, policy.scope(data_type, peer_userid), overrides)
         return {'verified': True, 'overrides': overrides, 'data_type': data_type}
     except Exception:
