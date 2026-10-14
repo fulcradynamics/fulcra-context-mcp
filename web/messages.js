@@ -17,6 +17,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const listPanel = doc.querySelector('#connection-list');
   const title = doc.querySelector('#message-title');
   const headerAvatar = doc.querySelector('#contact-avatar');
+  const contactSubtitle = doc.querySelector('#contact-subtitle');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
@@ -179,12 +180,17 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       : (thread.identifier || thread.peer || 'Agent Contact');
     title.textContent = name;
     headerAvatar.textContent = [...String(name).trim()][0]?.toUpperCase() || '?';
+    // Peer ID as a subtle monospace subtitle; hidden for multiparty or when it
+    // would just repeat the title (contact with no readable identifier).
+    contactSubtitle.textContent = thread.participants ? '' : (thread.peer ?? '');
+    contactSubtitle.hidden = !contactSubtitle.textContent || contactSubtitle.textContent === name;
     renderAssessment(assessment, thread.assessment);
     assessment.hidden = thread.assessment?.attention !== true;
-    const account = thread.accountName && thread.accountName !== thread.identifier ? ` · Account: ${thread.accountName}` : '';
+    const account = thread.accountName && thread.accountName !== thread.identifier ? thread.accountName : '';
     contactMeta.textContent = thread.participants
       ? `Participants: ${thread.participants.map(p => p.id).join(', ')}`
-      : `Contact ID: ${thread.peer}${account}`;
+      : (account ? `Account: ${account}` : '');
+    contactMeta.hidden = !contactMeta.textContent;
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
