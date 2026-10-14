@@ -23,7 +23,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:{message:{text:{}},updateModelContext:{text:{}}}});
    if(r.method==='ui/notifications/initialized')frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{presentation:'global'}}},'*');
    if(r.method==='ui/update-model-context'){window.contexts.push(r.params);reply(r.id,{});}
-   if(r.method==='ui/message'){window.hostMessages.push(r.params);reply(r.id,{});}
+   if(r.method==='ui/message'){window.hostMessages.push(r.params); const respond=()=>reply(r.id,window.rejectMessages?{isError:true}:{}); if(window.holdMessages)window.releaseMessage=respond; else respond();}
    if(r.method!=='tools/call')return;
    window.calls.push(r.params); const {name,arguments:a}=r.params;
    const discovery=['get_data_catalog','list_shares'].includes(name);

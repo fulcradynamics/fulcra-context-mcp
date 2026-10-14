@@ -134,6 +134,14 @@ async def test_the_files_prompt_asks_for_the_file_manager(client, fake_fulcra, a
     )
 
 
+async def test_open_file_manager_preserves_shared_owner(call, fake_fulcra):
+    fake_fulcra.list_files.return_value = {"folders": [], "files": [FILE]}
+    owner = "00000000-0000-4000-8000-000000000002"
+    text = await call("open_file_manager", {"path": "/reports", "fulcra_userid": owner})
+    fake_fulcra.list_files.assert_called_once_with("/reports", fulcra_userid=owner)
+    assert owner in text and "read-only" in text
+
+
 async def test_open_file_manager_helps_clients_without_the_panel(call, fake_fulcra):
     fake_fulcra.list_files.return_value = {"folders": ["/reports/2026"], "files": [FILE]}
 

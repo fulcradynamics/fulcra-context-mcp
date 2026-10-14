@@ -1,12 +1,12 @@
 # Agent connection compatibility
 
-Server 1.9.1 / UI v44 pairs with plugin 0.13.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
+Server 1.10.0 / UI v45 pairs with plugin 0.13.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
 
 ## Current interface
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v44.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v44.html`.
-- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v44.html`.
+- `fulcra_open`: global list; `ui://fulcra/contacts/v45.html`.
+- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v45.html`.
+- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v45.html`.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
 - `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
 - `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: settings/check status.
