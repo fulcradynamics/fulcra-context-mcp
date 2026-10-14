@@ -1,214 +1,174 @@
-"""Private preference persistence and effective-policy boundaries."""
-import io
+"""Private preference persistence in one owned Event data type description."""
 import json
 
 import pytest
 from fastmcp import Client
 from fulcra_mcp.main import mcp
+from fulcra_mcp import contact_preferences as policy
 
-ROOT = '/agent/chatgpt/contact-preferences'
+OWN = '00000000-0000-4000-8000-000000000001'
+CONNECTION = 'Event/00000000-0000-4000-8000-0000000000aa'
+PEER = '00000000-0000-4000-8000-000000000002'
+PREFS = 'Event/00000000-0000-4000-8000-0000000000ff'
 
 
 @pytest.fixture
 def storage(fake_fulcra):
-    fake_fulcra.get_fulcra_userid.return_value = 'me'
+    fake_fulcra.get_fulcra_userid.return_value = OWN
     fake_fulcra.get_datashares.return_value = []
-    files = {}
-    fake_fulcra.list_files.side_effect = lambda path: {'files': [
-        {'id': name, 'name': name} for name in files] if path == ROOT else [], 'folders': []}
-    fake_fulcra.download_file.side_effect = lambda name: io.BytesIO(files[name])
-    def upload(data, content_type, size, path):
-        files[path.rsplit('/', 1)[1]] = data
-        return {'id': path.rsplit('/', 1)[1]}
-    fake_fulcra.upload_file.side_effect = upload
-    return fake_fulcra, files
+    catalog = []
+    fake_fulcra.v1_catalog.side_effect = lambda **kwargs: [dict(e) for e in catalog]
+    def create(base, body):
+        assert base == 'Event' and set(body) == {'name', 'description'}
+        catalog.append(dict(id=PREFS, fulcra_userid=OWN, api_version='v1', **body))
+        return catalog[-1]
+    def update(base, type_id, body):
+        assert list(body) == ['description']
+        next(e for e in catalog if e['id'] == base + '/' + type_id).update(body)
+    fake_fulcra.create_data_type.side_effect = create
+    fake_fulcra.update_data_type.side_effect = update
+    return fake_fulcra, catalog
 
 
-async def test_native_defaults_and_verified_partial_update(storage):
-    api, files = storage
+async def test_native_defaults_guidance_and_verified_update(storage):
+    api, catalog = storage
     async with Client(mcp) as client:
         initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
-        assert initial['values']['status_metadata'] is True
-        assert initial['values']['autonomous_replies'] is False
-        assert initial['values']['unanswered_days'] == 2
-        assert initial['values']['attention_waiting'] is True
-        assert initial['values']['attention_overdue'] is True
-        assert initial['values']['attention_high_priority'] is True
-        api.upload_file.assert_not_called()
-        saved = (await client.call_tool('fulcra_settings_update', {'set': {'special_instructions': 'Keep replies brief.'}})).structured_content
+        assert initial['values'] == {k: policy.DEFAULTS[k] for k in policy.SCHEMA}
+        assert initial['values']['acknowledge_messages'] is True
+        assert initial['values']['share_contact_status'] is True
+        assert initial['values']['pause_autonomous_replies'] is False
+        assert initial['checking_preferences'] == ''
+        assert 'checking_preferences' not in initial['schema']['properties']
+        assert initial['layout'][-1]['title'] == 'For more specific preferences, chat with your agent.'
+        api.create_data_type.assert_not_called()
+        saved = (await client.call_tool('fulcra_settings_update', {'set': {
+            'checking_preferences': 'Treecle messages about travel are important.',
+            'pause_autonomous_replies': True}})).structured_content
         assert saved['verified'] is True
         current = (await client.call_tool('fulcra_settings_read', {})).structured_content
-        assert current['values']['special_instructions'] == 'Keep replies brief.'
-        assert current['values']['autonomous_replies'] is False
-        assert len(files) == 1
-        assert all('/mesh-checks/' not in str(c) for c in api.upload_file.call_args_list)
+        assert current['values']['pause_autonomous_replies'] is True
+        assert current['checking_preferences'] == 'Treecle messages about travel are important.'
+    assert len(catalog) == 1 and catalog[0]['name'] == 'Fulcra Contact Preferences'
+    policy.update(api, {'notifications': 'none'})
+    api.create_data_type.assert_called_once()
+    assert json.loads(catalog[0]['description'])['global_preferences']['notifications'] == 'none'
 
 
-@pytest.mark.parametrize('changes', [dict(autonomous_replies='true'), dict(unanswered_days=True),
-    dict(unanswered_days=0), dict(notifications='always'), dict(interval=30),
-    dict(special_instructions='x' * 2001), {}])
+@pytest.mark.parametrize('changes', [dict(acknowledge_messages='true'), dict(unanswered_days=True),
+    dict(unanswered_days=0), dict(notifications='always'), dict(interval=30), dict(autonomous_replies=True),
+    dict(special_instructions='x'), dict(checking_preferences='x' * 2001), {}])
 async def test_invalid_updates_do_not_write(storage, changes):
     api, _ = storage
     async with Client(mcp) as client:
         result = await client.call_tool('fulcra_settings_update', {'set': changes}, raise_on_error=False)
         assert result.is_error
-    api.upload_file.assert_not_called()
+    api.create_data_type.assert_not_called()
 
 
-async def test_peer_membership_notification_default_and_persistence(storage):
+def test_contact_overrides_share_the_document(storage):
     api, _ = storage
-    async with Client(mcp) as client:
-        initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
-        assert initial['values']['attention_peer_membership_announcements'] is True
-        result = await client.call_tool('fulcra_settings_update', {'set': {'attention_peer_membership_announcements': False}})
-        assert result.structured_content['verified'] is True
-        current = (await client.call_tool('fulcra_settings_read', {})).structured_content
-        assert current['values']['attention_peer_membership_announcements'] is False
-        assert current['values']['autonomous_replies'] is False
-
-
-async def test_preserve_unrelated_fields_and_fresh_reads(storage):
-    api, files = storage
-    from fulcra_mcp import contact_preferences as policy
+    key = policy.scope(CONNECTION, PEER)
     policy.update(api, {'notifications': 'none'})
-    document = policy.load(api)
-    document['future_metadata'] = {'keep': True}
-    files['settings.md'] = ('```json\n' + json.dumps(document) + '\n```').encode()
-    policy.update(api, {'autonomous_replies': True})
-    assert policy.load(api)['future_metadata'] == {'keep': True}
+    policy.set_overrides(api, key, {'unanswered_days': 5, 'checking_preferences': 'Brief replies.'})
+    values, overrides = policy.contact(api, key)
+    assert values['unanswered_days'] == 5 and values['notifications'] == 'none'
+    assert values['checking_preferences'] == 'Brief replies.'
+    assert overrides == {'unanswered_days': 5, 'checking_preferences': 'Brief replies.'}
+    policy.set_overrides(api, key, {})
+    assert policy.contact(api, key) == (policy.read(api), {})
     assert policy.read(api)['notifications'] == 'none'
-    api.get_fulcra_userid.return_value = 'other'
-    with pytest.raises(ValueError):
-        policy.read(api)
+    assert api.update_data_type.call_count == 2
 
 
-@pytest.mark.parametrize('share', [dict(share_all_data=True),
-    dict(share_all_data=False, fulcra_data_types=['file:/agent/']),
-    dict(share_all_data=False, fulcra_data_types=['filehistory:' + ROOT + '/settings.md']),
-    dict(share_all_data=False, fulcra_data_types=['file:/']),
-    dict(share_all_data=False, file_paths=['/agent/']),
-    dict(share_all_data=False, file_history_paths=[ROOT + '/settings.md'])])
-def test_exposed_settings_fail_closed(storage, share):
-    from fulcra_mcp import contact_preferences as policy
+def test_global_pause_applies_to_every_contact():
+    paused = {**policy.DEFAULTS, 'pause_autonomous_replies': True}
+    assert policy.effective(paused, {'pause_autonomous_replies': False})['pause_autonomous_replies'] is True
+    assert policy.effective(policy.DEFAULTS, {'pause_autonomous_replies': True})['pause_autonomous_replies'] is True
+    assert policy.effective(policy.DEFAULTS, {'share_contact_status': False})['share_contact_status'] is False
+
+
+@pytest.mark.parametrize('share', [dict(share_all_data=True, fulcra_data_types=[]),
+    dict(share_all_data=False, fulcra_data_types=['Event/*']),
+    dict(share_all_data=False, fulcra_data_types=[PREFS])])
+def test_shared_preferences_fail_closed(storage, share):
     api, _ = storage
+    policy.update(api, {'notifications': 'none'})
     api.get_datashares.return_value = [share]
     with pytest.raises(ValueError):
-        policy.update(api, {'autonomous_replies': True})
-    api.upload_file.assert_not_called()
-
-
-def test_malformed_and_unverified_save_not_success(storage):
-    from fulcra_mcp import contact_preferences as policy
-    api, files = storage
-    files['settings.md'] = b'bad'
-    with pytest.raises(ValueError): policy.update(api, {'notifications': 'none'})
-    api.upload_file.assert_not_called()
-    files.clear()
-    api.upload_file.side_effect = None
-    with pytest.raises(ValueError): policy.update(api, {'notifications': 'none'})
-
-
-@pytest.mark.parametrize('legacy_status', [False, True, None])
-def test_legacy_status_reset_is_read_only_and_later_choices_survive(storage, legacy_status):
-    from fulcra_mcp import contact_preferences as policy
-    api, files = storage
-    preferences = {'notifications': 'none'}
-    if legacy_status is not None:
-        preferences['status_metadata'] = legacy_status
-    document = dict(version=1, account_id='me', preferences=preferences, future='keep')
-    files['settings.md'] = ('```json\n' + json.dumps(document) + '\n```').encode()
-    assert policy.read(api)['status_metadata'] is True
-    api.upload_file.assert_not_called()
-    policy.update(api, {'special_instructions': 'Brief.'})
-    assert policy.load(api)['version'] == 2
-    assert policy.load(api)['future'] == 'keep'
-    assert policy.read(api)['status_metadata'] is True
-    policy.update(api, {'status_metadata': False})
-    assert policy.read(api)['status_metadata'] is False
-    policy.update(api, {'special_instructions': 'Even briefer.'})
-    assert policy.read(api)['status_metadata'] is False
-    assert policy.read(api)['notifications'] == 'none'
-
-
-def test_explicit_opt_out_during_first_legacy_update_wins(storage):
-    from fulcra_mcp import contact_preferences as policy
-    api, files = storage
-    files['settings.md'] = b'```json\n{"version":1,"account_id":"me","preferences":{"status_metadata":false}}\n```'
-    policy.update(api, {'status_metadata': False})
-    assert policy.read(api)['status_metadata'] is False
-
-
-def test_owned_override_marker_precedence():
-    from fulcra_mcp import contact_preferences as policy
-    original = 'connect-agents-with-anyone channel\n[mesh_identifier: "Friend"]'
-    description = policy.write_overrides(original, {'autonomous_replies': True, 'unanswered_days': 3})
-    assert description.endswith('[mesh_identifier: "Friend"]')
-    overrides = policy.parse_overrides(description)
-    assert policy.effective(policy.DEFAULTS, overrides)['autonomous_replies'] is False
-    assert policy.effective(policy.DEFAULTS, overrides)['unanswered_days'] == 3
-    enabled = {**policy.DEFAULTS, 'autonomous_replies': True}
-    assert policy.effective(enabled, overrides)['autonomous_replies'] is True
-    assert policy.effective(enabled, {'autonomous_replies': False})['autonomous_replies'] is False
-    assert policy.parse_overrides(policy.write_overrides(description, {})) == {}
-    with pytest.raises(ValueError): policy.parse_overrides(description + '\n[contact_preferences: {}]')
-
-
-def test_legacy_contact_status_reset_preserves_metadata_and_new_opt_out():
-    from fulcra_mcp import contact_preferences as policy
-    original = ('connect-agents-with-anyone channel\n[contact_status: {"summary":"Keep"}]\n'
-                '[contact_preferences: {"status_metadata":false,"autonomous_replies":false,"unanswered_days":4}]\n'
-                '[mesh_identifier: "Friend"]')
-    overrides = policy.parse_overrides(original)
-    assert policy.effective(policy.DEFAULTS, overrides)['status_metadata'] is True
-    assert policy.effective(policy.DEFAULTS, overrides)['autonomous_replies'] is False
-    assert overrides['unanswered_days'] == 4
-    assert policy.effective({**policy.DEFAULTS, 'status_metadata': False}, overrides)['status_metadata'] is False
-    saved = policy.write_overrides(original, {**overrides, 'status_metadata': False})
-    assert '[contact_preferences_version: 2]' in saved
-    assert '[contact_status: {"summary":"Keep"}]' in saved
-    assert saved.endswith('[mesh_identifier: "Friend"]')
-    assert policy.parse_overrides(saved)['status_metadata'] is False
-    again = policy.write_overrides(saved, policy.parse_overrides(saved))
-    assert again == saved
-    assert policy.parse_overrides(policy.write_overrides(saved, {})) == {}
-
-
-@pytest.mark.parametrize('version', ['1', '3', 'bad', '2]\n[contact_preferences_version: 2'])
-def test_invalid_contact_preference_version_fails_closed(version):
-    from fulcra_mcp import contact_preferences as policy
+        policy.read(api)
     with pytest.raises(ValueError):
-        policy.parse_overrides('[contact_preferences: {"status_metadata":false}]\n'
-                               f'[contact_preferences_version: {version}]')
+        policy.update(api, {'notifications': 'all_messages'})
 
 
-def test_real_sdk_private_upload_and_independent_download(monkeypatch):
+@pytest.mark.parametrize('description', ['not json', '{"version":2,"global_preferences":{},"overrides":{}}',
+    '{"version":1,"global_preferences":{"autonomous_replies":true},"overrides":{}}',
+    '{"version":1,"global_preferences":{},"overrides":{"bad":{}}}'])
+def test_malformed_document_fails_closed(storage, description):
+    api, catalog = storage
+    catalog.append(dict(id=PREFS, fulcra_userid=OWN, api_version='v1', name=policy.NAME, description=description))
+    with pytest.raises(ValueError):
+        policy.read(api)
+    with pytest.raises(ValueError):
+        policy.update(api, {'notifications': 'none'})
+    api.update_data_type.assert_not_called()
+
+
+def test_ignores_foreign_and_archived_types_and_detects_unverified_save(storage):
+    api, catalog = storage
+    catalog.append(dict(id='Event/00000000-0000-4000-8000-0000000000ee', fulcra_userid=PEER,
+                        api_version='v1', name=policy.NAME, description='{}'))
+    catalog.append(dict(id='Event/00000000-0000-4000-8000-0000000000dd', fulcra_userid=OWN, deprecated=True,
+                        api_version='v1', name=policy.NAME, description='{}'))
+    assert policy.read(api) == policy.DEFAULTS
+    api.create_data_type.side_effect = None
+    with pytest.raises(ValueError):
+        policy.update(api, {'notifications': 'none'})
+
+
+async def test_create_share_refuses_preferences_type(storage):
+    api, _ = storage
+    policy.update(api, {'notifications': 'none'})
+    async with Client(mcp) as client:
+        result = await client.call_tool('create_share', {
+            'name': 'x', 'with_user_ids': [PEER], 'data_types': [PREFS]})
+    assert 'private' in result.content[0].text
+    api.create_datashare.assert_not_called()
+
+
+def test_real_sdk_create_then_update_description(monkeypatch):
+    from datetime import datetime, timedelta
+    from email.message import Message
+    from io import BytesIO
+    from urllib.error import HTTPError
+    from urllib.parse import urlparse
     from fulcra_api.core import FulcraAPI
-    from fulcra_mcp import contact_preferences as policy
-    api = FulcraAPI()
-    monkeypatch.setattr(api, 'get_token_claims', lambda: {'fulcradynamics.com/userid': 'me'})
-    stored = {}
-    calls = []
-    def transport(endpoint, **kwargs):
-        calls.append((endpoint, kwargs.get('method', 'GET')))
-        if endpoint == '/user/v1/datashare':
-            return '[]'
-        if endpoint == '/input/v1/file_upload':
-            if kwargs.get('method') == 'POST':
-                assert kwargs['data']['path'] == ROOT
-                assert kwargs['data']['name'] == 'settings.md'
-                return json.dumps({'url': 'https://upload.synthetic.invalid', 'id': 'private'})
-            assert kwargs['query']['path'] == ROOT
-            return json.dumps({'files': [{'name': 'settings.md', 'id': 'private'}] if stored else [], 'folders': []})
-        assert endpoint == '/input/v1/file_upload/private/download'
-        return io.BytesIO(stored['data'])
-    def upload(request):
-        assert request.full_url == 'https://upload.synthetic.invalid'
-        assert request.method == 'POST'
-        stored['data'] = request.data
-        return io.BytesIO(b'')
-    monkeypatch.setattr(api, 'fulcra_api', transport)
-    monkeypatch.setattr('urllib.request.urlopen', upload)
-    result = policy.update(api, {'special_instructions': 'Brief, please.'})
-    assert result['special_instructions'] == 'Brief, please.'
-    assert calls[-1] == ('/input/v1/file_upload/private/download', 'GET')
-    assert sum(method == 'POST' for _, method in calls) == 1
+    from fulcra_api.credentials import FulcraCredentials
+    api = FulcraAPI(oidc_audience='https://synthetic.invalid')
+    api.fulcra_credentials = FulcraCredentials(access_token='synthetic',
+                                               access_token_expiration=datetime.now() + timedelta(hours=1))
+    monkeypatch.setattr(api, 'get_token_claims', lambda: {'fulcradynamics.com/userid': OWN})
+    monkeypatch.setattr(api, 'get_datashares', lambda: [])
+    row = {}
+    methods = []
+    def transport(req):
+        path = urlparse(req.full_url).path
+        methods.append(req.get_method())
+        if path == '/data/v1/catalog':
+            return BytesIO(json.dumps([row] if row else []).encode())
+        if req.get_method() == 'GET':
+            return BytesIO(json.dumps(row).encode())
+        body = json.loads(req.data)
+        if req.get_method() == 'POST':
+            assert path == '/input/v1/data_type/Event'
+            row.update(id=PREFS, fulcra_userid=OWN, api_version='v1', **body)
+        else:
+            assert path == '/input/v1/data_type/' + PREFS and list(body) == ['description']
+            row.update(body)
+        headers = Message(); headers['Location'] = '/input/v1/data_type/' + PREFS
+        raise HTTPError(req.full_url, 303, 'See Other', headers, None)
+    monkeypatch.setattr('urllib.request.urlopen', transport)
+    assert policy.update(api, {'acknowledge_messages': False})['acknowledge_messages'] is False
+    assert policy.update(api, {'unanswered_days': 4})['acknowledge_messages'] is False
+    assert methods.count('POST') == 1 and methods.count('PUT') == 1
+    assert policy.read(api)['unanswered_days'] == 4

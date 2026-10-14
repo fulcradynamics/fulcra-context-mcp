@@ -4,6 +4,16 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Contact preferences as configuration (1.10.0 / UI v44)
+
+Global preferences and per-contact overrides move into the description of one private
+**Fulcra Contact Preferences** Event type, created on first save; the old settings file
+and peer-visible connection override markers are no longer read (testing-only data,
+not migrated). New Acknowledge messages, Share contact status and Pause autonomous
+replies switches replace autonomous replies/status metadata. Special instructions
+become stored-only `checking_preferences` set in chat. Pair with plugin 0.14.0, which
+splits `check-messages` and `reply-to-messages`. See [settings](docs/fulcra-settings.md).
+
 ### Contact defaults and receipt polish (1.9.0 / UI v43)
 
 Legacy global testing preferences now project status enabled once, preserving later

@@ -499,19 +499,20 @@ async def set_contact_identifier(data_type: str, identifier: str) -> str:
                             "destructiveHint": False, "idempotentHint": False},
                 meta={"ui": {"visibility": ["model"]}})
 async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
-    """Save a best-effort last assessment on your own existing Event connection.
+    """Save the general status of a conversation on your own existing Event connection.
 
-    Only with status-metadata consent after complete scoped reads; never clear on
-    incomplete history or denial. An ack alone does not resolve a human decision.
-    Reason is a peer-visible neutral label, not private thoughts, excerpts,
-    instructions or permission. Failure must not block reads/checkpoint work;
-    do not retry after denial. Not live state, unread counts or acknowledgement.
+    Use when the share_contact_status preference is on, after complete scoped
+    reads. The status describes aspects both sides can see, such as a priority
+    message or time since the last reply; never clear it on incomplete history.
+    An ack alone does not resolve a decision. Failure must not block other work;
+    do not retry after denial.
 
     Args:
         data_type: Exact owned Event/<uuid> channel ID.
         peer_userid: Exact UUID of its sole directly authorized peer.
-        attention: Whether the user needs to act, based on the completed assessment.
-        reason: Neutral trimmed single-line Unicode label, 1..80 code points, without control characters.
+        attention: Whether the conversation needs the user's attention.
+        reason: Short shared-status label, e.g. "Priority message waiting" or "No reply in 3 days";
+            trimmed single-line Unicode, 1..80 code points, without control characters.
     """
     from datetime import datetime, timezone
     from . import connection
@@ -2242,6 +2243,11 @@ async def create_share(
     if time_start and time_end and (err := _range_error(time_start, time_end)):
         return err
     fulcra = get_fulcra_object()
+    if data_types:
+        from . import contact_preferences
+        private = contact_preferences.find_type(fulcra, fulcra.get_fulcra_userid())
+        if private and private["id"] in types:
+            return "Contact preferences are private and cannot be shared."
     result = fulcra.create_datashare(
         datashare_name=name,
         fulcra_data_types=types,
