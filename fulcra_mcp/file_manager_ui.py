@@ -292,17 +292,24 @@ function renderCrumbs() {
   });
 }
 
+let refreshes = 0;
+
 async function refresh() {
   renderCrumbs();
+  // Rows act on the folder they were listed from, and a listing that arrives
+  // after a newer one was asked for is dropped.
+  const folderPath = currentPath;
+  const generation = ++refreshes;
   const list = document.getElementById("listing");
   try {
-    const listing = await callTool("list_files", { path: currentPath });
+    const listing = await callTool("list_files", { path: folderPath });
+    if (generation !== refreshes) return;
     list.replaceChildren();
     let index = 0;
     for (const folder of listing.folders || []) {
       const name = (typeof folder === "string" ? folder : (folder.name || folder.path)).split("/").filter(Boolean).pop();
       const open = el("button", "name", name);
-      open.onclick = () => { currentPath = join(currentPath, name); refresh(); };
+      open.onclick = () => { currentPath = join(folderPath, name); refresh(); };
       const li = el("li", null, null, tile("folder", "teal"), el("div", "main", null, open, el("div", "sub", "Folder")));
       li.onclick = (e) => { if (e.target === li) open.click(); };
       list.append(rise(li, index++));
@@ -312,7 +319,7 @@ async function refresh() {
       download.innerHTML = ICONS.download;
       download.title = "Download";
       download.setAttribute("aria-label", "Download " + file.name);
-      download.onclick = () => downloadFile(join(currentPath, file.name), file);
+      download.onclick = () => downloadFile(join(folderPath, file.name), file);
       const when = file.uploaded_at || file.created_at;
       const main = el("div", "main", null, el("div", "name", file.name));
       if (when) main.append(el("div", "sub", "Uploaded " + formatDate(when)));
@@ -328,6 +335,7 @@ async function refresh() {
         upload));
     }
   } catch (e) {
+    if (generation !== refreshes) return;
     list.replaceChildren(el("li", "state", null, tile("warning", "error"), el("p", null, e.message)));
   }
 }
@@ -411,7 +419,8 @@ function toBase64(buffer) {
   return btoa(binary);
 }
 
-async function uploadFile(file) {
+async function uploadFile(file, folder) {
+  const path = join(folder, file.name);
   const fill = el("div");
   const bar = el("div", "bar", null, fill);
   const sub = el("div", "sub", "Uploading…");
@@ -419,7 +428,7 @@ async function uploadFile(file) {
   document.getElementById("uploads").append(rise(li, 0));
   try {
     const started = await callTool("start_file_upload", {
-      path: join(currentPath, file.name),
+      path,
       size: file.size,
       ...(file.type ? { content_type: file.type } : {}),
     });
@@ -432,7 +441,7 @@ async function uploadFile(file) {
       fill.style.width = (100 * offset / Math.max(file.size, 1)) + "%";
       if (sent.done) break;
     } while (offset < file.size);
-    sub.textContent = "Saved to " + join(currentPath, file.name);
+    sub.textContent = "Saved to " + path;
     bar.replaceWith(el("span", "done", "Uploaded"));
   } catch (e) {
     sub.textContent = e.message;
@@ -442,7 +451,10 @@ async function uploadFile(file) {
 }
 
 async function uploadAll(files) {
-  for (const file of files) await uploadFile(file);
+  // The folder when the files were dropped or picked, even if the user browses
+  // elsewhere while they upload.
+  const folder = currentPath;
+  for (const file of files) await uploadFile(file, folder);
   refresh();
 }
 
