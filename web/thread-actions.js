@@ -75,7 +75,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const contactName = current.thread?.identifier || current.thread?.accountName || 'your contact';
     const placeholder = `Message ${contactName}…`;
     if (input.placeholder !== placeholder) input.placeholder = placeholder;
-    const hintText = `Goes straight to ${contactName} — not your ChatGPT chat.`;
+    const host = app.getHostVersion()?.name;
+    const hintText = `Goes straight to ${contactName} — not your ${host || 'main'} chat.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);

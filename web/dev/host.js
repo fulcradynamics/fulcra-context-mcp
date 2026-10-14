@@ -33,7 +33,7 @@ addEventListener('message', ({ data: r, source }) => {
   if (r.method === 'ui/initialize') {
     reply(r.id, {
       protocolVersion: '2026-01-26',
-      hostInfo: { name: 'dev-harness', version: '1' },
+      hostInfo: { name: 'ChatGPT', version: '1' }, // simulate the real host name
       hostCapabilities: { message: { text: {} }, updateModelContext: { text: {} }, sampling: {} },
       // bottom inset matches the simulated composer bar in host.html so footer
       // clearance can be eyeballed the way ChatGPT would report it.
