@@ -1,5 +1,4 @@
 import { createThreadComposer } from './thread-composer.js';
-import { renderIdentity, renderThreadIdentity } from './identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
@@ -18,6 +17,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const listPanel = doc.querySelector('#connection-list');
   const title = doc.querySelector('#message-title');
   const headerAvatar = doc.querySelector('#contact-avatar');
+  const contactSubtitle = doc.querySelector('#contact-subtitle');
+  const contactTopic = doc.querySelector('#contact-topic');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
@@ -56,7 +57,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // technical/debug sections and multiparty controls (PLAT-719).
   const advanced = doc.querySelector('#advanced-panel');
   const advancedToggle = doc.querySelector('#advanced-toggle');
-  advanced.append(rosterWarning, incoming.element, readingOptions);
+  const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
+  advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
   const onAdvanced = () => {
     const expand = advanced.hidden;
     advanced.hidden = !expand;
@@ -116,7 +118,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const messageList = createMessageList(messages, order,
     (item, { record, source, direction, state }) => {
       const incoming = direction === 'Incoming';
-      let avatar, bubble, body, date, meta;
+      let avatar, bubble, body, date, meta, sender;
       if (!item.firstChild) {
         // Chat layout: an avatar (incoming only) beside a content column holding
         // the bubble and a meta line (date, etc.). Incoming left, outgoing right.
@@ -127,7 +129,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         bubble.append(body);
         meta = doc.createElement('div'); meta.className = 'message-meta';
         date = doc.createElement('span'); date.className = 'message-date';
-        meta.append(date);
+        sender = doc.createElement('span'); sender.className = 'message-sender';
+        meta.append(date, sender);
         const content = doc.createElement('div'); content.className = 'msg-content';
         content.append(bubble, meta);
         item.append(avatar, content);
@@ -137,21 +140,29 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         body = item.querySelector('.bubble-body');
         meta = item.querySelector('.message-meta');
         date = item.querySelector('.message-date');
+        sender = item.querySelector('.message-sender');
       }
       item.classList.toggle('incoming', incoming);
       item.classList.toggle('outgoing', !incoming);
-      // Avatar initial from the message sender (incoming); hidden for outgoing.
-      const senderName = typeof record.sender === 'string' && record.sender.trim()
-        ? record.sender : (selected?.identifier || selected?.peer || '?');
-      const initial = [...senderName.trim()][0]?.toUpperCase() || '?';
+      // Avatar initial (incoming only; hidden for outgoing). For a 1:1 contact
+      // use the contact's name so it matches the header avatar; for multiparty
+      // use the message sender so participants stay distinguishable.
+      const avatarName = selected?.participants && typeof record.sender === 'string' && record.sender.trim()
+        ? record.sender : (selected?.identifier || selected?.peer || 'Agent Contact');
+      const initial = [...String(avatarName).trim()][0]?.toUpperCase() || '?';
       if (avatar.textContent !== initial) avatar.textContent = initial;
+      // Under the date: the sending agent name, when it differs from the contact.
+      const showSender = incoming && typeof record.sender === 'string' && record.sender.trim()
+        && record.sender !== (selected?.identifier || selected?.peer);
+      sender.textContent = showSender ? record.sender : '';
+      sender.hidden = !showSender;
       const addressing = messageAddressing(record, activeViewer);
       item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
       item.classList.toggle('addressed-to-others', addressing === 'other');
       // Recipients line (multiparty only; hidden for ordinary 1:1 threads).
       let recipients = item.querySelector('.message-recipients');
       if (!recipients) { recipients = doc.createElement('span'); recipients.className = 'message-recipients'; meta.append(recipients); }
-      recipients.hidden = record.recipients === undefined;
+      recipients.hidden = !selected?.participants || !Array.isArray(record.recipients);
       const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
       if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
       // Channel provenance (multiparty participants view only).
@@ -173,16 +184,34 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => {
-    const label = thread.identifier || thread.accountName || thread.peer || '?';
-    headerAvatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
+    // Clean header: just the contact's name + avatar. The exact ID / account go
+    // to the Advanced panel, and the assessment shows only when it needs attention.
+    const name = thread.participants ? (thread.identifier || 'Group conversation')
+      : (thread.identifier || thread.peer || 'Agent Contact');
+    title.textContent = name;
+    headerAvatar.textContent = [...String(name).trim()][0]?.toUpperCase() || '?';
+    // Peer ID as a subtle monospace subtitle; hidden for multiparty or when it
+    // would just repeat the title (contact with no readable identifier).
+    contactSubtitle.textContent = thread.participants ? '' : (thread.peer ?? '');
+    contactSubtitle.hidden = !contactSubtitle.textContent || contactSubtitle.textContent === name;
     renderAssessment(assessment, thread.assessment);
-    if (thread.participants) renderThreadIdentity(title, thread, 'Agent Contact with ');
-    else renderIdentity(title, thread.identifier, thread.peer, 'Agent Contact with ',
-      thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
+    assessment.hidden = thread.assessment?.attention !== true;
+    const account = thread.accountName && thread.accountName !== thread.identifier ? thread.accountName : '';
+    contactMeta.textContent = thread.participants
+      ? `Participants: ${thread.participants.map(p => p.id).join(', ')}`
+      : (account ? `Account: ${account}` : '');
+    contactMeta.hidden = !contactMeta.textContent;
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
     refreshLegacyHandoff();
+  };
+  // The thread's current topic (latest meaningful one), shown under the name.
+  const setThreadTopic = messages => {
+    const topic = messages.map(m => m.record.topic)
+      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) ?? '';
+    contactTopic.textContent = topic;
+    contactTopic.hidden = !topic;
   };
 
   function render(result, canSend = true) {
@@ -208,6 +237,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     }) };
     messageList.update(result.messages, () => {
       setTitle(selected);
+      setThreadTopic(result.messages);
       renderStatus();
       placeMore();
       updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
@@ -342,6 +372,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
+    contactTopic.hidden = true; contactTopic.textContent = '';
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();

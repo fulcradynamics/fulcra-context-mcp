@@ -9,6 +9,9 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.PORT) || 5050;
+// Dev-only: render the app on a dark gray (not its production black :root) so
+// non-black-host contrast issues surface here. Hosts supply their own background.
+const DEV_BG = '#2a2a2e';
 const webDir = fileURLToPath(new URL('../', import.meta.url));
 const appHtmlPath = fileURLToPath(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url));
 const hostHtmlPath = fileURLToPath(new URL('./host.html', import.meta.url));
@@ -72,8 +75,10 @@ createServer(async (req, res) => {
       return res.end(hostBundle);
     }
     if (url === '/contacts.html') {
+      const html = (await readFile(appHtmlPath, 'utf8'))
+        .replace('</head>', `<style>:root{background:${DEV_BG} !important}</style></head>`);
       res.writeHead(200, { 'content-type': 'text/html' });
-      return res.end(await readFile(appHtmlPath));
+      return res.end(html);
     }
     res.writeHead(404);
     res.end('not found');
