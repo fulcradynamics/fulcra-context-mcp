@@ -357,6 +357,10 @@ details[open] > summary { color: var(--violet); }
    (visibility, not display) so showing it never moves the button. */
 .more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
+/* Quiet, link-like "Load more history" — no pill background, sized to match the
+   "Showing messages through X" label above it. */
+#message-more { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 1px 8px; }
+#message-more:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
 /* Prominent initial-load state: a large centered spinner with a label. */
 #message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
