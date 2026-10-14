@@ -127,22 +127,14 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 #pending-connections p { margin: 2px 0 0; }
 #connections > li:hover { background: var(--row-hover); }
 
-/* Leading icon tile shared by thread and message rows. */
-.row-tile {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--teal-tint);
-  color: var(--teal);
-}
-.row-tile.incoming { background: var(--violet-tint); color: var(--lavender); }
+/* Gradient initial avatar leading each contact row (matches the detail header),
+   wrapped so the unread badge can anchor to its corner. */
+.row-avatar-wrap { position: relative; flex: none; display: inline-flex; }
+.row-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--avatar-gradient); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; line-height: 1; }
 
-/* Thread rows: a full-width clickable button (tile + peer id) with the account
-   subline aligned under the name. */
+/* Thread rows: a full-width clickable button — a leading unread dot (reserving
+   its slot so avatars stay aligned), the gradient avatar, then a text column
+   (name, monospace peer id, latest-message preview). */
 .thread-button {
   display: flex;
   align-items: center;
@@ -156,13 +148,15 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
   font-weight: 500;
 }
 .thread-button:hover:not(:disabled) { background: transparent; }
-.thread-peer { min-width: 0; overflow-wrap: anywhere; }
+.thread-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.thread-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-id { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a70; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity-secondary { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
-.thread-account { margin: 4px 0 0; padding-left: 48px; }
 .contact-status { margin: 4px 0 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-#connections .contact-status { padding-left: 48px; }
-.contact-status.attention, #connections .contact-status.attention { color: #c79448; }
-.thread-preview { margin: 4px 0 0; padding-left: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-text .contact-status { margin: 2px 0 0; }
+.contact-status.attention { color: #c79448; }
+.thread-preview { margin: 2px 0 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread-time { flex: none; margin-left: auto; align-self: center; color: var(--muted); font-size: 12px; font-weight: 400; }
 
 /* Conversation: a familiar chat layout. Bubbles align by direction — incoming
    left (gray), outgoing right (green) — with the date beneath each bubble. */
@@ -226,9 +220,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 /* Reply composer action buttons (Send + handoff) on one wrapping row. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
-.thread-preview-state { margin: 2px 0 0; padding-left: 48px; color: var(--muted); font-size: 12px; }
-.unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #e34d59; flex-shrink: 0; }
-.unread-dot[hidden] { display: none; }
+/* Unread indicator: a small badge on the avatar's upper-left corner, ringed in
+   the row background so it reads as a notification dot. Hidden (not removed) so
+   row layout never shifts. */
+.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #e34d59; border: 2px solid var(--surface); visibility: hidden; }
+.unread-dot.on { visibility: visible; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 /* Floating reply composer: sticks to the top so it stays reachable while the
@@ -245,15 +241,17 @@ details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
 .invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
 
-.refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--divider); border-top-color: var(--teal); border-radius: 50%; animation: refresh-spin 1s linear infinite; }
+/* A tapered "comet" ring: a conic gradient fading from transparent to teal,
+   masked to a thin ring. Smoother and more modern than a solid border spinner. */
+.refresh-spinner { --spinner-thickness: 2px; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(from 90deg, transparent, var(--teal)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness))); mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness))); animation: refresh-spin .8s linear infinite; }
 /* Spinner to the right of "Load more history"; its space is always reserved
    (visibility, not display) so showing it never moves the button. */
 .more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
 /* Prominent initial-load state: a large centered spinner with a label. */
-#message-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
-#message-loading .refresh-spinner { width: 40px; height: 40px; border-width: 3px; }
+#message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
+#message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 

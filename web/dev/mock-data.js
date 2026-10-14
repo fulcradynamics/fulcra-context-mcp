@@ -59,7 +59,9 @@ const contacts = [
   contact({
     peerId: '22222222-2222-2222-2222-222222222222', name: 'Bob', outId: 'b-out', inId: 'b-in',
     outgoing: [{ body: 'Bob, did your agent get the shared budget file?', at: iso(5, 11) }],
-    incoming: [{ body: 'Yes, received. Reviewing the Q3 numbers and I’ll send notes tomorrow.', at: iso(5, 13), kind: 'reply' }],
+    // Most recent activity of anyone — sorts to the top of the list even though
+    // Bob's peer id is not first alphabetically, demonstrating recency ordering.
+    incoming: [{ body: 'Yes, received. Reviewing the Q3 numbers and I’ll send notes tomorrow.', at: iso(0, 9), kind: 'reply' }],
   }),
   contact({
     peerId: '33333333-3333-3333-3333-333333333333', name: 'Carol', outId: 'c-out', inId: 'c-in',

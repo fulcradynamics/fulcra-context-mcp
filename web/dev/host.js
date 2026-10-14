@@ -41,7 +41,13 @@ addEventListener('message', ({ data: r, source }) => {
         safeAreaInsets: { top: 0, right: 0, bottom: 56, left: 0 } },
     });
   } else if (r.method === 'tools/call') {
-    reply(r.id, toolResult(r.params?.name, r.params?.arguments ?? {}));
+    const name = r.params?.name, args = r.params?.arguments ?? {};
+    const result = toolResult(name, args);
+    // Slow the whole-account discovery calls so the loading spinner is visible on
+    // initial load and when "Refresh contacts" is clicked; keep reads snappy.
+    const slow = name === 'list_shares' || (name === 'get_data_catalog' && !args.data_type);
+    if (slow) setTimeout(() => reply(r.id, result), 5000);
+    else reply(r.id, result);
   } else if (r.method === 'ui/request-display-mode') {
     reply(r.id, { mode: r.params?.mode ?? 'fullscreen' });
   } else if (r.method === 'ui/create-sampling-message') {

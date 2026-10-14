@@ -1,12 +1,24 @@
 import { discoverThreads } from './connections-discovery.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { renderThreadIdentity } from './identity.js';
 import { renderStatus } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
-import { icon, MessagesSquare, RefreshCw } from './icons.js';
+import { icon, RefreshCw } from './icons.js';
+
+// Compact "time since last message" for contact rows: now / 5m / 3h / 2d, then a
+// short local date once it's a week old.
+function relativeTime(ms) {
+  const min = Math.floor((Date.now() - ms) / 60000);
+  if (min < 1) return 'now';
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d`;
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) {
   const status = doc.querySelector('#connection-status');
@@ -23,11 +35,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   legacySection.hidden = true;
   const legacyRows = new Map();
 
-  let disposed = false, disposal, lastSuccess, nextRow = 0;
+  let disposed = false, disposal, lastSuccess, nextRow = 0, firstLoad = true;
   const rows = new Map();
+  const loadingEl = doc.querySelector('#connections-loading');
   const refreshButton = doc.querySelector('#refresh-threads');
   refreshButton.prepend(icon(RefreshCw, 'btn-icon'));
-  status.textContent = 'Loading Agent Contacts…';
+  status.textContent = '';
   const inlineList = entrypoint.presentation === 'threads';
   const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
   let displayPending = false, displayEpoch = 0, hostContext = app.getHostContext();
@@ -86,29 +99,39 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const row = doc.createElement('li');
             row.className = 'thread-row animate-rise';
             row.style.animationDelay = `${Math.min(nextRow, 12) * 40}ms`;
+            // Drop the entrance class once it has played so a later re-sort can't
+            // replay the rise (which would flash the row on auto-refresh).
+            row.addEventListener('animationend', () => row.classList.remove('animate-rise'), { once: true });
             const button = doc.createElement('button');
-            const account = doc.createElement('p'); account.className = 'thread-account';
-            const assessment = doc.createElement('p');
-            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
-            const previewState = doc.createElement('p'); previewState.className = 'thread-preview-state'; previewState.hidden = true;
-            const dot = doc.createElement('span'); dot.className = 'unread-dot'; dot.hidden = true;
-            dot.setAttribute('aria-label', 'Last message not acknowledged');
             button.type = 'button'; button.id = `thread-${++nextRow}`;
             button.className = 'thread-button';
-            const tile = doc.createElement('span'); tile.className = 'row-tile';
-            tile.append(icon(MessagesSquare, 'row-icon'));
-            const peer = doc.createElement('span'); peer.className = 'thread-peer';
-            button.append(tile, peer, dot);
-            entry = { row, button, peer, account, assessment, preview, previewState, dot, thread };
+            const avatarWrap = doc.createElement('span'); avatarWrap.className = 'row-avatar-wrap';
+            const dot = doc.createElement('span'); dot.className = 'unread-dot';
+            dot.setAttribute('aria-label', 'Unread');
+            const avatar = doc.createElement('span'); avatar.className = 'row-avatar';
+            avatar.setAttribute('aria-hidden', 'true');
+            avatarWrap.append(avatar, dot);
+            const textCol = doc.createElement('div'); textCol.className = 'thread-text';
+            const name = doc.createElement('span'); name.className = 'thread-name';
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
+            const assessment = doc.createElement('p'); assessment.hidden = true;
+            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
+            textCol.append(name, id, assessment, preview);
+            const time = doc.createElement('span'); time.className = 'thread-time';
+            button.append(avatarWrap, textCol, time);
+            entry = { row, button, name, id, avatar, assessment, preview, dot, time, thread };
             button.addEventListener('click', () => choose(entry));
-            row.append(button, assessment, account, preview, previewState); list.append(row); rows.set(thread.peer, entry);
+            row.append(button); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          renderThreadIdentity(entry.peer, thread);
+          const label = thread.identifier || (thread.participants ? 'Group conversation' : thread.peer) || 'Agent Contact';
+          entry.name.textContent = label;
+          entry.avatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
+          const idText = thread.participants ? '' : (thread.peer ?? '');
+          entry.id.textContent = idText;
+          entry.id.hidden = !idText || idText === label;
           renderStatus(entry.assessment, thread.assessment);
-          const accountName = thread.accountName !== thread.peer ? thread.accountName : '';
-          entry.account.textContent = accountName ? `Account: ${accountName}` : '';
-          entry.account.hidden = !accountName;
+          entry.assessment.hidden = thread.assessment?.attention !== true;
         }
         const pendingKeys = new Set();
         for (const source of discovery.pending) {
@@ -155,13 +178,21 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
-        status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} Agent Contacts returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
+        status.textContent = discovery.warnings.join(' ');
         if (doc.visibilityState !== 'visible') return true;
-        if (!listPanel.hidden) { void refreshPreviews(); return true; }
-        return await detail.refresh(discovery);
+        if (listPanel.hidden) {
+          // Detail panel is showing; still prime and sort the hidden list behind it.
+          if (firstLoad) void finishFirstLoad(refreshPreviews());
+          return await detail.refresh(discovery);
+        }
+        const previews = refreshPreviews();
+        if (firstLoad) await finishFirstLoad(previews);
+        else void previews.then(sortRows);
+        return true;
       } catch (error) {
         if (disposed) return false;
-        status.textContent = `Could not load Agent Contacts — discovery failed. Stale last-good Agent Contacts retained. Last success: ${lastSuccess ?? 'not yet'}.`;
+        if (firstLoad) { firstLoad = false; loadingEl.hidden = true; list.hidden = false; }
+        status.textContent = lastSuccess ? 'Couldn’t refresh — showing the last results.' : 'Couldn’t load your contacts.';
         detail.failed(error);
         return false;
       }
@@ -183,10 +214,30 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       const text = message ? `${message.direction === 'Outgoing' ? 'You: ' : ''}${messageText(message.record)}` : '';
       if (entry.preview.textContent !== text) entry.preview.textContent = text;
       entry.preview.hidden = !text;
-      entry.previewState.textContent = summary ? (summary.acknowledged ? 'Acknowledged' : 'Not acknowledged') : '';
-      entry.previewState.hidden = !summary;
-      entry.dot.hidden = !summary || summary.acknowledged;
+      entry.dot.classList.toggle('on', Boolean(summary) && !summary.acknowledged);
+      const at = message?.record?.recorded_at;
+      entry.lastAt = at ? Date.parse(at) : NaN;
+      entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
     }));
+  }
+  // Order rows like a chat list: most recent activity first, threads without a
+  // readable message last. Re-appending existing <li>s reorders them in place.
+  function sortRows() {
+    const ordered = [...rows.values()].sort((a, b) =>
+      (Number.isFinite(b.lastAt) ? b.lastAt : -Infinity) - (Number.isFinite(a.lastAt) ? a.lastAt : -Infinity));
+    // No-op when the DOM already matches, so a steady auto-refresh doesn't move
+    // (and repaint) rows for no reason.
+    const current = list.children;
+    if (ordered.length === current.length && ordered.every((e, i) => e.row === current[i])) return;
+    for (const entry of ordered) list.append(entry.row);
+  }
+  async function finishFirstLoad(previews) {
+    await previews;
+    if (disposed) return;
+    sortRows();
+    firstLoad = false;
+    loadingEl.hidden = true;
+    list.hidden = false;
   }
   const stopHost = entrypoint.observeHost?.(context => {
     hostContext = { ...hostContext, ...context };
@@ -199,7 +250,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     }
     doc.documentElement.classList.toggle('compact-threads', context.displayMode !== 'fullscreen');
   });
-  const manual = () => scheduler.request();
+  const manual = () => {
+    // An explicit refresh shows the prominent loader again (when the list is the
+    // visible panel); completion reveals the re-sorted list via the first-load path.
+    if (!listPanel.hidden && !firstLoad) { firstLoad = true; loadingEl.hidden = false; list.hidden = true; }
+    scheduler.request();
+  };
   refreshButton.addEventListener('click', manual);
   const visibility = () => scheduler.visibilityChanged();
   function dispose() {
