@@ -646,7 +646,7 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.51"
+version = "0.1.53"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -655,14 +655,14 @@ dependencies = [
     { name = "jsonschema" },
     { name = "puremagic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/f5/10c42bdb53f619bdfc8f6ea506834754307e1ea988f8045604eccb0c7030/fulcra_api-0.1.51.tar.gz", hash = "sha256:7e8da4f41c7552d73fee99a688c8f16039d34448ec772b66f6fa67183e9802b3", size = 78936, upload-time = "2026-10-12T21:02:16.222Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/07/62fc8b53e67d937c61c558354124cb0fa0bf8a26fff2d473be15df94e3e9/fulcra_api-0.1.53.tar.gz", hash = "sha256:0b8083b9cbb08faaa55a5ac17e7704c2ed8ad200524ffd5d20bd3b4e175b63d9", size = 79455, upload-time = "2026-10-14T19:07:56.538Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/19/f5daf5adb134f18e39221f8d65b1d49e5e6fc9e68ff9aa669cdbf5b04816/fulcra_api-0.1.51-py3-none-any.whl", hash = "sha256:8c431e4302a79f1eb4e11928d1577bc77bbf48ee7182b2892d20571882131a76", size = 88042, upload-time = "2026-10-12T21:02:15.084Z" },
+    { url = "https://files.pythonhosted.org/packages/60/dc/0bf2bb889add008779d3c186961c9619884dd4ba01e74750858af5f82314/fulcra_api-0.1.53-py3-none-any.whl", hash = "sha256:8293b00c3a2e596d478e4f87a300cbe763ea7aa17b069e54fce58e4de7df36b7", size = 88557, upload-time = "2026-10-14T19:07:55.117Z" },
 ]
 
 [[package]]
 name = "fulcra-context-mcp"
-version = "1.2.3"
+version = "1.2.4"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
@@ -685,7 +685,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.3.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.51" },
+    { name = "fulcra-api", specifier = ">=0.1.53" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },
