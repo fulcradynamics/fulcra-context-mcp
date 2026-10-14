@@ -757,3 +757,124 @@ def test_an_expired_or_ended_upload_link_says_so(link_uploads, monkeypatch, put_
     assert unknown.status_code == 410 and "expired" in unknown.text
     assert ended.status_code == 410 and "Reconnect Fulcra" in ended.text
     assert put_chunks == []
+
+
+# --- racing uploads to one link ----------------------------------------------------
+
+
+class FakeBucket:
+    """The state bucket seen through the GCS API, backed by the same files the
+    tests' state directory holds (as gcsfuse would be). A file's generation is
+    its mtime. ``after_read`` runs once a blob's contents have been read."""
+
+    def __init__(self, after_read=lambda: None):
+        import threading
+
+        self.lock = threading.Lock()
+        self.after_read = after_read
+
+    def get_blob(self, name):
+        path = settings.state_path / name
+        return FakeBlob(self, path) if path.exists() else None
+
+
+class FakeBlob:
+    def __init__(self, bucket, path):
+        self.bucket, self.path = bucket, path
+        self.generation = path.stat().st_mtime_ns
+
+    def _check(self, generation):
+        from google.api_core.exceptions import PreconditionFailed
+
+        if self.path.stat().st_mtime_ns != generation:
+            raise PreconditionFailed("generation mismatch")
+
+    def download_as_bytes(self, if_generation_match):
+        with self.bucket.lock:
+            self._check(if_generation_match)
+            data = self.path.read_bytes()
+        self.bucket.after_read()
+        return data
+
+    def upload_from_string(self, data, content_type, if_generation_match):
+        with self.bucket.lock:
+            self._check(if_generation_match)
+            time.sleep(0.001)  # so the write moves the mtime on
+            self.path.write_text(data)
+
+
+def _race_two_uploads(token):
+    """Send two uploads to one link at once; each one's outcome."""
+    import asyncio
+    import threading
+
+    outcomes = [None, None]
+
+    def send(i):
+        async def body():
+            yield b"abc"
+
+        try:
+            outcomes[i] = asyncio.run(
+                ft.receive_link_upload(token, 3, body(), lambda grant_id: object())
+            )
+        except ft.LinkUploadError as e:
+            outcomes[i] = e.status
+
+    threads = [threading.Thread(target=send, args=(i,)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    return outcomes
+
+
+def _assert_one_upload(outcomes, sessions, put_chunks):
+    assert len(sessions) == 1 and len(put_chunks) == 1
+    # the other request was refused, or (if it came after) got the same result
+    results = [o for o in outcomes if isinstance(o, dict)]
+    assert results and all(r == results[0] for r in results)
+    assert all(o == 409 for o in outcomes if not isinstance(o, dict))
+
+
+def test_racing_uploads_to_a_link_store_one_file(link_uploads, put_chunks, monkeypatch):
+    import threading
+
+    _, token, sessions = link_uploads
+    # Both requests pass the first look at the link before either claims it.
+    both_checked = threading.Barrier(2)
+    change = ft._change_record
+
+    def change_after_both_checked(*args):
+        both_checked.wait(timeout=5)
+        return change(*args)
+
+    monkeypatch.setattr(ft, "_change_record", change_after_both_checked)
+
+    _assert_one_upload(_race_two_uploads(token), sessions, put_chunks)
+
+
+def test_racing_uploads_across_instances_store_one_file(link_uploads, put_chunks, monkeypatch):
+    import threading
+
+    _, token, sessions = link_uploads
+    # Both instances read the same generation of the link before either writes.
+    both_read = threading.Barrier(2)
+    monkeypatch.setattr(settings, "state_bucket", "state")
+    bucket = FakeBucket(lambda: both_read.wait(timeout=5))
+    monkeypatch.setattr(ft, "_state_bucket", lambda: bucket)
+
+    outcomes = _race_two_uploads(token)
+
+    _assert_one_upload(outcomes, sessions, put_chunks)
+    assert 409 in outcomes
+
+
+def test_a_bucket_link_record_that_is_missing_or_expired_is_none(monkeypatch):
+    monkeypatch.setattr(settings, "state_bucket", "state")
+    bucket = FakeBucket()
+    monkeypatch.setattr(ft, "_state_bucket", lambda: bucket)
+    ft._save_record("upload_links", "old", {"state": "new", "expires_at": time.time() - 1})
+
+    assert ft._change_record("upload_links", "missing", lambda r: r) is None
+    assert ft._change_record("upload_links", "old", lambda r: r) is None

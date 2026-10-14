@@ -33,6 +33,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
 
+try:
+    import fcntl
+except ImportError:  # Windows, where only the local stdio server runs
+    fcntl = None
+
 import structlog
 from fastmcp.apps.config import AppConfig, ResourceCSP
 from fastmcp.exceptions import ResourceError, ToolError
@@ -185,6 +190,85 @@ def _load_record(kind: str, key: str) -> dict | None:
 
 def _delete_record(kind: str, key: str) -> None:
     _record_path(kind, key).unlink(missing_ok=True)
+
+
+class RecordChanged(Exception):
+    """Another process wrote a record between our reading and writing it."""
+
+
+def _change_record(kind: str, key: str, change) -> dict | None:
+    """Change a record in one step that no other server process can interleave
+    with. ``change(record)`` returns the record to write, or ``None`` to leave
+    it as it is.
+
+    Returns the record as it now stands, or ``None`` if it's missing or has
+    expired. Raises ``RecordChanged``, having written nothing, if another
+    process wrote the record first.
+
+    On Cloud Run the state directory is a GCS bucket mounted with gcsfuse, which
+    has no locks, so there (``settings.state_bucket``) the record is read and
+    written through the GCS API, the write conditioned on the generation read.
+    Elsewhere a file lock does the job.
+    """
+    if settings.state_bucket:
+        return _change_bucket_record(kind, key, change)
+    return _change_local_record(kind, key, change)
+
+
+def _change_local_record(kind: str, key: str, change) -> dict | None:
+    try:
+        f = _record_path(kind, key).open("r+")
+    except FileNotFoundError:
+        return None
+    with f:
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            record = json.loads(f.read())
+        except ValueError:
+            return None
+        if record.get("expires_at", 0) < time.time():
+            return None
+        new = change(record)
+        if new is None:
+            return record
+        f.seek(0)
+        f.truncate()
+        f.write(json.dumps(new))
+        return new
+
+
+@functools.cache
+def _state_bucket():
+    from google.cloud import storage
+
+    return storage.Client().bucket(settings.state_bucket)
+
+
+def _change_bucket_record(kind: str, key: str, change) -> dict | None:
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
+    # The mount maps the bucket's root to state_path.
+    name = _record_path(kind, key).relative_to(settings.state_path).as_posix()
+    blob = _state_bucket().get_blob(name)
+    if blob is None:
+        return None
+    generation = blob.generation
+    try:
+        record = json.loads(blob.download_as_bytes(if_generation_match=generation))
+        if record.get("expires_at", 0) < time.time():
+            return None
+        new = change(record)
+        if new is None:
+            return record
+        blob.upload_from_string(
+            json.dumps(new), content_type="application/json", if_generation_match=generation
+        )
+        return new
+    except PreconditionFailed as e:
+        raise RecordChanged(f"{kind} record changed while being updated") from e
+    except (NotFound, ValueError):
+        return None
 
 
 # ------------------------------------------------------------------ resources
@@ -597,6 +681,17 @@ def make_upload_link(path: str, grant_id: str) -> str:
     return f"{settings.oidc_server_url.rstrip('/')}/files/upload/{token}"
 
 
+LINK_EXPIRED = "This upload link has expired. Ask for a new one."
+LINK_BUSY = "An upload to this link is already in progress."
+
+
+def _link_upload_running(record: dict) -> bool:
+    return (
+        record["state"] == "uploading"
+        and time.time() - record["started_at"] < LINK_UPLOAD_STALE_SECONDS
+    )
+
+
 class LinkUploadError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -630,11 +725,11 @@ async def receive_link_upload(token: str, length: int | None, body, fulcra_for) 
     """
     record = _load_record("upload_links", token)
     if record is None:
-        raise LinkUploadError(410, "This upload link has expired. Ask for a new one.")
+        raise LinkUploadError(410, LINK_EXPIRED)
     if record["state"] == "done":
         return record["result"]
-    if record["state"] == "uploading" and time.time() - record["started_at"] < LINK_UPLOAD_STALE_SECONDS:
-        raise LinkUploadError(409, "An upload to this link is already in progress.")
+    if _link_upload_running(record):
+        raise LinkUploadError(409, LINK_BUSY)
     if length is None:
         raise LinkUploadError(411, "Send the file with its length, e.g. curl -T <file> <link>.")
     if length > MAX_LINK_UPLOAD_BYTES:
@@ -644,8 +739,24 @@ async def receive_link_upload(token: str, length: int | None, body, fulcra_for) 
             f"{length}. Upload it with open_file_manager instead.",
         )
 
-    record.update(state="uploading", started_at=time.time())
-    _save_record("upload_links", token, record)
+    # Claim the link. Two requests can both get this far; only one claim lands.
+    claim = secrets.token_hex(8)
+
+    def take(current: dict) -> dict | None:
+        if current["state"] == "done" or _link_upload_running(current):
+            return None
+        return dict(current, state="uploading", started_at=time.time(), claim=claim)
+
+    try:
+        record = await asyncio.to_thread(_change_record, "upload_links", token, take)
+    except RecordChanged:
+        raise LinkUploadError(409, LINK_BUSY) from None
+    if record is None:
+        raise LinkUploadError(410, LINK_EXPIRED)
+    if record["state"] == "done":
+        return record["result"]
+    if record.get("claim") != claim:
+        raise LinkUploadError(409, LINK_BUSY)
     try:
         path = record["path"]
         fulcra = fulcra_for(record["grant_id"])
