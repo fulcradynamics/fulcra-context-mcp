@@ -24,7 +24,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
-  const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Viewing agent name';
+  const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Your agent name';
   const viewer = doc.createElement('input'); viewer.type = 'text'; viewer.maxLength = 128; viewer.id = 'viewing-agent';
   viewerLabel.append(viewer);
   const addressingHelp = doc.createElement('p'); addressingHelp.className = 'addressing-help';
@@ -337,7 +337,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), undefined,
-      () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
+      () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();

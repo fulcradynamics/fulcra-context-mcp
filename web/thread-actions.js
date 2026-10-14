@@ -1,6 +1,6 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
 import { renderThreadIdentity } from './identity.js';
-import { clearPostedDraft, matchesPost, messageId, postRecord, recipientAgent } from './connection-send.js';
+import { clearPostedDraft, matchesPost, messageId, postRecord } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
@@ -21,23 +21,22 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   handoff.textContent = 'talk with my agent about this Agent Contact';
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
-  const transfer = doc.createElement('details'); transfer.hidden = true;
+  const transfer = doc.createElement('details'); transfer.hidden = true; transfer.className = 'composer-advanced';
   const transferTitle = doc.createElement('summary'); transferTitle.textContent = 'Copy handoff for original session';
-  const transferHelp = doc.createElement('p');
+  const transferHelp = doc.createElement('p'); transferHelp.className = 'composer-advanced';
   transferHelp.textContent = 'Opening the session does not transfer your message or context. Copy this handoff first, then paste it there. Or ask in the current chat. The host may block opening the link.';
   const transferText = doc.createElement('textarea'); transferText.readOnly = true; transferText.rows = 6;
   transferText.setAttribute('aria-label', 'Handoff for original session');
   transfer.append(transferTitle, transferText);
-  const address = doc.createElement('details'), addressTitle = doc.createElement('summary');
+  const address = doc.createElement('details'); address.className = 'delivery-address composer-advanced';
+  const addressTitle = doc.createElement('summary');
   addressTitle.textContent = 'Delivery address';
   const outboxLabel = doc.createElement('label'); outboxLabel.textContent = 'Your outbox';
   const outbox = doc.createElement('select'); outboxLabel.append(outbox);
   const outboxId = doc.createElement('p'); outboxId.className = 'outbox-id identity-secondary';
-  const agentLabel = doc.createElement('label'); agentLabel.textContent = 'Your sending agent name';
-  const agent = doc.createElement('input'); agent.type = 'text'; agent.maxLength = 128; agentLabel.append(agent);
   const addressHelp = doc.createElement('p');
   addressHelp.textContent = 'Uses an existing outgoing connection channel only. Everyone in this connection can read the message. No sharing is created.';
-  address.append(addressTitle, outboxLabel, outboxId, agentLabel, addressHelp);
+  address.append(addressTitle, outboxLabel, outboxId, addressHelp);
   let status = doc.querySelector('#send-status');
   if (!status) {
     status = doc.createElement('p'); status.id = 'send-status'; status.setAttribute('role', 'status');
@@ -46,14 +45,18 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(send, handoff);
   if (orderField) actions.append(orderField);
-  container.append(label, actions, hint, address);
+  container.append(label, actions, hint);
+  // Delivery address (and any setup-session handoff) lives in the Advanced panel.
+  const advanced = doc.querySelector('#advanced-panel');
+  advanced?.querySelectorAll('.composer-advanced').forEach(el => el.remove());
+  (advanced ?? container).append(address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct connection Send remains available.';
   let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
-  draft.posts ??= []; draft.agents ??= {}; draft.acks ??= new Set();
+  draft.posts ??= []; draft.acks ??= new Set();
   // Acknowledge each target once; a failure returns it to unread for another try.
   async function ack(targets, body) {
-    const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = agent.value;
+    const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = view().viewingAgent;
     if (!outboxId || !sender.trim()) return false;
     targets = targets.filter(m => !draft.acks.has(m.record.id));
     targets.forEach(m => draft.acks.add(m.record.id)); changed();
@@ -109,18 +112,14 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';
     outboxId.hidden = !source?.name;
-    const inferred = source ? recipientAgent(current.result?.messages ?? [], source, peerId()) : '';
-    const agentValue = draft.agents[outbox.value] ?? inferred;
-    if (agent.value !== agentValue) agent.value = agentValue;
     if (input.value !== draft.value) input.value = draft.value;
-    send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !agent.value.trim() || !input.value.trim()
+    send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !current.viewingAgent?.trim() || !input.value.trim()
       || draft.posts.some(p => p.state === 'sending' || p.state === 'uncertain');
     handoff.disabled = !supported || lifecycle.pending || !isCurrent() || !context();
     updateSuggestions();
   };
   if (presentation === 'thread') updateSuggestions = setupReplySuggestions(app, lifecycle, context, container, isCurrent, input, draft, update);
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
-  agent.addEventListener('input', () => { draft.agents[outbox.value] = agent.value; update(); });
   outbox.addEventListener('change', () => { draft.outbox = outbox.value; update(); });
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
@@ -130,7 +129,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const audience = view().thread?.expectedPeerUserids;
     const unread = unreadMessages(view().result?.messages ?? [], draft.acks), target = unread.at(-1);
     const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
-    const envelope = { id: mid, sender: agent.value, kind: target ? 'reply' : 'message', priority: 'P2',
+    const envelope = { id: mid, sender: view().viewingAgent, kind: target ? 'reply' : 'message', priority: 'P2',
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
     const posted = () => {
       report('Posted to your outbox; not confirmed delivered or read by the peer.');
