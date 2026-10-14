@@ -183,6 +183,17 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-headings h2 { margin: 0; }
 .contact-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--teal); color: #06281f; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; }
 
+/* Single "Advanced" disclosure (PLAT-719): a compact upper-right toggle that
+   reveals all the technical/debug sections collected into one panel. */
+.detail-topbar { display: flex; align-items: center; gap: 12px; }
+.advanced-toggle { flex: none; margin-left: auto; min-height: 32px; padding: 4px 10px; font-size: 12px; font-weight: 500; background: transparent; color: var(--muted); border: 1px solid var(--divider); }
+.advanced-toggle:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.advanced-toggle::after { content: '▸'; margin-left: 6px; font-size: 10px; }
+.advanced-toggle[aria-expanded='true']::after { content: '▾'; }
+.advanced-panel { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 12px; background: var(--raised); }
+.advanced-panel > p { margin: 0; }
+.advanced-panel .context-details, .advanced-panel details { margin: 0; }
+
 /* Reply composer reads as a message-to-contact box (purple Send + hint). */
 .composer-primary.send-to-peer:not(:disabled) { background: var(--outgoing); color: #fff; }
 .composer-primary.send-to-peer:hover:not(:disabled) { background: #6b4fe0; }

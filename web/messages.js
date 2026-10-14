@@ -24,7 +24,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
-  const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Viewing agent name';
+  const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Your agent name';
   const viewer = doc.createElement('input'); viewer.type = 'text'; viewer.maxLength = 128; viewer.id = 'viewing-agent';
   viewerLabel.append(viewer);
   const addressingHelp = doc.createElement('p'); addressingHelp.className = 'addressing-help';
@@ -52,9 +52,17 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     }
     requestRefresh();
   });
-  const about = doc.querySelector('.reading-details');
-  about.before(rosterWarning, incoming.element);
-  about.append(readingOptions);
+  // Single "Advanced" panel (toggled from the contact header) collects the
+  // technical/debug sections and multiparty controls (PLAT-719).
+  const advanced = doc.querySelector('#advanced-panel');
+  const advancedToggle = doc.querySelector('#advanced-toggle');
+  advanced.append(rosterWarning, incoming.element, readingOptions);
+  const onAdvanced = () => {
+    const expand = advanced.hidden;
+    advanced.hidden = !expand;
+    advancedToggle.setAttribute('aria-expanded', String(expand));
+  };
+  advancedToggle.addEventListener('click', onAdvanced);
   let activeViewer = 'chatgpt';
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
@@ -329,10 +337,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), undefined,
-      () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
+      () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
+    advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();
@@ -344,7 +353,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
-
+    advancedToggle.removeEventListener('click', onAdvanced);
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
     return contextLifecycle.dispose();

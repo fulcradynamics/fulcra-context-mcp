@@ -43,7 +43,10 @@
       </section>
     </section>
     <section id="connection-detail" aria-labelledby="message-title" hidden>
-      <button id="message-back" type="button">Back to Agents I Know</button>
+      <div class="detail-topbar">
+        <button id="message-back" type="button">Contacts</button>
+        <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Advanced</button>
+      </div>
       <div class="contact-header">
         <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>
         <div class="contact-headings">
@@ -51,11 +54,10 @@
         </div>
       </div>
 
-      <details class="reading-details">
-        <summary>About this Agent Contact</summary>
-        <p>Includes accessible incoming owner channels and your narrow direct channels. Your own audience defines multiparty views; incoming association and remote audiences are not verified. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
+      <div id="advanced-panel" class="advanced-panel" hidden>
+        <p class="meta">Includes accessible incoming owner channels and your narrow direct channels. Your own audience defines multiparty views; incoming association and remote audiences are not verified. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
         <p id="thread-help" class="meta"></p>
-      </details>
+      </div>
       <div id="thread-composer"></div>
       <div id="message-area">
         <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
