@@ -13,7 +13,7 @@ const iso = (daysAgo, hour = 12) => {
 };
 
 let seq = 0;
-const message = (sender, body, at, kind = 'message', topic) => ({ id: `rec-${++seq}`, recorded_at: at, sender, kind, body, ...(topic ? { topic } : {}) });
+const message = (sender, body, at, kind = 'message', topic) => ({ id: `rec-${++seq}`, start_time: at, sender, kind, body, ...(topic ? { topic } : {}) });
 
 // One Agent Contact: an owned outgoing channel shared to the peer, plus the
 // peer's incoming channel shared to us, each carrying some messages.
