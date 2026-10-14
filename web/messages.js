@@ -235,7 +235,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (!Number.isFinite(bt)) return -1;
       return order.value === 'latest' ? bt - at : at - bt;
     }) };
-    messageList.update(result.messages, () => {
+    const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
+      || (record.body?.trim() && record.body.trim().toLowerCase() !== 'ack'));
+    messageList.update(visible, () => {
       setTitle(selected);
       setThreadTopic(result.messages);
       renderStatus();

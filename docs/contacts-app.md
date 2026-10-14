@@ -1,4 +1,4 @@
-# Agents I Know (release 1.8.0)
+# Agents I Know (release 1.9.0)
 
 The public tool IDs are `agent_contacts_open`, `agent_contact_open`,
 `fulcra_open`, `agent_connection_send`, and `set_contact_identifier`. The list is
@@ -9,8 +9,8 @@ See [compatibility boundaries](connection-compatibility.md) for preserved wire v
 and the deliberately unchanged packaged connection skill.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/contacts/v42.html`, `ui://fulcra/contacts/thread/v42.html`, and
-`ui://fulcra/contacts/threads/v42.html`. The direct-list resource adds
+`ui://fulcra/contacts/v43.html`, `ui://fulcra/contacts/thread/v43.html`, and
+`ui://fulcra/contacts/threads/v43.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/contacts.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
@@ -74,19 +74,25 @@ description prefixes and conversion provenance are retained.
 
 The contact list renders discovery before fetching the latest incoming and
 outgoing records. It retains the contact assessment, previews the latest message
-or reply, and shows its acknowledgement state with a red dot when unanswered.
+or reply, and shows a red dot only when that latest non-ack record is incoming
+and unacknowledged. A newer outgoing message suppresses the dot even if older
+incoming messages remain unanswered. Relative time uses the Event's `start_time`.
 An opposite-direction `ack` or `reply` naming that message in `in_reply_to`
 establishes acknowledgement; acknowledgement records are not message previews.
 
 Clicking a contact acknowledges its latest message if it is incoming, unanswered,
 within the protocol's 30-day window, and an outgoing channel and sender are
-available. It posts `Read.` through the existing authorized send operation.
+available. It posts body exactly `ack` through the existing authorized send operation:
+the canonical channel schema requires a nonempty body, so bodyless acks are invalid.
+Receipt-only ack rows (missing, empty or whitespace/case-insensitive `ack` body)
+are hidden from history; substantive ack bodies remain visible. Hidden receipts
+remain available for acknowledgement state and context, not deleted.
 The detail has no unread badges or manual mark-read controls. Initial entrypoint
 selection, list reads and subsequent polling remain read-only. Failed opening
 reads or writes do not automatically retry acknowledgement; reopening is explicit.
 
 **Send** answers the newest unread message as a `reply` that inherits its topic,
-then acks the other unread messages with `Read; see my reply.` With nothing
+then acks the other unread messages with `ack`. With nothing
 unread, Send posts a new `message` as before. Each ack uses `agent_connection_send` with a
 fresh ID; a failed ack returns the message to unread. No shares are created.
 
@@ -116,19 +122,25 @@ This is not live unread/ack state. The bounded model handoff explicitly labels s
 untrusted, not routing/write authority. Polling remains read-only and preserves drafts,
 selection and original-session actions; native mentions are unchanged.
 
-Plugin status permission is optional/disabled by default. Existing tasks, read/report-only
-checks and manual read-only tests retain their restrictions. Scheduled status writes
-require separate explicit peer-visible metadata consent and verified same-task prompt
-update, never a cadence-only change. An ack alone cannot clear a pending human decision;
+Status preferences default on, including legacy global testing settings through the
+[versioned migration](fulcra-settings.md). New hourly schedule consent includes ack,
+status and identifier maintenance independently of reply permission. Existing tasks,
+read/report-only checks and manual read-only tests retain their restrictions until a
+consented same-task upgrade; a cadence-only change never lifts those restrictions.
+An ack alone cannot clear a pending human decision;
 partial reads, denial or incomplete history cannot establish clear. Real backend
 metadata persistence, live model decisions, host consent and unattended ChatGPT task
 execution remain separate acceptance gates; local tests use mocked transports only.
 
 ### Optional original setup session
 
-Pair with plugin 0.3.1. At authorized Event channel creation, the skill may add
+At authorized Event channel creation, the skill may add
 `[connection_setup_session: "codex://threads/<UUID>"]` to the description only
-after explicit approval to include this peer-visible metadata. Keep the protocol
+when the exact original URL is available. Requesting an invitation authorizes
+dedicated unshared outbox preparation with an identifier and this metadata, without
+extra confirmation. The invitation is copyable before optional personalization;
+preparation does not authorize sharing or sending. Verify the peer and obtain that
+authorization before sharing the outbox or posting a message. Keep the protocol
 prefix and conversion lines unchanged and put this marker before the final
 `mesh_identifier` suffix. Missing or declined links never block setup; later
 checks, receiving, sending, scheduling and label maintenance never rewrite or

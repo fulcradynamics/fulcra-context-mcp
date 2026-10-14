@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { open, peer, other } from './harness.js';
-const handoff = ui => ui.getByRole('button', {name:'talk with my agent about this Agent Contact',exact:true});
+const handoff = ui => ui.getByRole('button', {name:'Discuss in synthetic',exact:true});
 async function deselect(ui) {
+ await ui.locator('#advanced-toggle').click();
  await ui.locator('.incoming-sources summary').click();
  await ui.locator('.incoming-sources input').first().uncheck();
 }

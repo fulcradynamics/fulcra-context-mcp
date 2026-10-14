@@ -7,6 +7,7 @@ skill. Changing them would hide channels/checkpoints or break its instructions.
 IDENTIFIER_TOKEN = "[mesh_identifier"
 LEGACY_OUTBOX_PATTERN = r"\bmesh outbox\b"
 CHECK_STATE_ROOT = "/agent/chatgpt/mesh-checks/"
+SHARE_NAME_PREFIX = "connect-agents-with-anyone"
 
 # The packaged connection skill stays byte-for-byte unchanged. Translate only
 # these tool references, never its consent, audience, retry or acknowledgement rules.

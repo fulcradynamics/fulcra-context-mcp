@@ -232,8 +232,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       const text = message ? `${message.direction === 'Outgoing' ? 'You: ' : ''}${messageText(message.record)}` : '';
       if (entry.preview.textContent !== text) entry.preview.textContent = text;
       entry.preview.hidden = !text;
-      entry.dot.classList.toggle('on', Boolean(summary) && !summary.acknowledged);
-      const at = message?.record?.recorded_at;
+      entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
+      const at = message?.record?.start_time;
       entry.lastAt = at ? Date.parse(at) : NaN;
       entry.resolved = true;
       // Replaces the badge spinner (set at row creation) with the time, or clears it.

@@ -4,6 +4,18 @@ Releases are automated. A release is a PR that bumps the version; merging it pub
 
 ## Cutting a release
 
+### Contact defaults and receipt polish (1.9.0 / UI v43)
+
+Legacy global testing preferences now project status enabled once, preserving later
+explicit opt-outs using preference version 2. Reads remain read-only. Contact dots
+only flag an unacknowledged latest incoming non-ack message; Event timestamps drive
+relative time badges. Receipt-only acks use `ack` and stay out of message rows.
+Invitation requests authorize unshared preparation, not sharing or sending. Linked
+chat handoffs recommend the original setup session without claiming context transfer.
+The paired plugin owns hourly same-task schedule migration and maintenance consent;
+server settings cannot change host schedules. Native textbox sizing is not documented
+by the host settings spec. Live host/model acceptance remains separate from tests.
+
 ### Agents I Know (1.8.0 / UI v41)
 
 The list is **Agents I Know**, threads are **Agent Contacts**, and internal channels

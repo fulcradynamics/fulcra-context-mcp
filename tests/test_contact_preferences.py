@@ -28,6 +28,7 @@ async def test_native_defaults_and_verified_partial_update(storage):
     api, files = storage
     async with Client(mcp) as client:
         initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
+        assert initial['values']['status_metadata'] is True
         assert initial['values']['autonomous_replies'] is False
         assert initial['values']['unanswered_days'] == 2
         assert initial['values']['attention_waiting'] is True
@@ -105,6 +106,36 @@ def test_malformed_and_unverified_save_not_success(storage):
     files.clear()
     api.upload_file.side_effect = None
     with pytest.raises(ValueError): policy.update(api, {'notifications': 'none'})
+
+
+@pytest.mark.parametrize('legacy_status', [False, True, None])
+def test_legacy_status_reset_is_read_only_and_later_choices_survive(storage, legacy_status):
+    from fulcra_mcp import contact_preferences as policy
+    api, files = storage
+    preferences = {'notifications': 'none'}
+    if legacy_status is not None:
+        preferences['status_metadata'] = legacy_status
+    document = dict(version=1, account_id='me', preferences=preferences, future='keep')
+    files['settings.md'] = ('```json\n' + json.dumps(document) + '\n```').encode()
+    assert policy.read(api)['status_metadata'] is True
+    api.upload_file.assert_not_called()
+    policy.update(api, {'special_instructions': 'Brief.'})
+    assert policy.load(api)['version'] == 2
+    assert policy.load(api)['future'] == 'keep'
+    assert policy.read(api)['status_metadata'] is True
+    policy.update(api, {'status_metadata': False})
+    assert policy.read(api)['status_metadata'] is False
+    policy.update(api, {'special_instructions': 'Even briefer.'})
+    assert policy.read(api)['status_metadata'] is False
+    assert policy.read(api)['notifications'] == 'none'
+
+
+def test_explicit_opt_out_during_first_legacy_update_wins(storage):
+    from fulcra_mcp import contact_preferences as policy
+    api, files = storage
+    files['settings.md'] = b'```json\n{"version":1,"account_id":"me","preferences":{"status_metadata":false}}\n```'
+    policy.update(api, {'status_metadata': False})
+    assert policy.read(api)['status_metadata'] is False
 
 
 def test_owned_override_marker_precedence():

@@ -4,9 +4,9 @@ const invitationPrompt = 'I want to invite another user to connect our agents th
   + 'Please use the invite skill to help me prepare the invitation. '
   + 'First show me a copyable invitation prompt for the other person to give their agent, '
   + 'using my own verified Fulcra user ID and the connection skill URL. Do not ask for the other user\'s ID. '
-  + 'Then ask whether I want to add optional context about who or what the invite is for, '
-  + 'so you can personalize the prompt, prepare a dedicated outbox, and draft an outgoing message. '
-  + 'Get my go-ahead before creating data or sharing anything; do not share or post a message until the peer ID is verified.';
+  + 'This request authorizes you to prepare a dedicated unshared outbox with a context-supported identifier and the original setup session URL when available, without another confirmation. '
+  + 'Then ask whether I want to add optional context about who or what the invite is for, so you can personalize the prompt and draft an outgoing message. '
+  + 'Keep it unshared; do not share or post a message until the peer ID is verified and I authorize sharing and sending.';
 
 export async function setupInvite(app, button, status) {
   button.addEventListener('click', async () => {

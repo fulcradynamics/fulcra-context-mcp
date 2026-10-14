@@ -64,7 +64,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
   draft.posts ??= []; draft.acks ??= new Set();
   // Acknowledge each target once; a failure returns it to unread for another try.
-  async function ack(targets, body) {
+  async function ack(targets) {
     const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = view().viewingAgent;
     if (!outboxId || !sender.trim()) return false;
     targets = targets.filter(m => !draft.acks.has(m.record.id));
@@ -72,7 +72,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     let failed = 0;
     for (const m of targets) {
       try {
-        const { response, result } = await postRecord(app, { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body,
+        const { response, result } = await postRecord(app, { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body: 'ack',
           mid: messageId(), kind: 'ack', in_reply_to: m.record.id, ...(audience ? { expected_peer_userids: audience } : {}) });
         if (response.isError || result.status !== 'posted') throw new Error('Not posted');
       } catch { draft.acks.delete(m.record.id); failed++; }
@@ -142,7 +142,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
     const posted = () => {
       report('Posted to your outbox; not confirmed delivered or read by the peer.');
-      ack(unread.slice(0, -1), 'Read; see my reply.');
+      ack(unread.slice(0, -1));
     };
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
@@ -232,6 +232,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     } finally { lifecycle.pending = false; lifecycle.onChange(); }
   });
   update();
-  update.markRead = messages => ack(messages, 'Read.');
+  update.markRead = ack;
   return update;
 }

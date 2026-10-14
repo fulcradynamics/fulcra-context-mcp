@@ -9,6 +9,7 @@ from urllib.error import HTTPError
 
 import jsonschema
 from fulcra_api import connections, records
+from .connection_compatibility import SHARE_NAME_PREFIX
 
 UUID_PATTERN = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 RETRY_DELAY = 1
@@ -62,7 +63,7 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
             raise ValueError('Every covering grant must share only this channel with direct users, without groups, files or time bounds.')
         audience.update(p['allowed_fulcra_userid'] for p in permissions)
         covering.append(share)
-    if not covering or not all(s.get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX) for s in covering):
+    if not covering or not all(s.get('datashare_name', '').startswith(SHARE_NAME_PREFIX) for s in covering):
         raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
     if audience != set(expected):
         raise ValueError('Channel audience changed or differs from expected_peer_userids. Nothing submitted.')
@@ -75,7 +76,7 @@ def _target(api, peer, target, now):
     for grant in api.get_shared_datasets():
         types = grant.get('fulcra_data_types')
         if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
-                and grant.get('datashare_name', '').startswith(connections.SHARE_NAME_PREFIX)
+                and grant.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
                 and isinstance(types, list) and len(types) == 1
                 and re.fullmatch('Event/' + UUID_PATTERN, types[0])
                 and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):

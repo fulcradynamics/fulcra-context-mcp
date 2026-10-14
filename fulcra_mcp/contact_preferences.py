@@ -6,7 +6,7 @@ from threading import RLock
 ROOT = '/agent/chatgpt/contact-preferences'
 PATH = ROOT + '/settings.md'
 LOCK = RLock()  # Serializes this worker only; storage has no compare-and-swap.
-DEFAULTS = dict(autonomous_replies=False, status_metadata=False,
+DEFAULTS = dict(autonomous_replies=False, status_metadata=True,
                 attention_waiting=True, attention_overdue=True, unanswered_days=2,
                 attention_high_priority=True, attention_peer_membership_announcements=True,
                 notifications='attention', special_instructions='')
@@ -81,7 +81,7 @@ def load(api):
     listing = api.list_files(ROOT)
     matches = [f for f in listing['files'] if f['name'] == 'settings.md']
     if not matches:
-        return dict(version=1, account_id=account, preferences={})
+        return dict(version=2, account_id=account, preferences={})
     if len(matches) != 1:
         raise ValueError('Ambiguous preferences.')
     with api.download_file(matches[0]['id']) as response:
@@ -92,15 +92,24 @@ def load(api):
     if len(blocks) != 1:
         raise ValueError('Invalid preferences.')
     document = json.loads(blocks[0])
-    if (type(document.get('version')) is not int or document['version'] != 1
+    if (type(document.get('version')) is not int or document['version'] not in (1, 2)
             or document.get('account_id') != account):
         raise ValueError('Invalid preference identity.')
     validate(document['preferences'])
     return document
 
 
+def migrated(document):
+    # Project legacy testing defaults without writing from the native read tool.
+    # Persist the version on the next explicit update, before applying user edits.
+    if document['version'] == 1:
+        document = {**document, 'version': 2,
+                    'preferences': {**document['preferences'], 'status_metadata': True}}
+    return document
+
+
 def read(api):
-    return {**DEFAULTS, **load(api)['preferences']}
+    return {**DEFAULTS, **migrated(load(api))['preferences']}
 
 
 def update(api, changes):
@@ -108,7 +117,7 @@ def update(api, changes):
     if not changes:
         raise ValueError('Choose at least one preference.')
     with LOCK:
-        document = load(api)
+        document = migrated(load(api))
         document['preferences'] = {**document['preferences'], **changes}
         if private_account(api) != document['account_id']:
             raise ValueError('Authenticated account changed.')
