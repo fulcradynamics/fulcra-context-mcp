@@ -5,6 +5,10 @@ from typing import Literal
 
 class Settings(BaseSettings):
     state_path: Path = Path("state/").resolve()
+    # The GCS bucket mounted at state_path, if it is one. Records that must be
+    # changed atomically across instances go through the GCS API instead of the
+    # mount, which can't do that.
+    state_bucket: str | None = None
     oidc_server_url: str = "http://localhost:4499"
     fulcra_environment: str = "stdio"
     port: int = 4499

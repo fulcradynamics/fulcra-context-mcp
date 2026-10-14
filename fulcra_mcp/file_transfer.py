@@ -1,0 +1,819 @@
+"""Moving whole files, including large and binary ones, between Fulcra and the
+client, without passing their bytes through the model.
+
+* **Resources.** ``fulcra://files/{path}`` (and, for files another user shares,
+  ``fulcra://users/{fulcra_userid}/files/{path}``) serve a file's bytes through
+  ``resources/read``.
+* **The file manager panel** (an MCP App, ``ui://fulcra/file-manager.html``).
+  In hosts that display MCP Apps, ``open_file_manager`` shows a panel where the
+  user browses folders, drops files in to upload them and downloads files. The
+  panel uploads in chunks through two app-only tools, ``start_file_upload`` and
+  ``upload_file_chunk``, which feed a resumable upload to Fulcra's storage. It
+  downloads through ``resources/read`` and the host's ``ui/download-file``, or a
+  download link where the host can't do that.
+* **Download links** (``read_file(as_link=True)``), for any client: a short-lived
+  link the user opens in a browser. ``main.py`` serves ``/files/download/<token>``.
+
+Clients without MCP Apps still list the app-only tools (the protocol doesn't let
+a server vary its tool list by client), so their descriptions say what to use
+instead.
+"""
+
+import asyncio
+import base64
+import binascii
+import functools
+import hashlib
+import json
+import mimetypes
+import secrets
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path, PurePosixPath
+
+try:
+    import fcntl
+except ImportError:  # Windows, where only the local stdio server runs
+    fcntl = None
+
+import structlog
+from fastmcp.apps.config import AppConfig, ResourceCSP
+from fastmcp.exceptions import ResourceError, ToolError
+from fastmcp.resources import ResourceContent
+from fastmcp.utilities.mime import UI_MIME_TYPE
+
+from . import tools
+from .credentials import current_grant_id
+from .file_manager_ui import FILE_MANAGER_HTML
+from .settings import settings
+from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
+
+logger = structlog.getLogger(__name__)
+
+FILE_MANAGER_URI = "ui://fulcra/file-manager.html"
+
+# Resumable uploads take chunks in multiples of 256 KiB, except the last.
+UPLOAD_GRANULE = 256 * 1024
+UPLOAD_CHUNK_BYTES = 8 * UPLOAD_GRANULE  # 2 MiB: what the panel sends
+MAX_UPLOAD_CHUNK_BYTES = 32 * UPLOAD_GRANULE  # 8 MiB: the most one call takes
+MAX_UPLOAD_BYTES = 2 * 1024**3
+UPLOAD_TTL_SECONDS = 24 * 3600
+
+# resources/read carries the whole file, base64-encoded, in one message.
+MAX_RESOURCE_BYTES = 20 * 1024**2
+
+DOWNLOAD_LINK_TTL_SECONDS = 600
+
+# write_file's base64 mode: the model writes every character of it.
+MAX_WRITE_BASE64_BYTES = 5 * 1024**2
+
+# For agents in clients that can't show the panel.
+WITHOUT_THE_PANEL = (
+    "If this client can't display the file manager panel: write_file uploads "
+    "text, or base64 with encoding='base64' (up to 5 MB); for a file on disk, "
+    "encoding='upload_link' returns a link to send it to with curl (up to 30 MB). "
+    "Otherwise use start_file_upload and upload_file_chunk, or the Fulcra CLI "
+    "(`uvx fulcra-api file upload`). read_file reads a file's contents, including "
+    "spreadsheets as CSV, and with as_link=true gives the user a link to download "
+    "any file."
+)
+
+
+def file_resource_uri(path: str, fulcra_userid: str | None = None) -> str:
+    """The resource URI for a file path, e.g. ``fulcra://files/docs/a%20b.xlsx``."""
+    quoted = urllib.parse.quote(path.lstrip("/"))
+    if fulcra_userid:
+        return f"fulcra://users/{fulcra_userid}/files/{quoted}"
+    return f"fulcra://files/{quoted}"
+
+
+def guess_content_type(name: str, default: str = "application/octet-stream") -> str:
+    return mimetypes.guess_type(name)[0] or default
+
+
+SPREADSHEET_SUFFIXES = (".xlsx", ".xlsm")
+
+# A spreadsheet is a zip file, so read_file has to fetch all of it.
+MAX_SPREADSHEET_FILE_BYTES = 20 * 1024**2
+# Bounds on converting one: the cells read cost time even when they're empty,
+# and a few kilobytes of workbook can span Excel's whole grid.
+MAX_SPREADSHEET_COLUMNS = 200
+MAX_SPREADSHEET_CELLS = 1_000_000
+
+
+def is_spreadsheet(path: str) -> bool:
+    return path.lower().endswith(SPREADSHEET_SUFFIXES)
+
+
+def spreadsheet_as_csv(data: bytes, max_chars: int) -> str | None:
+    """An Excel workbook as CSV text, one section per sheet; ``None`` if ``data``
+    isn't one. Cells hold their last computed values, not formulas.
+
+    Bounded however large the workbook says it is: it stops after ``max_chars``
+    characters or ``MAX_SPREADSHEET_CELLS`` cells read, and reads at most
+    ``MAX_SPREADSHEET_COLUMNS`` columns. Empty rows and trailing empty cells are
+    left out. When it stops early, the last line says why.
+    """
+    import csv
+    import io
+
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception:
+        return None
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    cells_left = MAX_SPREADSHEET_CELLS
+    stopped = None
+    try:
+        for sheet in workbook.worksheets:
+            out.write(f"# Sheet: {sheet.title}\n")
+            columns = min(sheet.max_column or MAX_SPREADSHEET_COLUMNS, MAX_SPREADSHEET_COLUMNS)
+            if (sheet.max_column or 0) > MAX_SPREADSHEET_COLUMNS:
+                out.write(f"# (only the first {MAX_SPREADSHEET_COLUMNS} columns)\n")
+            for row in sheet.iter_rows(max_col=columns, values_only=True):
+                cells_left -= len(row)
+                values = list(row)
+                while values and values[-1] is None:
+                    values.pop()
+                if values:
+                    writer.writerow(["" if v is None else v for v in values])
+                if out.tell() > max_chars:
+                    stopped = "the text limit"
+                    break
+                if cells_left <= 0:
+                    stopped = f"{MAX_SPREADSHEET_CELLS} cells"
+                    break
+            if stopped:
+                break
+            out.write("\n")
+    finally:
+        workbook.close()
+    text = out.getvalue()[:max_chars]
+    if stopped:
+        text += f"\n# (stopped after {stopped}; the rest of the workbook isn't shown)\n"
+    return text
+
+
+# ---------------------------------------------------------------- state store
+
+
+def _record_path(kind: str, key: str) -> Path:
+    """Where a record lives under the server's state directory. ``key`` may be a
+    secret, so the filename is its hash."""
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    return settings.state_path / kind / f"{digest}.json"
+
+
+def _save_record(kind: str, key: str, record: dict) -> None:
+    path = _record_path(kind, key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record))
+
+
+def _load_record(kind: str, key: str) -> dict | None:
+    """The record, or ``None`` if it's missing or has expired."""
+    path = _record_path(kind, key)
+    try:
+        record = json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+    if record.get("expires_at", 0) < time.time():
+        path.unlink(missing_ok=True)
+        return None
+    return record
+
+
+def _delete_record(kind: str, key: str) -> None:
+    _record_path(kind, key).unlink(missing_ok=True)
+
+
+class RecordChanged(Exception):
+    """Another process wrote a record between our reading and writing it."""
+
+
+def _change_record(kind: str, key: str, change) -> dict | None:
+    """Change a record in one step that no other server process can interleave
+    with. ``change(record)`` returns the record to write, or ``None`` to leave
+    it as it is.
+
+    Returns the record as it now stands, or ``None`` if it's missing or has
+    expired. Raises ``RecordChanged``, having written nothing, if another
+    process wrote the record first.
+
+    On Cloud Run the state directory is a GCS bucket mounted with gcsfuse, which
+    has no locks, so there (``settings.state_bucket``) the record is read and
+    written through the GCS API, the write conditioned on the generation read.
+    Elsewhere a file lock does the job.
+    """
+    if settings.state_bucket:
+        return _change_bucket_record(kind, key, change)
+    return _change_local_record(kind, key, change)
+
+
+def _change_local_record(kind: str, key: str, change) -> dict | None:
+    try:
+        f = _record_path(kind, key).open("r+")
+    except FileNotFoundError:
+        return None
+    with f:
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            record = json.loads(f.read())
+        except ValueError:
+            return None
+        if record.get("expires_at", 0) < time.time():
+            return None
+        new = change(record)
+        if new is None:
+            return record
+        f.seek(0)
+        f.truncate()
+        f.write(json.dumps(new))
+        return new
+
+
+@functools.cache
+def _state_bucket():
+    from google.cloud import storage
+
+    return storage.Client().bucket(settings.state_bucket)
+
+
+def _change_bucket_record(kind: str, key: str, change) -> dict | None:
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
+    # The mount maps the bucket's root to state_path.
+    name = _record_path(kind, key).relative_to(settings.state_path).as_posix()
+    blob = _state_bucket().get_blob(name)
+    if blob is None:
+        return None
+    generation = blob.generation
+    try:
+        record = json.loads(blob.download_as_bytes(if_generation_match=generation))
+        if record.get("expires_at", 0) < time.time():
+            return None
+        new = change(record)
+        if new is None:
+            return record
+        try:
+            blob.upload_from_string(
+                json.dumps(new), content_type="application/json", if_generation_match=generation
+            )
+        except PreconditionFailed:
+            # The client retries this write after a timeout or 5xx. If an
+            # earlier attempt landed, the retry fails its precondition on our
+            # own write: the record holding exactly `new` means it succeeded.
+            if _read_bucket_record(name) == new:
+                return new
+            raise
+        return new
+    except PreconditionFailed as e:
+        raise RecordChanged(f"{kind} record changed while being updated") from e
+    except (NotFound, ValueError):
+        return None
+
+
+def _read_bucket_record(name: str) -> dict | None:
+    from google.api_core.exceptions import NotFound
+
+    blob = _state_bucket().get_blob(name)
+    try:
+        return json.loads(blob.download_as_bytes(if_generation_match=blob.generation)) if blob else None
+    except (NotFound, ValueError):
+        return None
+
+
+# ------------------------------------------------------------------ resources
+
+
+def _read_file(path: str, fulcra_userid: str | None) -> list[ResourceContent]:
+    fulcra = tools.get_fulcra_object()
+    # FastMCP has already percent-decoded the template's path.
+    path = _file_path(path)
+    try:
+        record = fulcra.resolve_filepath(path, fulcra_userid=fulcra_userid)[0]
+    except Exception:
+        if fulcra_userid:
+            raise ResourceError(
+                f"User {fulcra_userid} doesn't share a file at {path!r} with this user."
+            )
+        raise ResourceError(f"No file at {path!r}. list_files shows what's there.")
+    size = record.get("size") or 0
+    if size > MAX_RESOURCE_BYTES:
+        raise ResourceError(
+            f"{path} is {size} bytes, too large to read in one message (the most "
+            f"is {MAX_RESOURCE_BYTES}). read_file with as_link=true gives a link to it."
+        )
+    data = fulcra.download_file(record["id"], fulcra_userid=fulcra_userid).read()
+    mime_type = guess_content_type(record.get("name") or path)
+    if _is_text_type(mime_type):
+        try:
+            return [ResourceContent(data.decode("utf-8"), mime_type=mime_type)]
+        except UnicodeDecodeError:
+            pass
+    return [ResourceContent(data, mime_type=mime_type)]
+
+
+def _is_text_type(mime_type: str) -> bool:
+    return mime_type.startswith("text/") or mime_type in (
+        "application/json",
+        "application/xml",
+        "application/javascript",
+        "application/x-yaml",
+    )
+
+
+@tools_mcp.resource(
+    "fulcra://files/{path*}",
+    name="Fulcra file",
+    description="A file in the user's Fulcra account, by its path.",
+)
+def file_resource(path: str) -> list[ResourceContent]:
+    return _read_file(path, None)
+
+
+@tools_mcp.resource(
+    "fulcra://users/{fulcra_userid}/files/{path*}",
+    name="Shared Fulcra file",
+    description="A file another Fulcra user shares with this user.",
+)
+def shared_file_resource(fulcra_userid: str, path: str) -> list[ResourceContent]:
+    return _read_file(path, fulcra_userid)
+
+
+@tools_mcp.resource(
+    FILE_MANAGER_URI,
+    name="Fulcra file manager",
+    description="The panel open_file_manager shows.",
+    mime_type=UI_MIME_TYPE,
+    app=AppConfig(
+        prefers_border=True,
+        # Rubik, Fulcra's typeface, from Google Fonts. Hosts that refuse these
+        # fall back to the system font.
+        csp=ResourceCSP(
+            resource_domains=["https://fonts.googleapis.com", "https://fonts.gstatic.com"]
+        ),
+    ),
+)
+def file_manager_ui() -> str:
+    return FILE_MANAGER_HTML
+
+
+# ----------------------------------------------------------- the file manager
+
+
+def _raising_http_errors(func):
+    """Like ``_friendly_http_errors``, but for tools that return structured
+    results: the friendly message is raised as a tool error, not returned."""
+    friendly = _friendly_http_errors(func)
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        result = await friendly(*args, **kwargs)
+        if isinstance(result, str):
+            raise ToolError(result)
+        return result
+
+    return wrapper
+
+
+
+@tools_mcp.tool(
+    annotations={"title": "Open File Manager", "readOnlyHint": True},
+    app=AppConfig(resource_uri=FILE_MANAGER_URI),
+)
+@_friendly_http_errors
+async def open_file_manager(path: str = "/") -> str:
+    """Show the user a file manager for their Fulcra files, where they can
+    upload files from their computer (any type or size, such as spreadsheets)
+    and download files. Use it when the user wants to upload or download files.
+
+    Args:
+        path: The folder to open (default "/").
+    """
+    fulcra = tools.get_fulcra_object()
+    path = _file_path(path)
+    listing = fulcra.list_files(path)
+    result = {
+        "folders": listing.get("folders") or [],
+        "files": [_slim_file(f) for f in listing.get("files") or []],
+    }
+    return (
+        f"Showing the Fulcra file manager at {path}. Files the user uploads "
+        "there appear in list_files. "
+        + WITHOUT_THE_PANEL
+        + f" Files at {path}: "
+        + json.dumps(result)
+    )
+
+
+@tools_mcp.prompt(
+    name="files",
+    title="Fulcra files",
+    description="Open the Fulcra file manager to upload or download files.",
+)
+def files_prompt(path: str = "/") -> str:
+    """A slash command (an MCP prompt) for the file manager. Prompts cost no
+    model context until the user picks one, unlike tools.
+
+    Args:
+        path: The folder to open (default "/").
+    """
+    return (
+        f"Open my Fulcra file manager at {_file_path(path)} with open_file_manager, "
+        "so I can upload or download files."
+    )
+
+
+def _require_grant() -> str:
+    grant_id = current_grant_id()
+    if grant_id is None:
+        raise ToolError("This session isn't connected to a Fulcra account.")
+    return grant_id
+
+
+@tools_mcp.tool(
+    annotations={"title": "Start File Upload", "destructiveHint": False},
+    app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
+)
+@_raising_http_errors
+async def start_file_upload(
+    path: str, size: int, content_type: str | None = None
+) -> dict:
+    """Start uploading a file of any type or size, in chunks. Used by the file
+    manager panel; agents can use it too. Then send the file's bytes, in order,
+    with upload_file_chunk. For small text files, write_file is simpler.
+
+    Args:
+        path: The full path to write to, e.g. "/reports/q3.xlsx". An existing
+            file at that path gets a new version.
+        size: The file's size in bytes.
+        content_type: Its MIME type; guessed from the name when left out.
+    Returns:
+        The upload_id, and the chunk size to use: every chunk but the last must
+        be a multiple of 256 KiB.
+    """
+    grant_id = _require_grant()
+    path = _file_path(path)
+    name = PurePosixPath(path).name
+    if not name:
+        raise ToolError("path must end in a file name, e.g. /reports/q3.xlsx.")
+    if size < 0 or size > MAX_UPLOAD_BYTES:
+        raise ToolError(f"size must be between 0 and {MAX_UPLOAD_BYTES} bytes.")
+    content_type = content_type or guess_content_type(name)
+
+    response = _create_upload_session(tools.get_fulcra_object(), path, size, content_type)
+    upload_id = secrets.token_urlsafe(16)
+    _save_record(
+        "uploads",
+        upload_id,
+        {
+            "grant_id": grant_id,
+            "url": response["url"],
+            "path": path,
+            "size": size,
+            "received": 0,
+            "file": _new_file_summary(response.get("file")),
+            "expires_at": time.time() + UPLOAD_TTL_SECONDS,
+        },
+    )
+    logger.info("file_upload_started", path=path, size=size)
+    return {
+        "upload_id": upload_id,
+        "path": path,
+        "size": size,
+        "chunk_size": UPLOAD_CHUNK_BYTES,
+    }
+
+
+def _new_file_summary(file: dict) -> dict:
+    """A just-uploaded file's record, minus its state: that was captured when the
+    upload began, and Fulcra marks the file uploaded a moment after the last
+    byte arrives."""
+    return {k: v for k, v in _slim_file(file or {}).items() if k != "state"}
+
+
+def _create_upload_session(fulcra, path: str, size: int, content_type: str) -> dict:
+    """Start a resumable upload of ``size`` bytes to ``path``. Returns Fulcra's
+    response: the upload ``url`` and the new ``file`` record."""
+    return json.loads(
+        fulcra.fulcra_api(
+            "/input/v1/file_upload",
+            method="POST",
+            data={
+                "content_length": size,
+                "content_type": content_type,
+                "name": PurePosixPath(path).name,
+                "path": str(PurePosixPath(path).parent),
+            },
+        )
+    )
+
+
+def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
+    """Send one chunk of a resumable upload. Returns how many bytes storage has
+    now committed; ``total`` once the upload is complete."""
+    if data:
+        content_range = f"bytes {start}-{start + len(data) - 1}/{total}"
+    else:
+        content_range = f"bytes */{total}"
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method="PUT",
+        headers={"Content-Length": str(len(data)), "Content-Range": content_range},
+    )
+    try:
+        with urllib.request.urlopen(request):
+            return total
+    except urllib.error.HTTPError as e:
+        if e.code != 308:
+            raise
+        # 308 Resume Incomplete: Range says what storage has so far.
+        committed = e.headers.get("Range")
+        e.close()
+        return int(committed.rsplit("-", 1)[1]) + 1 if committed else 0
+
+
+@tools_mcp.tool(
+    annotations={"title": "Upload File Chunk", "destructiveHint": False},
+    app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
+)
+@_raising_http_errors
+async def upload_file_chunk(upload_id: str, offset: int, data: str) -> dict:
+    """Send the next chunk of an upload begun with start_file_upload. Used by
+    the file manager panel; agents can use it too.
+
+    Args:
+        upload_id: From start_file_upload.
+        offset: Where this chunk starts in the file, in bytes; chunks go in
+            order. Resending a chunk that already arrived is harmless.
+        data: The chunk, base64-encoded. Every chunk but the last must be a
+            multiple of 256 KiB, and at most 8 MiB.
+    Returns:
+        How many bytes have arrived, and the file once the last chunk is in.
+    """
+    grant_id = _require_grant()
+    record = _load_record("uploads", upload_id)
+    if record is None or record["grant_id"] != grant_id:
+        raise ToolError(
+            f"No upload {upload_id!r} in progress; it may have expired. Start "
+            "again with start_file_upload."
+        )
+    if record.get("done"):
+        # Already complete: the caller missed the reply to the last chunk.
+        # Answer it again rather than letting a retry start a second upload.
+        return record["result"]
+    try:
+        chunk = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        raise ToolError("data must be base64.")
+
+    size, received = record["size"], record["received"]
+    end = offset + len(chunk)
+    if offset < received and end <= received:
+        return {"upload_id": upload_id, "received": received, "size": size, "done": False}
+    if offset != received:
+        raise ToolError(f"Expected the chunk starting at byte {received}, got {offset}.")
+    if end > size:
+        raise ToolError(f"The chunk ends at byte {end}, past the file's size ({size}).")
+    if len(chunk) > MAX_UPLOAD_CHUNK_BYTES:
+        raise ToolError(f"A chunk can be at most {MAX_UPLOAD_CHUNK_BYTES} bytes.")
+    if end < size and len(chunk) % UPLOAD_GRANULE:
+        raise ToolError(
+            f"Every chunk but the last must be a multiple of {UPLOAD_GRANULE} bytes."
+        )
+    if not chunk and size:
+        raise ToolError("The chunk is empty.")
+
+    committed = _put_chunk(record["url"], chunk, offset, size)
+    if committed >= size:
+        result = {
+            "upload_id": upload_id,
+            "received": size,
+            "size": size,
+            "done": True,
+            "path": record["path"],
+            "file": record["file"],
+            "resource_uri": file_resource_uri(record["path"]),
+        }
+        # Kept until the record expires, so a resent last chunk gets this
+        # answer again instead of an unknown upload.
+        record.update(received=size, done=True, result=result)
+        _save_record("uploads", upload_id, record)
+        logger.info("file_upload_finished", path=record["path"], size=size)
+        return result
+    record["received"] = committed
+    _save_record("uploads", upload_id, record)
+    return {"upload_id": upload_id, "received": committed, "size": size, "done": False}
+
+
+# ------------------------------------------------------------ download links
+
+
+def _unique_local_path(folder: Path, name: str) -> Path:
+    candidate = folder / name
+    stem, suffix = Path(name).stem, Path(name).suffix
+    counter = 1
+    while candidate.exists():
+        candidate = folder / f"{stem} ({counter}){suffix}"
+        counter += 1
+    return candidate
+
+
+def download_link_for(fulcra, record: dict, path: str, fulcra_userid: str | None) -> dict:
+    """A way for the user to download a file: a link that works for 10 minutes,
+    or, from a server running on the user's computer, the file saved there.
+    Used by read_file(as_link=True) and the file manager."""
+    name = record.get("name") or PurePosixPath(path).name
+
+    if settings.fulcra_environment == "stdio":
+        # This server runs on the user's computer: save the file there.
+        folder = Path.home() / "Downloads"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = _unique_local_path(folder, name)
+        response = fulcra.download_file(record["id"], fulcra_userid=fulcra_userid)
+        with target.open("wb") as out:
+            while chunk := response.read(1024 * 1024):
+                out.write(chunk)
+        return {
+            "saved_to": str(target),
+            "name": name,
+            "size": record.get("size"),
+            "note": "This server runs on the user's computer, so the file was saved there.",
+        }
+
+    token = secrets.token_urlsafe(32)
+    expires_at = time.time() + DOWNLOAD_LINK_TTL_SECONDS
+    _save_record(
+        "download_links",
+        token,
+        {
+            "grant_id": _require_grant(),
+            "file_id": record["id"],
+            "fulcra_userid": fulcra_userid,
+            "name": name,
+            "expires_at": expires_at,
+        },
+    )
+    url = f"{settings.oidc_server_url.rstrip('/')}/files/download/{token}"
+    return {
+        "url": url,
+        "name": name,
+        "size": record.get("size"),
+        "expires_in_seconds": DOWNLOAD_LINK_TTL_SECONDS,
+        "note": "Give the user this link to open in a browser. It works for 10 minutes.",
+    }
+
+
+# -------------------------------------------------------------- upload links
+
+UPLOAD_LINK_TTL_SECONDS = 600
+# One link upload is one HTTP request, and Cloud Run caps an HTTP/1 request body
+# at 32 MiB. Larger files go through the file manager, which sends chunks.
+MAX_LINK_UPLOAD_BYTES = 30 * 1024**2
+LINK_UPLOAD_CHUNK_BYTES = 32 * UPLOAD_GRANULE  # 8 MiB
+# A link upload in progress longer than this is taken to have died.
+LINK_UPLOAD_STALE_SECONDS = 300
+
+
+def make_upload_link(path: str, grant_id: str) -> str:
+    """A short-lived URL that saves one file, sent in a PUT, to ``path``."""
+    token = secrets.token_urlsafe(32)
+    _save_record(
+        "upload_links",
+        token,
+        {
+            "grant_id": grant_id,
+            "path": path,
+            "state": "new",
+            "expires_at": time.time() + UPLOAD_LINK_TTL_SECONDS,
+        },
+    )
+    return f"{settings.oidc_server_url.rstrip('/')}/files/upload/{token}"
+
+
+LINK_EXPIRED = "This upload link has expired. Ask for a new one."
+LINK_BUSY = "An upload to this link is already in progress."
+
+
+def _link_upload_running(record: dict) -> bool:
+    return (
+        record["state"] == "uploading"
+        and time.time() - record["started_at"] < LINK_UPLOAD_STALE_SECONDS
+    )
+
+
+class LinkUploadError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
+
+async def _send_link_chunk(url: str, pending: bytearray, count: int, sent: int, total: int) -> int:
+    """Send the first ``count`` bytes of ``pending``, which starts at byte
+    ``sent``. Drops from ``pending`` only what storage confirms, and returns the
+    new confirmed offset."""
+    committed = await asyncio.to_thread(_put_chunk, url, bytes(pending[:count]), sent, total)
+    if committed >= total:
+        pending.clear()
+        return total
+    progress = committed - sent
+    if progress <= 0 or progress > count:
+        # No progress, or storage reports bytes it was never sent, or forgot
+        # some it had confirmed (already dropped here): start again.
+        raise LinkUploadError(502, "Storage didn't take the file. Try again.")
+    del pending[:progress]
+    return committed
+
+
+async def receive_link_upload(token: str, length: int | None, body, fulcra_for) -> dict:
+    """Save the file PUT to an upload link. ``body`` yields the request's bytes;
+    ``fulcra_for(grant_id)`` gives the client to act as.
+
+    A link saves one file. Once it has, sending to it again returns the same
+    result without storing anything, so a retry after a lost reply is safe.
+    Raises ``LinkUploadError`` with the HTTP status and a message for the sender.
+    """
+    record = _load_record("upload_links", token)
+    if record is None:
+        raise LinkUploadError(410, LINK_EXPIRED)
+    if record["state"] == "done":
+        return record["result"]
+    if _link_upload_running(record):
+        raise LinkUploadError(409, LINK_BUSY)
+    if length is None:
+        raise LinkUploadError(411, "Send the file with its length, e.g. curl -T <file> <link>.")
+    if length > MAX_LINK_UPLOAD_BYTES:
+        raise LinkUploadError(
+            413,
+            f"An upload link takes at most {MAX_LINK_UPLOAD_BYTES} bytes; this file is "
+            f"{length}. Upload it with open_file_manager instead.",
+        )
+
+    # Claim the link. Two requests can both get this far; only one claim lands.
+    claim = secrets.token_hex(8)
+
+    def take(current: dict) -> dict | None:
+        if current["state"] == "done" or _link_upload_running(current):
+            return None
+        return dict(current, state="uploading", started_at=time.time(), claim=claim)
+
+    try:
+        record = await asyncio.to_thread(_change_record, "upload_links", token, take)
+    except RecordChanged:
+        raise LinkUploadError(409, LINK_BUSY) from None
+    if record is None:
+        raise LinkUploadError(410, LINK_EXPIRED)
+    if record["state"] == "done":
+        return record["result"]
+    if record.get("claim") != claim:
+        raise LinkUploadError(409, LINK_BUSY)
+    try:
+        path = record["path"]
+        fulcra = fulcra_for(record["grant_id"])
+        session = await asyncio.to_thread(
+            _create_upload_session, fulcra, path, length, guess_content_type(path)
+        )
+        # `sent` is what storage has confirmed; `pending` holds every byte after
+        # it. Storage may confirm only part of a chunk, and the rest is resent.
+        url, sent, pending = session["url"], 0, bytearray()
+        async for piece in body:
+            pending += piece
+            if sent + len(pending) > length:
+                raise LinkUploadError(400, "The upload sent more bytes than its Content-Length.")
+            while len(pending) >= LINK_UPLOAD_CHUNK_BYTES and sent + len(pending) < length:
+                sent = await _send_link_chunk(url, pending, LINK_UPLOAD_CHUNK_BYTES, sent, length)
+        if sent + len(pending) != length:
+            raise LinkUploadError(400, "The upload ended before its Content-Length.")
+        sent = await _send_link_chunk(url, pending, len(pending), sent, length)
+        while sent < length:
+            sent = await _send_link_chunk(url, pending, len(pending), sent, length)
+    except BaseException:
+        # Let the sender try again with the same link.
+        record.update(state="new")
+        _save_record("upload_links", token, record)
+        raise
+
+    result = {
+        "path": path,
+        "size": length,
+        "file": _new_file_summary(session.get("file")),
+        "resource_uri": file_resource_uri(path),
+    }
+    record.update(state="done", result=result)
+    _save_record("upload_links", token, record)
+    logger.info("file_link_upload_finished", path=path, size=length)
+    return result
+
+
+def download_link_target(token: str) -> dict | None:
+    """The download a link's token stands for, or ``None`` if it's unknown or
+    has expired. Used by the ``/files/download/<token>`` route."""
+    return _load_record("download_links", token)
