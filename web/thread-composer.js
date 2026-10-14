@@ -15,8 +15,16 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   container.replaceChildren();
   const currentContext = () => usable ? context : undefined;
   const update = setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, orderField, view, changed, presentation);
-  if (presentation === 'thread') container.append(help);
-  container.append(details);
+  // Context preview + handoff help live in the single Advanced panel (PLAT-719),
+  // not inline in the composer. Replace any prior copy on re-mount.
+  const advanced = doc.querySelector('#advanced-panel');
+  advanced?.querySelector('.context-details')?.remove();
+  if (presentation === 'thread') {
+    advanced?.querySelector('.thread-help-dyn')?.remove();
+    help.className = 'meta thread-help-dyn';
+    (advanced ?? container).append(help);
+  }
+  (advanced ?? container).append(details);
   const updater = (peer, range, result, ready, loaded) => {
     peerId = peer;
     usable = loaded;

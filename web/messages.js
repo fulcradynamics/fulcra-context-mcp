@@ -52,9 +52,17 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     }
     requestRefresh();
   });
-  const about = doc.querySelector('.reading-details');
-  about.before(rosterWarning, incoming.element);
-  about.append(readingOptions);
+  // Single "Advanced" panel (toggled from the contact header) collects the
+  // technical/debug sections and multiparty controls (PLAT-719).
+  const advanced = doc.querySelector('#advanced-panel');
+  const advancedToggle = doc.querySelector('#advanced-toggle');
+  advanced.append(rosterWarning, incoming.element, readingOptions);
+  const onAdvanced = () => {
+    const expand = advanced.hidden;
+    advanced.hidden = !expand;
+    advancedToggle.setAttribute('aria-expanded', String(expand));
+  };
+  advancedToggle.addEventListener('click', onAdvanced);
   let activeViewer = 'chatgpt';
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
@@ -333,6 +341,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
+    advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();
@@ -344,7 +353,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
-
+    advancedToggle.removeEventListener('click', onAdvanced);
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
     return contextLifecycle.dispose();
