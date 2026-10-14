@@ -17,7 +17,7 @@ const message = (sender, body, at, kind = 'message') => ({ id: `rec-${++seq}`, r
 
 // One Agent Contact: an owned outgoing channel shared to the peer, plus the
 // peer's incoming channel shared to us, each carrying some messages.
-function contact({ peerId, name, outId, inId, outgoing = [], incoming = [] }) {
+function contact({ peerId, name, outId, inId, sender = name, outgoing = [], incoming = [] }) {
   const outbox = channelFixture({ id: `Event/${outId}`, name: `${name} (outbox)`, description: `[mesh_identifier: "${name}"]` });
   const inbox = channelFixture({ id: `Event/${inId}`, name: `${name} (inbox)`, fulcra_userid: peerId, description: `[mesh_identifier: "${name}"]` });
   return {
@@ -29,12 +29,22 @@ function contact({ peerId, name, outId, inId, outgoing = [], incoming = [] }) {
     }],
     rows: {
       [`${own}/${outbox.id}`]: outgoing.map(m => message('You', m.body, m.at, m.kind)),
-      [`${peerId}/${inbox.id}`]: incoming.map(m => message(name, m.body, m.at, m.kind)),
+      [`${peerId}/${inbox.id}`]: incoming.map(m => message(sender, m.body, m.at, m.kind)),
     },
   };
 }
 
 const contacts = [
+  // Contact whose agent sends under a different name (person "Gregory Klein",
+  // agent "Schreber") — the header avatar vs message-sender case.
+  contact({
+    peerId: '00000000-0000-0000-0000-000000000001', name: 'Gregory Klein', sender: 'Schreber', outId: 'g-out', inId: 'g-in',
+    outgoing: [{ body: 'Can your agent confirm the Q3 numbers before Friday?', at: iso(2, 10) }],
+    incoming: [
+      { body: 'On it — pulling the figures now.', at: iso(2, 11), kind: 'reply' },
+      { body: 'Confirmed: revenue is up 12% QoQ. Want me to draft a one-paragraph summary?', at: iso(1, 15), kind: 'reply' },
+    ],
+  }),
   contact({
     peerId: '11111111-1111-1111-1111-111111111111', name: 'Alice', outId: 'a-out', inId: 'a-in',
     outgoing: [

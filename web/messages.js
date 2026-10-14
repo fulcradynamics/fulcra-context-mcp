@@ -117,7 +117,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const messageList = createMessageList(messages, order,
     (item, { record, source, direction, state }) => {
       const incoming = direction === 'Incoming';
-      let avatar, bubble, body, date, meta;
+      let avatar, bubble, body, date, meta, sender;
       if (!item.firstChild) {
         // Chat layout: an avatar (incoming only) beside a content column holding
         // the bubble and a meta line (date, etc.). Incoming left, outgoing right.
@@ -128,7 +128,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         bubble.append(body);
         meta = doc.createElement('div'); meta.className = 'message-meta';
         date = doc.createElement('span'); date.className = 'message-date';
-        meta.append(date);
+        sender = doc.createElement('span'); sender.className = 'message-sender';
+        meta.append(date, sender);
         const content = doc.createElement('div'); content.className = 'msg-content';
         content.append(bubble, meta);
         item.append(avatar, content);
@@ -138,14 +139,22 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         body = item.querySelector('.bubble-body');
         meta = item.querySelector('.message-meta');
         date = item.querySelector('.message-date');
+        sender = item.querySelector('.message-sender');
       }
       item.classList.toggle('incoming', incoming);
       item.classList.toggle('outgoing', !incoming);
-      // Avatar initial from the message sender (incoming); hidden for outgoing.
-      const senderName = typeof record.sender === 'string' && record.sender.trim()
-        ? record.sender : (selected?.identifier || selected?.peer || '?');
-      const initial = [...senderName.trim()][0]?.toUpperCase() || '?';
+      // Avatar initial (incoming only; hidden for outgoing). For a 1:1 contact
+      // use the contact's name so it matches the header avatar; for multiparty
+      // use the message sender so participants stay distinguishable.
+      const avatarName = selected?.participants && typeof record.sender === 'string' && record.sender.trim()
+        ? record.sender : (selected?.identifier || selected?.peer || 'Agent Contact');
+      const initial = [...String(avatarName).trim()][0]?.toUpperCase() || '?';
       if (avatar.textContent !== initial) avatar.textContent = initial;
+      // Under the date: the sending agent name, when it differs from the contact.
+      const showSender = incoming && typeof record.sender === 'string' && record.sender.trim()
+        && record.sender !== (selected?.identifier || selected?.peer);
+      sender.textContent = showSender ? record.sender : '';
+      sender.hidden = !showSender;
       const addressing = messageAddressing(record, activeViewer);
       item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
       item.classList.toggle('addressed-to-others', addressing === 'other');
