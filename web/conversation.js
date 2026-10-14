@@ -7,15 +7,30 @@ const timestamp = record => {
   return Number.isFinite(time) ? time : Infinity;
 };
 
-// The latest record from each source, newest first; untimestamped records are ignored.
-export async function readLatest(app, sources) {
+// Latest content plus receipt evidence. A latest read returns ONE record, so
+// receipt-ended channels need bounded history, not just client-side filtering.
+export async function readLatest(app, sources, now = Date.now(), { resolveContent = true } = {}) {
+  const start = now - 30 * 86400000;
+  let usedHistory = false;
   const latest = await Promise.all(sources.map(async ({ direction, identifier: _identifier, setupSession: _setupSession, ...source }) => {
-    const args = { data_type: source.id, latest: true };
+    const args = { data_type: source.id };
     if (direction === 'Incoming') args.fulcra_userid = source.fulcra_userid;
-    const { records } = parseRecords(await app.callServerTool({ name: 'get_records', arguments: args }, { timeout: 30000 }), source.id);
+    async function read(range) {
+      const { records, truncated } = parseRecords(await app.callServerTool({ name: 'get_records', arguments: { ...args, ...range } }, { timeout: 30000 }), source.id);
+      if (truncated || records.some(record => !Number.isFinite(timestamp(record)))) throw new Error('Preview incomplete.');
+      return records;
+    }
+    let records = await read({ latest: true });
+    if (resolveContent && records.some(record => !['message', 'reply'].includes(record.kind))) {
+      usedHistory = true;
+      records = [...records, ...await read({ start_time: new Date(start).toISOString(), end_time: new Date(now).toISOString() })];
+    }
     return records.map(record => ({ record, source, direction }));
   }));
-  return latest.flat().filter(m => Number.isFinite(timestamp(m.record))).sort((a, b) => timestamp(b.record) - timestamp(a.record));
+  const messages = latest.flat().sort((a, b) => timestamp(b.record) - timestamp(a.record));
+  const content = messages.find(m => ['message', 'reply'].includes(m.record.kind));
+  if (usedHistory && (!content || timestamp(content.record) < start)) throw new Error('Preview incomplete within 30-day history.');
+  return messages;
 }
 
 export async function readConversation(app, selected, range, isCurrent = () => true, { discovery: supplied, previous, now } = {}) {

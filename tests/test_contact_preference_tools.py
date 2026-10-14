@@ -43,6 +43,29 @@ async def test_override_save_and_owned_read(backend, monkeypatch):
         assert '[connection_setup_session:' in backend['row']['description']
 
 
+async def test_legacy_override_reads_do_not_write_and_explicit_opt_out_survives(backend, monkeypatch):
+    from fulcra_mcp import contact_preferences as policy
+    monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)
+    original = backend['row']['description'] + '\n[contact_preferences: {"status_metadata":false,"autonomous_replies":false}]'
+    backend['row']['description'] = original
+    args = {'data_type': OUT, 'peer_userid': PEER}
+    async with Client(mcp) as client:
+        for _ in range(2):
+            result = (await client.call_tool('get_contact_preferences', args)).structured_content
+            assert result['values']['status_metadata'] is True
+            assert result['values']['autonomous_replies'] is False
+            assert not backend['writes']
+            assert backend['row']['description'] == original
+        saved = (await client.call_tool('set_contact_preferences', {
+            **args, 'overrides': {'status_metadata': False}})).structured_content
+        assert saved['verified'] is True
+        assert '[contact_preferences_version: 2]' in backend['row']['description']
+        for _ in range(2):
+            result = (await client.call_tool('get_contact_preferences', args)).structured_content
+            assert result['values']['status_metadata'] is False
+        assert len(backend['writes']) == 1
+
+
 @pytest.mark.parametrize('option', ['peer', 'denied', 'unverified', 'schema'])
 async def test_override_rejects_unowned_invalid_or_unverified(backend, option):
     if option == 'peer': backend['row']['fulcra_userid'] = PEER

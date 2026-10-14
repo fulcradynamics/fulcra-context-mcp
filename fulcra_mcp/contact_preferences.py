@@ -132,23 +132,36 @@ def update(api, changes):
 
 TOKEN = '[contact_preferences:'
 PATTERN = re.compile(r'^\[contact_preferences: (\{[^\r\n]*\})\]$', re.M)
+VERSION_TOKEN = '[contact_preferences_version:'
+VERSION_MARKER = '[contact_preferences_version: 2]'
 
 
 def parse_overrides(description):
     if not isinstance(description, str):
         raise ValueError('Missing connection description.')
+    versioned = VERSION_TOKEN in description
+    if versioned and (description.count(VERSION_TOKEN) != 1
+                      or VERSION_MARKER not in description.splitlines()):
+        raise ValueError('Malformed contact preference version; do not infer permission.')
     if TOKEN not in description:
         return {}
     match = PATTERN.search(description)
     if description.count(TOKEN) != 1 or not match:
         raise ValueError('Malformed contact preferences; do not infer permission.')
-    return validate(json.loads(match[1]))
+    overrides = validate(json.loads(match[1]))
+    # Legacy testing status defaults now inherit; reads never rewrite metadata.
+    # Other restrictions, including autonomous replies, remain untouched.
+    if not versioned:
+        overrides.pop('status_metadata', None)
+    return overrides
 
 
 def write_overrides(description, overrides):
     validate(overrides)
     parse_overrides(description)
     marker = '[contact_preferences: ' + json.dumps(overrides, separators=(',', ':')) + ']'
+    if VERSION_TOKEN not in description:
+        marker = VERSION_MARKER + '\n' + marker
     match = PATTERN.search(description)
     if match:
         return description[:match.start()] + marker + description[match.end():]

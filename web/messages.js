@@ -236,7 +236,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       return order.value === 'latest' ? bt - at : at - bt;
     }) };
     const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
-      || (record.body?.trim() && record.body.trim().toLowerCase() !== 'ack'));
+      || (record.body != null && (typeof record.body !== 'string'
+        || (record.body.trim() && record.body.trim().toLowerCase() !== 'ack'))));
     messageList.update(visible, () => {
       setTitle(selected);
       setThreadTopic(result.messages);
@@ -287,7 +288,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       // Initial window: one week before the earlier of the latest incoming and latest outgoing messages.
       if (!start && !requestedStart && thread) {
         let latest;
-        try { latest = await readLatest(app, thread.sources); } catch { throw new Error('Could not find the latest messages.'); }
+        // Anchoring history must remain available even when a preview cannot be resolved.
+        try { latest = await readLatest(app, thread.sources, Date.now(), { resolveContent: false }); } catch { throw new Error('Could not find the latest messages.'); }
         if (!current()) return true;
         const edges = ['Incoming', 'Outgoing'].map(d => latest.find(m => m.direction === d)).filter(Boolean)
           .map(m => Date.parse(m.record.recorded_at ?? m.record.start_time));

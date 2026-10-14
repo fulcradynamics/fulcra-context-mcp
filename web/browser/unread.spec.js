@@ -90,6 +90,36 @@ test('verified acknowledgement clears the list dot and is not sent again on reop
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
 });
 
+test('malformed ack bodies retain safe rows alongside valid messages', async ({ page }) => {
+  const ownRecords = [123, { text: 'ack' }].map((body, i) => ({
+    id: `malformed-${i}`, kind: 'ack', sender: 'chatgpt', body, start_time: '2026-10-13T11:30:00Z',
+  }));
+  const ui = await open(page, 900, { ownRecords, listOnly: true });
+  await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(8);
+  await expect(ui.locator('#messages')).toContainText('Broadcast message');
+  await expect(ui.locator('#messages')).toContainText('Unrecognized connection record.');
+  await expect(ui.locator('#message-status')).toHaveText('');
+});
+
+test('preview recovers newer outgoing content behind a receipt', async ({ page }) => {
+  const ownRecords = [
+    { id: 'sent', kind: 'message', sender: 'chatgpt', body: 'Hidden outgoing', start_time: '2026-10-13T11:30:00Z' },
+    { id: 'receipt', kind: 'ack', body: 'ack', in_reply_to: 'older', start_time: '2026-10-13T11:45:00Z' },
+  ];
+  const ui = await open(page, 900, { ownRecords, listOnly: true });
+  const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
+  await expect(row.locator('.thread-preview')).toHaveText('You: Hidden outgoing');
+  await expect(row.locator('.thread-time')).toHaveText('30m');
+  await expect(row.locator('.unread-dot')).toBeHidden();
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  await page.evaluate(() => { window.failReads = true; });
+  await ui.locator('#refresh-threads').click();
+  await expect(row.locator('.thread-preview')).toContainText('Preview unavailable');
+  await expect(row.locator('.thread-time')).toHaveText('');
+  await expect(row.locator('.unread-dot')).toBeHidden();
+});
+
 test('receipt-only acks are hidden but substantive acks remain visible', async ({ page }) => {
   const ownRecords = [undefined, '', 'ack', ' ACK ', 'ack — I need your decision', 'Read.'].map((body, i) => ({
     id: `receipt-${i}`, kind: 'ack', sender: 'chatgpt', body,

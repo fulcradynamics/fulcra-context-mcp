@@ -153,6 +153,34 @@ def test_owned_override_marker_precedence():
     with pytest.raises(ValueError): policy.parse_overrides(description + '\n[contact_preferences: {}]')
 
 
+def test_legacy_contact_status_reset_preserves_metadata_and_new_opt_out():
+    from fulcra_mcp import contact_preferences as policy
+    original = ('connect-agents-with-anyone channel\n[contact_status: {"summary":"Keep"}]\n'
+                '[contact_preferences: {"status_metadata":false,"autonomous_replies":false,"unanswered_days":4}]\n'
+                '[mesh_identifier: "Friend"]')
+    overrides = policy.parse_overrides(original)
+    assert policy.effective(policy.DEFAULTS, overrides)['status_metadata'] is True
+    assert policy.effective(policy.DEFAULTS, overrides)['autonomous_replies'] is False
+    assert overrides['unanswered_days'] == 4
+    assert policy.effective({**policy.DEFAULTS, 'status_metadata': False}, overrides)['status_metadata'] is False
+    saved = policy.write_overrides(original, {**overrides, 'status_metadata': False})
+    assert '[contact_preferences_version: 2]' in saved
+    assert '[contact_status: {"summary":"Keep"}]' in saved
+    assert saved.endswith('[mesh_identifier: "Friend"]')
+    assert policy.parse_overrides(saved)['status_metadata'] is False
+    again = policy.write_overrides(saved, policy.parse_overrides(saved))
+    assert again == saved
+    assert policy.parse_overrides(policy.write_overrides(saved, {})) == {}
+
+
+@pytest.mark.parametrize('version', ['1', '3', 'bad', '2]\n[contact_preferences_version: 2'])
+def test_invalid_contact_preference_version_fails_closed(version):
+    from fulcra_mcp import contact_preferences as policy
+    with pytest.raises(ValueError):
+        policy.parse_overrides('[contact_preferences: {"status_metadata":false}]\n'
+                               f'[contact_preferences_version: {version}]')
+
+
 def test_real_sdk_private_upload_and_independent_download(monkeypatch):
     from fulcra_api.core import FulcraAPI
     from fulcra_mcp import contact_preferences as policy
