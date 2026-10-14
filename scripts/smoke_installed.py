@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.8.0'
+                assert initialized.serverInfo.version == '1.9.0'
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
@@ -45,9 +45,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v42.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v42.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v42.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v43.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v43.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v43.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
@@ -60,7 +60,7 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v42 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v43 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

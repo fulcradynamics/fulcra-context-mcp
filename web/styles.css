@@ -91,6 +91,11 @@ button {
 button:hover:not(:disabled) { background: var(--teal-tint-hover); }
 button:disabled { color: var(--muted); background: rgba(255, 255, 255, .04); cursor: default; }
 .btn-icon { flex: none; }
+/* Top-level Refresh is a quiet text+icon action, not a filled pill — same
+   compact size as the Contacts back button, with tight spacing around it. */
+#refresh-threads { background: transparent; min-height: 32px; padding: 4px 10px; font-size: 12px; display: flex; margin-left: auto; }
+#refresh-threads:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
+#refresh-threads + .section-header { margin-top: 8px; }
 /* Primary actions get a solid fill with dark text. */
 button.primary:not(:disabled) { background: var(--teal); color: #000; }
 button.primary:hover:not(:disabled) { background: var(--teal-soft); }
@@ -108,9 +113,17 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 .composer-input { border: 0; background: transparent; padding: 8px 10px; resize: none; overflow-y: hidden; line-height: 1.45; min-height: 40px; }
 .composer-input::placeholder { color: #6a6a70; }
 .composer-input:focus-visible { outline-width: 1px; outline-offset: 2px; }
-#message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; }
-#message-through { margin: 0; }
-#message-status { margin-block: 20px; }
+#message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 8px 0 16px; }
+#message-through { margin: 0; color: #6a6a70; }
+.message-status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-block: 20px; }
+/* No status text (the normal reading state) means an empty row — drop its margin
+   so it doesn't pad the top of the "Showing messages through" label below it. */
+.message-status-row:has(#message-status:empty) { margin-block: 0; }
+#message-status { margin: 0; }
+/* Borderless teal inline retry, matching the quiet "Load more history" link. */
+.retry-now { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 0 2px; }
+.retry-now:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
+.message-status-row .refresh-spinner { align-self: center; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
    are divided by hairlines and lift on hover (Portal data-types row cards). */
@@ -198,10 +211,11 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* Single "Advanced" disclosure (PLAT-719): a compact upper-right toggle that
    reveals all the technical/debug sections collected into one panel. */
 .detail-topbar { display: flex; align-items: center; gap: 12px; }
+/* Back button: same compact size as the Advanced toggle, but borderless. */
+#message-back { flex: none; min-height: 32px; padding: 4px 10px; font-size: 12px; font-weight: 500; background: transparent; color: var(--teal); }
+#message-back:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
 .advanced-toggle { flex: none; margin-left: auto; min-height: 32px; padding: 4px 10px; font-size: 12px; font-weight: 500; background: transparent; color: var(--muted); border: 1px solid var(--divider); }
 .advanced-toggle:hover:not(:disabled) { background: var(--raised); color: #fff; }
-.advanced-toggle::after { content: '▸'; margin-left: 6px; font-size: 10px; }
-.advanced-toggle[aria-expanded='true']::after { content: '▾'; }
 .advanced-panel { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 12px; background: var(--raised); }
 .advanced-panel > p { margin: 0; }
 .advanced-panel .context-details, .advanced-panel details { margin: 0; }
@@ -246,7 +260,8 @@ details { margin-block: 16px; }
 summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
 details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
-.invite-section { margin-bottom: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
+.invite-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--divider); }
+.invite-section p.meta { font-size: 13px; }
 
 /* A tapered "comet" ring: a conic gradient fading from transparent to teal,
    masked to a thin ring. Smoother and more modern than a solid border spinner. */
@@ -255,6 +270,10 @@ details[open] > summary { color: var(--violet); }
    (visibility, not display) so showing it never moves the button. */
 .more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
+/* Quiet, link-like "Load more history" — no pill background, sized to match the
+   "Showing messages through X" label above it. */
+#message-more { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 1px 8px; }
+#message-more:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
 /* Prominent initial-load state: a large centered spinner with a label. */
 #message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }

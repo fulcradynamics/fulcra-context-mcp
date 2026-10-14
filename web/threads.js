@@ -215,25 +215,33 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       }
     },
   });
-  // Latest sent or received message per thread. A failed read keeps the previous preview.
+  // Never present an incomplete read as a current preview or unread state.
   async function refreshPreviews() {
     await Promise.all([...rows.values()].map(async entry => {
       if (entry.reading) return;
       const thread = entry.thread;
-      let latest;
+      let latest, failed = false;
       entry.reading = true;
       try { latest = await readLatest(app, thread.sources); }
-      catch { if (!entry.resolved) entry.time.textContent = ''; return; } // drop the badge spinner on a failed first read
+      catch { failed = true; }
       finally { entry.reading = false; }
       if (disposed || rows.get(thread.peer) !== entry
         || JSON.stringify(entry.thread.sources) !== JSON.stringify(thread.sources)) return;
+      if (failed) {
+        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+        entry.preview.hidden = false;
+        entry.dot.classList.remove('on');
+        entry.time.textContent = '';
+        entry.lastAt = NaN;
+        return;
+      }
       const summary = contactPreview(latest);
       const message = summary?.message;
       const text = message ? `${message.direction === 'Outgoing' ? 'You: ' : ''}${messageText(message.record)}` : '';
       if (entry.preview.textContent !== text) entry.preview.textContent = text;
       entry.preview.hidden = !text;
-      entry.dot.classList.toggle('on', Boolean(summary) && !summary.acknowledged);
-      const at = message?.record?.recorded_at;
+      entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
+      const at = message?.record?.start_time;
       entry.lastAt = at ? Date.parse(at) : NaN;
       entry.resolved = true;
       // Replaces the badge spinner (set at row creation) with the time, or clears it.

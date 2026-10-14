@@ -3,19 +3,21 @@ import { open, own, peer, other, out, incoming } from './harness.js';
 
 test('own audience names, exact addressing, provenance and safe responsive labels',async({page})=>{
  const ui=await open(page,390);
- for(const id of [own,peer,other])await expect(ui.locator('#message-title')).toContainText(id);
+ await expect(ui.locator('#message-title')).toHaveText('Weekend');
+ for(const id of [own,peer,other])await expect(ui.locator('#advanced-panel .meta').filter({hasText:'Participants:'})).toContainText(id);
  await expect(ui.locator('#messages .addressed-to-viewer')).toHaveCount(2);
  await expect(ui.locator('#messages .addressed-to-others')).toHaveCount(2);
  await expect(ui.locator('#messages img, #messages script')).toHaveCount(0);
  await expect(ui.locator('.message-source').first()).toContainText('association unverified');
- await ui.getByText('About this Agent Contact',{exact:true}).click();
- await expect(ui.getByLabel('Viewing agent name')).toHaveValue('chatgpt');
- await ui.getByLabel('Viewing agent name').fill('ChatGPT');
+ await ui.locator('#advanced-toggle').click();
+ await expect(ui.getByLabel('Your agent name')).toHaveValue('chatgpt');
+ await ui.getByLabel('Your agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
  expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send').map(c=>c.arguments.kind))).toEqual(['ack']);
 });
 test('incoming selection remains selectable across polling and context includes sources',async({page})=>{
  const ui=await open(page);
+ await ui.locator('#advanced-toggle').click();
  await ui.locator('.incoming-sources summary').click();
  const boxes=ui.locator('.incoming-sources input');
  await boxes.first().uncheck();
@@ -25,7 +27,7 @@ test('incoming selection remains selectable across polling and context includes 
  await expect(boxes.first()).not.toBeChecked();
  await boxes.first().check(); await page.clock.runFor(11000);
  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
- await ui.getByRole('button',{name:'talk with my agent about this Agent Contact',exact:true}).click();
+ await ui.getByRole('button',{name:'Discuss in synthetic',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>JSON.stringify(window.contexts))).toContain('remote audiences are unverified');
  const context=await page.evaluate(()=>JSON.stringify(window.contexts));
  expect(context).toContain('remote audiences are unverified');
@@ -35,6 +37,7 @@ test('revoked selected outbox never silently switches draft to another channel',
  const ui=await open(page);
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Bound to selected channel');
  await page.evaluate(()=>window.second=true); await page.clock.runFor(11000);
+ await ui.locator('#advanced-toggle').click();
  await ui.getByText('Delivery address',{exact:true}).click();
  await expect(ui.getByLabel('Your outbox')).toHaveValue(out);
  await page.evaluate(()=>window.excludeOut=true); await page.clock.runFor(11000);
@@ -50,7 +53,7 @@ test('send carries full expected audience; widening invalidates context and pres
  const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').arguments);
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
- await ui.getByRole('button',{name:'talk with my agent about this Agent Contact',exact:true}).click();
+ await ui.getByRole('button',{name:'Discuss in synthetic',exact:true}).click();
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Keep old draft');
  await page.evaluate(()=>window.audience.push('00000000-0000-4000-8000-000000000009'));
  await page.clock.runFor(11000);

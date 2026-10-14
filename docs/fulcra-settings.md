@@ -4,7 +4,7 @@ The server advertises `openai/settings` with the existing MCP stack. Native fiel
 configure contact behavior; no settings buttons, modal or scheduler API is needed.
 
 - `fulcra_settings_read({})` returns primitive `{schema, values, layout}`: autonomous
-  replies (off), status persistence (off), waiting/overdue/high-priority attention
+  replies (off), status persistence (on), waiting/overdue/high-priority attention
   rules (on), unanswered days (2), notifications (`attention`, `all_messages`,
   `none`) and Special instructions (string, at most 2000 characters).
 - The existing read-only **Last contact check** and plain-chat schedule guidance remain
@@ -13,14 +13,19 @@ configure contact behavior; no settings buttons, modal or scheduler API is neede
   and independently reads back. Unknown fields, empty updates, wrong types and
   invalid bounds fail. Saving does not send messages, alter checkpoints or reschedule.
 - Read/update are model- and app-visible so onboarding and scheduled checks use the
-  same contract. Enabling reply/status fields requires explicit user consent.
+  same contract. Autonomous replies require explicit user consent; status defaults
+  do not override existing read-only task restrictions.
 - `fulcra_check_status` remains the app-only configuration-specific read projection.
 
 ## Persistence and consent
 
 Preferences live in the authenticated account's private
 `/agent/chatgpt/contact-preferences/settings.md`, an OKF Markdown document with a
-version-1 JSON block (`account_id`, `preferences`). Missing files yield safe defaults;
+version-2 JSON block (`account_id`, `preferences`). Version-1 testing configurations
+project `status_metadata=true`, including previously stored false values. Reads stay
+read-only. The next explicit update persists version 2 before applying the user's
+changes, so subsequent deliberate opt-outs survive all reads and unrelated edits.
+Other settings and per-contact restrictions are preserved. Missing files yield defaults;
 malformed, inaccessible, oversized or wrong-account files fail closed, not defaults.
 Outgoing shares are checked before reading/writing; broad or covering file/history
 shares and uncertain privacy block access. No caller-supplied account/path or global
@@ -55,7 +60,12 @@ Acks do not resolve substantive requests. Re-evaluate overdue attention even wit
 new arrivals and deduplicate attention separately from message delivery. Quiet output
 does not guarantee suppression of host completion alerts.
 
-New tasks store the live loader plus explicit reply/status permission ceilings.
+New tasks default to hourly checks and store the live loader plus explicit permission
+for acknowledgements, status and identifier maintenance independently of reply permission.
+The server does not create or reschedule host tasks. Existing testing schedules need
+an hourly update to the same task ID and readback, preserving destination, checkpoints
+and unrelated policy; never create a duplicate. Explicitly read-only tasks require
+upgrade consent before maintenance writes.
 Existing tasks need consented same-task migration/readback; a settings save cannot
 rewrite a host prompt, lift old restrictions or prove scheduled execution. Cadence-only
 changes preserve permissions and checkpoints. Hosts requiring literal prompt policy
@@ -76,7 +86,11 @@ packaged UI. Text/package tests are not model execution or native host rendering
 After server refresh and plugin 0.5.0 reinstall, verify in a fresh conversation:
 
 1. Native fields, enum/number controls, Special instructions and both status headings
-   render on the target client. Do not assume a multiline textarea.
+   render on the target client. The official settings spec's `SettingSchema` supports
+   string length/pattern/enum constraints, and `SettingsGroup` only grouping/property
+   references/tool actions. It documents no multiline, rows, height or width control.
+   Keep the native string field; do not invent sizing properties or assume `maxLength`
+   makes it larger. A larger native textbox remains host-dependent.
 2. Save/reopen values; check another account cannot see them. Opening/editing causes
    no messages, task changes or checkpoint changes.
 3. Keep defaults in onboarding, then explicitly opt into bounded replies. Test safe

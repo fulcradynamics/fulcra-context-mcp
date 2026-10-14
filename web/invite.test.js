@@ -26,7 +26,10 @@ test('click sends only a user message requesting the invitation action', async (
   assert.match(calls[0].content[0].text, /Do not ask for the other user's ID/);
   assert.match(calls[0].content[0].text, /optional context/);
   assert.match(calls[0].content[0].text, /draft an outgoing message/);
-  assert.match(calls[0].content[0].text, /Get my go-ahead before creating/);
+  assert.match(calls[0].content[0].text, /prepare a dedicated unshared outbox/);
+  assert.match(calls[0].content[0].text, /identifier.*original setup session URL/);
+  assert.match(calls[0].content[0].text, /without another confirmation/);
+  assert.match(calls[0].content[0].text, /do not share or post.*peer ID.*verified.*authoriz/);
   assert.match(status.textContent, /Request sent/);
 });
 

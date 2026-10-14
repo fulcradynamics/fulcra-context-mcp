@@ -28,6 +28,7 @@ async def test_native_defaults_and_verified_partial_update(storage):
     api, files = storage
     async with Client(mcp) as client:
         initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
+        assert initial['values']['status_metadata'] is True
         assert initial['values']['autonomous_replies'] is False
         assert initial['values']['unanswered_days'] == 2
         assert initial['values']['attention_waiting'] is True
@@ -107,6 +108,36 @@ def test_malformed_and_unverified_save_not_success(storage):
     with pytest.raises(ValueError): policy.update(api, {'notifications': 'none'})
 
 
+@pytest.mark.parametrize('legacy_status', [False, True, None])
+def test_legacy_status_reset_is_read_only_and_later_choices_survive(storage, legacy_status):
+    from fulcra_mcp import contact_preferences as policy
+    api, files = storage
+    preferences = {'notifications': 'none'}
+    if legacy_status is not None:
+        preferences['status_metadata'] = legacy_status
+    document = dict(version=1, account_id='me', preferences=preferences, future='keep')
+    files['settings.md'] = ('```json\n' + json.dumps(document) + '\n```').encode()
+    assert policy.read(api)['status_metadata'] is True
+    api.upload_file.assert_not_called()
+    policy.update(api, {'special_instructions': 'Brief.'})
+    assert policy.load(api)['version'] == 2
+    assert policy.load(api)['future'] == 'keep'
+    assert policy.read(api)['status_metadata'] is True
+    policy.update(api, {'status_metadata': False})
+    assert policy.read(api)['status_metadata'] is False
+    policy.update(api, {'special_instructions': 'Even briefer.'})
+    assert policy.read(api)['status_metadata'] is False
+    assert policy.read(api)['notifications'] == 'none'
+
+
+def test_explicit_opt_out_during_first_legacy_update_wins(storage):
+    from fulcra_mcp import contact_preferences as policy
+    api, files = storage
+    files['settings.md'] = b'```json\n{"version":1,"account_id":"me","preferences":{"status_metadata":false}}\n```'
+    policy.update(api, {'status_metadata': False})
+    assert policy.read(api)['status_metadata'] is False
+
+
 def test_owned_override_marker_precedence():
     from fulcra_mcp import contact_preferences as policy
     original = 'connect-agents-with-anyone channel\n[mesh_identifier: "Friend"]'
@@ -120,6 +151,34 @@ def test_owned_override_marker_precedence():
     assert policy.effective(enabled, {'autonomous_replies': False})['autonomous_replies'] is False
     assert policy.parse_overrides(policy.write_overrides(description, {})) == {}
     with pytest.raises(ValueError): policy.parse_overrides(description + '\n[contact_preferences: {}]')
+
+
+def test_legacy_contact_status_reset_preserves_metadata_and_new_opt_out():
+    from fulcra_mcp import contact_preferences as policy
+    original = ('connect-agents-with-anyone channel\n[contact_status: {"summary":"Keep"}]\n'
+                '[contact_preferences: {"status_metadata":false,"autonomous_replies":false,"unanswered_days":4}]\n'
+                '[mesh_identifier: "Friend"]')
+    overrides = policy.parse_overrides(original)
+    assert policy.effective(policy.DEFAULTS, overrides)['status_metadata'] is True
+    assert policy.effective(policy.DEFAULTS, overrides)['autonomous_replies'] is False
+    assert overrides['unanswered_days'] == 4
+    assert policy.effective({**policy.DEFAULTS, 'status_metadata': False}, overrides)['status_metadata'] is False
+    saved = policy.write_overrides(original, {**overrides, 'status_metadata': False})
+    assert '[contact_preferences_version: 2]' in saved
+    assert '[contact_status: {"summary":"Keep"}]' in saved
+    assert saved.endswith('[mesh_identifier: "Friend"]')
+    assert policy.parse_overrides(saved)['status_metadata'] is False
+    again = policy.write_overrides(saved, policy.parse_overrides(saved))
+    assert again == saved
+    assert policy.parse_overrides(policy.write_overrides(saved, {})) == {}
+
+
+@pytest.mark.parametrize('version', ['1', '3', 'bad', '2]\n[contact_preferences_version: 2'])
+def test_invalid_contact_preference_version_fails_closed(version):
+    from fulcra_mcp import contact_preferences as policy
+    with pytest.raises(ValueError):
+        policy.parse_overrides('[contact_preferences: {"status_metadata":false}]\n'
+                               f'[contact_preferences_version: {version}]')
 
 
 def test_real_sdk_private_upload_and_independent_download(monkeypatch):

@@ -17,6 +17,7 @@ test('linked handoff retains exact request and context with explicit navigation 
   const text = sessionHandoff(request, context, url);
   assert.ok(text.includes(request)); assert.ok(text.includes(context)); assert.ok(text.includes(url));
   assert.match(text, /Open the original setup session/);
+  assert.match(text, /rather than starting a new thread/);
   assert.match(text, /not authority/);
   assert.equal(sessionHandoff(request, context), request);
   assert.match(sessionHandoff('', context, url), /Let’s talk about this Agent Contact/);

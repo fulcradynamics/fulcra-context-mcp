@@ -8,7 +8,7 @@ import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { icon, History, ArrowLeft } from './icons.js';
+import { icon, History, ArrowLeft, Settings } from './icons.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
 
@@ -22,6 +22,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
+  const retry = doc.querySelector('#message-retry');
+  const retrySpinner = doc.querySelector('#message-retry-spinner');
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
@@ -57,6 +59,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // technical/debug sections and multiparty controls (PLAT-719).
   const advanced = doc.querySelector('#advanced-panel');
   const advancedToggle = doc.querySelector('#advanced-toggle');
+  advancedToggle.prepend(icon(Settings, 'btn-icon'));
   const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
   advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
   const onAdvanced = () => {
@@ -99,7 +102,12 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   let refreshState = { running: false, paused: false, nextAt: null };
   function renderStatus() {
     clearTimeout(statusTimer);
-    if (!selected) return;
+    if (!selected) { retry.hidden = true; retrySpinner.hidden = true; return; }
+    // Offer a manual retry while a load has failed and nothing is in flight; show
+    // a spinner instead while a retry is actually running.
+    const failedIdle = loadFailed && !refreshState.paused;
+    retry.hidden = !(failedIdle && !refreshState.running);
+    retrySpinner.hidden = !(failedIdle && refreshState.running);
     let text = '';
     if (unavailable) text = 'This Agent Contact is no longer available.';
     else if (loadFailed) {
@@ -178,7 +186,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const dateText = timestamp && Number.isFinite(+timestamp)
-        ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
+        ? timestamp.toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
       const bodyText = messageText(record);
       if (body.textContent !== bodyText) body.textContent = bodyText;
@@ -235,7 +243,10 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (!Number.isFinite(bt)) return -1;
       return order.value === 'latest' ? bt - at : at - bt;
     }) };
-    messageList.update(result.messages, () => {
+    const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
+      || (record.body != null && (typeof record.body !== 'string'
+        || (record.body.trim() && record.body.trim().toLowerCase() !== 'ack'))));
+    messageList.update(visible, () => {
       setTitle(selected);
       setThreadTopic(result.messages);
       renderStatus();
@@ -285,7 +296,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       // Initial window: one week before the earlier of the latest incoming and latest outgoing messages.
       if (!start && !requestedStart && thread) {
         let latest;
-        try { latest = await readLatest(app, thread.sources); } catch { throw new Error('Could not find the latest messages.'); }
+        // Anchoring history must remain available even when a preview cannot be resolved.
+        try { latest = await readLatest(app, thread.sources, Date.now(), { resolveContent: false }); } catch { throw new Error('Could not find the latest messages.'); }
         if (!current()) return true;
         const edges = ['Incoming', 'Outgoing'].map(d => latest.find(m => m.direction === d)).filter(Boolean)
           .map(m => Date.parse(m.record.recorded_at ?? m.record.start_time));
@@ -351,7 +363,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
   };
+  const onRetry = () => requestRefresh();
   more.addEventListener('click', onMore);
+  retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
   back.addEventListener('click', onBack);
   function select(thread, button, { acknowledge = false } = {}) {
@@ -384,6 +398,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
+    retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
