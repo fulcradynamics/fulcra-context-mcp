@@ -26,6 +26,7 @@
   --teal-tint-hover: rgba(86, 214, 183, 0.18);
   --violet-tint: rgba(123, 97, 255, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
+  --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   /* Bottom breathing room (symmetric with the top) plus whatever the host
      reports it needs reserved for its input bar. max() avoids double-counting
      when the device safe area is exposed via both env() and the host context. */
@@ -106,19 +107,18 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
    are divided by hairlines and lift on hover (Portal data-types row cards). */
-#connections, #messages, #pending-connections {
+#connections, #pending-connections {
   border: 1px solid var(--divider);
   border-radius: 12px;
   background: var(--raised);
   overflow: hidden;
 }
-#messages:empty { border: 0; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
-#connections > li, #messages > li, #pending-connections > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
-#connections > li:first-child, #messages > li:first-child, #pending-connections > li:first-child { border-top: 0; }
+#connections > li, #pending-connections > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
+#connections > li:first-child, #pending-connections > li:first-child { border-top: 0; }
 #pending-connections .pending-label { font-weight: 500; }
 #pending-connections p { margin: 2px 0 0; }
-#connections > li:hover, #messages > li:hover { background: var(--row-hover); }
+#connections > li:hover { background: var(--row-hover); }
 
 /* Leading icon tile shared by thread and message rows. */
 .row-tile {
@@ -157,55 +157,54 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-status.attention, #connections .contact-status.attention { color: #c79448; }
 .thread-preview { margin: 4px 0 0; padding-left: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Message rows: direction tile in column 1, stacked header / date / body in
-   column 2. A grid (not a wrapper div) keeps each text node a direct <li> child. */
-.message-row { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
-/* The tile spans (and centers over) the title and date rows so it sits beside
-   both, rather than inflating the title row and pushing the date down. */
-.message-row .row-tile { grid-column: 1; grid-row: 1 / 3; align-self: center; }
-.message-row .message-header { grid-column: 2; grid-row: 1; }
-.message-row .message-date { grid-column: 2; grid-row: 2; }
-.message-row .message-recipients { grid-column: 2; grid-row: 3; }
-.message-row .message-source { grid-column: 2; grid-row: 4; }
-.message-row .message-body { grid-column: 2; grid-row: 5; }
-.message-recipients, .message-source, .addressing-help { margin: 4px 0; color: var(--muted); font-size: 12px; }
-.message-row.addressed-to-viewer { border-left: 3px solid var(--teal); }
-.message-row.addressed-to-viewer .message-recipients { color: var(--teal-soft); }
-.message-row.addressed-to-others .message-title, .message-row.addressed-to-others pre { color: #b0b0b5; font-weight: 400; }
+/* Conversation: a familiar chat layout. Bubbles align by direction — incoming
+   left (gray), outgoing right (green) — with the date beneath each bubble. */
+#messages { display: flex; flex-direction: column; padding: 4px 0; }
+.message-row { display: flex; align-items: flex-end; gap: 8px; margin: 5px 0; }
+.message-row.incoming { justify-content: flex-start; }
+.message-row.outgoing { justify-content: flex-end; }
+/* Small sender avatar beside incoming bubbles; hidden for your own messages. */
+.bubble-avatar { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--teal); color: #06281f; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
+.message-row.outgoing .bubble-avatar { display: none; }
+.msg-content { display: flex; flex-direction: column; min-width: 0; max-width: 78%; }
+.message-row.incoming .msg-content { align-items: flex-start; }
+.message-row.outgoing .msg-content { align-items: flex-end; }
+.bubble { max-width: 100%; padding: 9px 13px; border-radius: 18px; line-height: 1.4; }
+.message-row.incoming .bubble { background: var(--raised); color: #fff; border-bottom-left-radius: 6px; }
+.message-row.outgoing .bubble { background: var(--outgoing); color: #fff; border-bottom-right-radius: 6px; }
+.bubble-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 3px 6px 0; font-size: 11px; color: var(--muted); }
+.message-row.outgoing .message-meta { justify-content: flex-end; }
+#messages .message-date { font-size: 11px; line-height: 1.3; }
+
+/* Contact header (avatar + name) and the framed conversation card. */
+.contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
+.contact-headings { min-width: 0; }
+.contact-headings h2 { margin: 0; }
+.contact-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--teal); color: #06281f; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; }
+
+/* Reply composer reads as a message-to-contact box (purple Send + hint). */
+.composer-primary.send-to-peer:not(:disabled) { background: var(--outgoing); color: #fff; }
+.composer-primary.send-to-peer:hover:not(:disabled) { background: #6b4fe0; }
+.composer-hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+/* Multiparty-only detail lines, kept subtle. */
+.message-recipients, .message-source, .addressing-help { color: var(--muted); font-size: 11px; }
+.message-row.addressed-to-viewer .bubble { box-shadow: 0 0 0 2px var(--teal); }
+.message-row.addressed-to-others .bubble { opacity: .6; }
 .incoming-sources label { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; }
 .incoming-sources input { width: 18px; min-height: 18px; flex: none; }
 #viewing-agent { max-width: 280px; }
-.message-header { margin: 0; font-weight: 700; font-size: 16px; line-height: 1.2; }
-.message-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.message-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-.message-title { min-width: 0; overflow-wrap: anywhere; }
-.message-chevron { flex: none; margin-left: auto; color: var(--muted); transition: transform .15s ease; }
-.message-row.collapsed .message-chevron { transform: rotate(-90deg); }
-#messages .message-date { margin: 1px 0 0; line-height: 1.35; }
-/* Collapsible body: animate the grid row between content height (1fr) and 0fr
-   while the clipped <pre> hides. Spacing/divider collapse together. */
-.message-body { margin-top: 10px; display: grid; grid-template-rows: 1fr; transition: grid-template-rows .2s ease, margin-top .2s ease; }
-.message-body > pre { overflow: hidden; min-height: 0; margin: 0; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); transition: opacity .2s ease; }
-.message-row.collapsed .message-body { grid-template-rows: 0fr; margin-top: 0; }
-/* Fade the body (and its divider) rather than removing it, so nothing in the
-   header shifts when collapsing. */
-.message-row.collapsed .message-body > pre { opacity: 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
 
-/* Primary action and the message-order control share one row; the order control
-   is right-aligned with its caption beneath the select. */
+/* Reply composer action buttons (Send + handoff) on one wrapping row. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
 /* Unread: an incoming message nobody on your side has acknowledged or answered. */
 .unread-badge { color: var(--teal); font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-.message-row.unread .row-tile { box-shadow: inset 0 0 0 1px var(--teal); }
-.message-row .mark-read { grid-column: 2; justify-self: start; min-height: 32px; margin-top: 8px; padding: 4px 10px; font-size: 12px; }
+.message-row.unread .bubble { box-shadow: 0 0 0 1px var(--teal); }
+.message-row .mark-read { min-height: 28px; padding: 3px 9px; font-size: 11px; }
 #mark-all-read { min-height: 32px; margin: 0 0 8px; padding: 4px 10px; font-size: 12px; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
-.composer-actions .order-field { margin-left: auto; }
-.order-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
-.order-field select { width: 100%; }
-.order-caption { font-size: 12px; color: var(--muted); }
 
 #thread-composer:not(:empty) { margin-top: 12px; padding-top: 24px; border-top: 1px solid var(--divider); }
 #thread-composer label { color: #fff; font-size: 16px; }
@@ -225,8 +224,6 @@ details[open] > summary { color: var(--violet); }
 /* Prominent initial-load state: a large centered spinner with a label. */
 #message-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
 #message-loading .refresh-spinner { width: 40px; height: 40px; border-width: 3px; }
-#new-activity { position: fixed; bottom: calc(var(--footer-clearance) + 12px); right: 24px; z-index: 2; background: var(--surface); border: 1px solid var(--divider); }
-#new-activity:hover:not(:disabled) { background: var(--raised); }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 
@@ -236,8 +233,6 @@ html { overflow-anchor: none; }
 @media (prefers-reduced-motion: reduce) {
   .refresh-spinner { animation: none; }
   .animate-rise { animation: none; opacity: 1; }
-  .message-chevron { transition: none; }
-  .message-body, .message-body > pre { transition: none; }
 }
 
 /* Inline launch has no floating host composer to clear until a panel opens. */

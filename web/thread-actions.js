@@ -13,8 +13,10 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const label = doc.createElement('label'), caption = doc.createElement('span');
   const input = doc.createElement('textarea'); input.rows = 2; input.maxLength = 4000;
   input.value = draft.value; label.append(caption, input);
-  const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary';
+  const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary send-to-peer';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
+  // Reinforces that this input replies to the contact (not ChatGPT's composer).
+  const hint = doc.createElement('p'); hint.className = 'composer-hint';
   const handoff = doc.createElement('button'); handoff.type = 'button';
   handoff.textContent = 'talk with my agent about this Agent Contact';
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
@@ -44,7 +46,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(send, handoff);
   if (orderField) actions.append(orderField);
-  container.append(label, actions, address);
+  container.append(label, actions, hint, address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct connection Send remains available.';
   let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
@@ -70,6 +72,11 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const update = () => {
     const current = view();
     renderThreadIdentity(caption, current.thread, 'Talk to ');
+    const contactName = current.thread?.identifier || current.thread?.accountName || 'your contact';
+    const placeholder = `Message ${contactName}…`;
+    if (input.placeholder !== placeholder) input.placeholder = placeholder;
+    const hintText = `Goes straight to ${contactName} — not your ChatGPT chat.`;
+    if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
