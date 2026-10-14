@@ -147,6 +147,28 @@ def get_fulcra_object() -> FulcraAPI:
         )
         raise ToolError(NOT_CONNECTED)
     grant_id, creds = resolved
+    return fulcra_for_grant(grant_id, creds, mcp_access_token.client_id)
+
+
+def current_grant_id() -> str | None:
+    """The grant (Fulcra login) behind the current request: ``"stdio"`` for a
+    local server, ``None`` when the request carries no usable MCP token."""
+    if settings.fulcra_environment == "stdio":
+        return "stdio"
+    token = get_access_token()
+    if not token:
+        return None
+    resolved = oauth_provider.credentials_for_token(token.token)
+    return resolved[0] if resolved else None
+
+
+def fulcra_for_grant(
+    grant_id: str, creds: FulcraCredentials, client_id: str | None = None
+) -> FulcraAPI:
+    """A `FulcraAPI` acting for one grant, its Fulcra token refreshed up front.
+
+    Used for tool calls, and for requests that carry no MCP token but name a
+    grant they were issued for (file download links)."""
 
     def on_refresh(new_creds: FulcraCredentials):
         # ``creds`` is the one shared object for this grant; update it in place
@@ -159,7 +181,7 @@ def get_fulcra_object() -> FulcraAPI:
         oauth_provider.save_grant(grant_id)
         logger.info(
             "fulcra_token_refreshed",
-            client_id=mcp_access_token.client_id,
+            client_id=client_id,
             grant_id=grant_id,
             new_expires_at=str(new_creds.access_token_expiration),
         )
@@ -188,9 +210,7 @@ def get_fulcra_object() -> FulcraAPI:
                 refreshed = False
             if not refreshed:
                 logger.warning(
-                    "fulcra_refresh_failed",
-                    client_id=mcp_access_token.client_id,
-                    grant_id=grant_id,
+                    "fulcra_refresh_failed", client_id=client_id, grant_id=grant_id
                 )
                 raise ToolError(SESSION_EXPIRED)
 

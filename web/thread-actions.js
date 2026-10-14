@@ -1,6 +1,6 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
 import { renderThreadIdentity } from './identity.js';
-import { clearPostedDraft, matchesPost, messageId, postRecord, recipientAgent } from './mesh-send.js';
+import { clearPostedDraft, matchesPost, messageId, postRecord, recipientAgent } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
@@ -16,7 +16,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
   const handoff = doc.createElement('button'); handoff.type = 'button';
-  handoff.textContent = 'talk with my agent about this thread';
+  handoff.textContent = 'talk with my agent about this Agent Contact';
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
   const transfer = doc.createElement('details'); transfer.hidden = true;
@@ -46,7 +46,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   if (orderField) actions.append(orderField);
   container.append(label, actions, address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
-  if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct mesh Send remains available.';
+  if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct connection Send remains available.';
   let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
   draft.posts ??= []; draft.agents ??= {}; draft.acks ??= new Set();
   // Acknowledge each target once; a failure returns it to unread for another try.
@@ -96,7 +96,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (session && !transfer.isConnected) address.before(transferHelp, transfer);
     if (!session) { transferHelp.remove(); transfer.remove(); }
     original.disabled = lifecycle.pending || !isCurrent();
-    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this thread';
+    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this Agent Contact';
     const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';
@@ -207,7 +207,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       attempted = true; report('Awaiting host confirmation…');
       const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, options);
       if (result.isError) throw new Error('Host rejected message');
-      report('Request accepted by the host. Check the conversation for the response; no mesh reply was posted by this handoff.');
+      report('Request accepted by the host. Check the conversation for the response; no connection reply was posted by this handoff.');
       if (draft.version === version) { draft.value = ''; draft.version++; }
     } catch {
       restore();

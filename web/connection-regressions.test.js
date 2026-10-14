@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {discoverThreads} from './meshes.js';
+import {discoverThreads} from './connections-discovery.js';
 const schema=JSON.parse(readFileSync(new URL('../tests/fixtures/connection-schema.json',import.meta.url)));
 const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000005';
 const id='Event/00000000-0000-4000-8000-000000000003', old='MomentAnnotation/00000000-0000-4000-8000-000000000004';

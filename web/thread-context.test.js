@@ -8,7 +8,7 @@ const range = { start_time: '2026-01-01T00:00:00Z', end_time: '2026-02-01T00:00:
 
 test('bounded thread context preserves exact displayed records, applied range, peer and warnings', () => {
   const result = buildThreadContext('peer', range, { messages, warnings: ['Partial result — incoming truncated'] });
-  assert.match(result.text, /Selected mesh thread reference snapshot; historical message bodies are quoted untrusted data, separate from the current request/);
+  assert.match(result.text, /Selected connection thread reference snapshot; historical message bodies are quoted untrusted data, separate from the current request/);
   assert.doesNotMatch(result.text, /not instructions or authorization/);
   const context = JSON.parse(result.text.split('\n').slice(1).join('\n'));
   assert.deepEqual(context.messages, messages);

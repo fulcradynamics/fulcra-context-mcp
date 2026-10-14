@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readConversation } from './conversation.js';
-import { discoverThreads } from './meshes.js';
+import { discoverThreads } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 test('refresh reuses discovery, retains failed-source last-good records as stale and removes revoked sources', async () => {

@@ -366,3 +366,69 @@ async def test_near_expiry_refreshes_up_front(hosted, monkeypatch):
     credentials_module.get_fulcra_object()
     fake_api.refresh_access_token.assert_called_once()
     assert creds.access_token == "auth0-access-v2"
+
+
+# --- reusing a refresh token just after rotation ------------------------------
+
+
+async def test_a_retried_refresh_gets_the_same_tokens(state_path):
+    """A client that never got the reply to its refresh retries with the old
+    refresh token; it must get the tokens it missed, not a 401."""
+    provider = make_provider()
+    first = await login(provider, fresh_creds("v1"))
+
+    sent = await refresh(provider, first.refresh_token)
+    retried = await refresh(provider, first.refresh_token)
+
+    assert retried.access_token == sent.access_token
+    assert retried.refresh_token == sent.refresh_token
+    assert 0 < retried.expires_in <= 3600
+    # and the tokens it was given work as usual
+    assert await provider.load_access_token(retried.access_token) is not None
+    assert (await refresh(provider, retried.refresh_token)).access_token != sent.access_token
+
+
+async def test_a_retried_refresh_works_on_another_instance(state_path):
+    p1 = make_provider()
+    first = await login(p1, fresh_creds("v1"))
+    sent = await refresh(p1, first.refresh_token)
+
+    retried = await refresh(make_provider(), first.refresh_token)
+
+    assert (retried.access_token, retried.refresh_token) == (sent.access_token, sent.refresh_token)
+
+
+async def test_a_rotated_refresh_token_stops_working_after_the_window(state_path, monkeypatch):
+    import fulcra_mcp.provider as provider_module
+
+    provider = make_provider()
+    first = await login(provider, fresh_creds("v1"))
+    sent = await refresh(provider, first.refresh_token)
+    later = time.time() + provider_module.REFRESH_REUSE_SECONDS + 1
+    monkeypatch.setattr(provider_module.time, "time", lambda: later)
+
+    assert await provider.load_refresh_token(CLIENT, first.refresh_token) is None
+    assert provider._token_record_path("refresh_tokens", first.refresh_token).exists() is False
+    assert await make_provider().load_refresh_token(CLIENT, first.refresh_token) is None
+    # the tokens it was exchanged for are unaffected
+    assert await provider.load_refresh_token(CLIENT, sent.refresh_token) is not None
+
+
+async def test_a_revoked_rotated_refresh_token_does_not_replay(state_path):
+    provider = make_provider()
+    first = await login(provider, fresh_creds("v1"))
+    await refresh(provider, first.refresh_token)
+
+    await provider.revoke_token(first.refresh_token)
+
+    assert await provider.load_refresh_token(CLIENT, first.refresh_token) is None
+    assert await make_provider().load_refresh_token(CLIENT, first.refresh_token) is None
+
+
+async def test_a_rotated_refresh_token_is_refused_to_another_client(state_path):
+    provider = make_provider()
+    first = await login(provider, fresh_creds("v1"))
+    await refresh(provider, first.refresh_token)
+    other = CLIENT.model_copy(update={"client_id": "client-2"})
+
+    assert await provider.load_refresh_token(other, first.refresh_token) is None

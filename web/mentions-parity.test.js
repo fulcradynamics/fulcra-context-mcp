@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { discoverThreads } from './meshes.js';
+import { discoverThreads } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
-const cases = JSON.parse(readFileSync(new URL('../tests/fixtures/mesh-discovery.json', import.meta.url)));
+const cases = JSON.parse(readFileSync(new URL('../tests/fixtures/connection-discovery.json', import.meta.url)));
 for (const fixture of cases) test(`mention discovery parity: ${fixture.name}`, async () => {
   const narrow = { data_types: ['Event/a'], with_user_ids: ['peer'], share_all_data: false };
   const outgoing = [...(fixture.outgoing ?? [narrow])];

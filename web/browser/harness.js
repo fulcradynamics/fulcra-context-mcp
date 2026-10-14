@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-const bundle = await readFile(new URL('../../fulcra_mcp/ui/mesh.html', import.meta.url), 'utf8');
+const bundle = await readFile(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url), 'utf8');
 const schema = JSON.parse(await readFile(new URL('../../tests/fixtures/connection-schema.json', import.meta.url), 'utf8'));
 export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
@@ -26,7 +26,7 @@ export async function open(page, width=900) {
    window.calls.push(r.params); const {name,arguments:a}=r.params;
    const discovery=['get_data_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
-   if(name==='mesh_send'){reply(r.id,{structuredContent:{status:'rejected',mid:a.mid,outbox:a.outbox,reason:'Synthetic audience rejection'}});return;}
+   if(name==='agent_connection_send'){reply(r.id,{structuredContent:{status:'rejected',mid:a.mid,outbox:a.outbox,reason:'Synthetic audience rejection'}});return;}
    let text;
    if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
     ...[out,...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n[mesh_identifier: "Weekend"]',...schema})),

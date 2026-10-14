@@ -2,11 +2,11 @@
 // or from account/message content. SDK 1.7.5 tool-result carries structuredContent;
 // hostContext.toolInfo is optional and is not an initial tool result.
 export function receiveEntrypoint(app, doc) {
-  const marker = doc.querySelector('meta[name="mesh-presentation"]')?.content;
+  const marker = doc.querySelector('meta[name="connection-presentation"]')?.content;
   const presentation = ['thread', 'threads'].includes(marker) ? marker : 'global';
   // Server-owned direct-resource variant, not a host capability or timeout guess.
   const directResource = presentation === 'threads'
-    && doc.querySelector('meta[name="mesh-startup"]')?.content === 'resource';
+    && doc.querySelector('meta[name="connection-startup"]')?.content === 'resource';
   let deliver, first, received = false;
   app.ontoolresult = result => {
     if (received) return;

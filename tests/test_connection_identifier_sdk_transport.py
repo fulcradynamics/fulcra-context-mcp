@@ -12,7 +12,7 @@ from fulcra_api.credentials import FulcraCredentials
 import pytest
 
 from fulcra_mcp import tools
-from fulcra_mcp.mesh_identifier import write_mesh_identifier
+from fulcra_mcp.contact_identifier import write_contact_identifier
 
 TYPE_ID = 'MomentAnnotation/12345678-1234-4234-8234-123456789abc'
 PATH = '/user/v1alpha1/annotation/' + TYPE_ID.split('/')[1]
@@ -45,7 +45,7 @@ def backend(monkeypatch):
         assert path == PATH
         if method == 'PUT':
             expected = {key: original[key] for key in FIELDS}
-            expected['description'] = write_mesh_identifier(original['description'], 'Travel')
+            expected['description'] = write_contact_identifier(original['description'], 'Travel')
             assert body == expected
             if state['persist']:
                 state['row'].update(deepcopy(body))
@@ -69,14 +69,14 @@ def backend(monkeypatch):
 
 
 async def test_real_sdk_preservation_redirect_independent_readback_and_noop(backend):
-    result = json.loads(await tools.set_mesh_identifier(TYPE_ID, 'Travel'))
+    result = json.loads(await tools.set_contact_identifier(TYPE_ID, 'Travel'))
     assert result == {'data_type': TYPE_ID, 'fulcra_userid': 'own', 'identifier': 'Travel', 'changed': True, 'verified': True}
     assert [(m, p) for m, p, _ in backend['calls']] == [
         ('GET', '/data/v1/catalog'), ('GET', PATH), ('PUT', PATH),
         ('GET', PATH), ('GET', PATH), ('GET', '/data/v1/catalog')]
-    assert backend['row'] == {**backend['original'], 'description': write_mesh_identifier(backend['original']['description'], 'Travel')}
+    assert backend['row'] == {**backend['original'], 'description': write_contact_identifier(backend['original']['description'], 'Travel')}
     backend['calls'].clear()
-    assert json.loads(await tools.set_mesh_identifier(TYPE_ID, 'Travel'))['changed'] is False
+    assert json.loads(await tools.set_contact_identifier(TYPE_ID, 'Travel'))['changed'] is False
     assert [(m, p) for m, p, _ in backend['calls']] == [
         ('GET', '/data/v1/catalog'), ('GET', PATH), ('GET', PATH), ('GET', '/data/v1/catalog')]
 
@@ -84,7 +84,7 @@ async def test_real_sdk_preservation_redirect_independent_readback_and_noop(back
 @pytest.mark.parametrize('field', ['id', 'fulcra_userid', *FIELDS])
 async def test_missing_metadata_no_write(backend, field):
     del backend['row'][field]
-    result = await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    result = await tools.set_contact_identifier(TYPE_ID, 'Travel')
     assert 'verified' not in result
     assert all(m == 'GET' for m, _, _ in backend['calls'])
 
@@ -97,7 +97,7 @@ async def test_missing_metadata_no_write(backend, field):
 ])
 async def test_invalid_raw_metadata_no_write(backend, change):
     backend['row'].update(change)
-    result = await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    result = await tools.set_contact_identifier(TYPE_ID, 'Travel')
     assert 'verified' not in result
     assert all(m == 'GET' for m, _, _ in backend['calls'])
 
@@ -109,33 +109,33 @@ async def test_invalid_raw_metadata_no_write(backend, change):
 ])
 async def test_readback_mismatch_never_success(backend, change):
     backend['mutation'] = change
-    assert 'Could not verify' in await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    assert 'Could not verify' in await tools.set_contact_identifier(TYPE_ID, 'Travel')
 
 
 async def test_stale_readback(backend):
     backend['persist'] = False
-    assert 'Could not verify' in await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    assert 'Could not verify' in await tools.set_contact_identifier(TYPE_ID, 'Travel')
 
 
 @pytest.mark.parametrize('value', [TYPE_ID.upper(), 'MomentAnnotation/' + TYPE_ID.split('/')[1].upper(), TYPE_ID + '/..', TYPE_ID + '?x=1', TYPE_ID + '%2f', TYPE_ID + '\n'])
 async def test_noncanonical_id_no_requests(backend, value):
-    assert 'exact Event/<uuid> or MomentAnnotation/<uuid>' in await tools.set_mesh_identifier(value, 'Travel')
+    assert 'exact Event/<uuid> or MomentAnnotation/<uuid>' in await tools.set_contact_identifier(value, 'Travel')
     assert backend['calls'] == []
 
 
 async def test_redirect_success_cannot_replace_independent_verification(backend):
     backend['independent_mutation'] = {'spec': None}
-    assert 'Could not verify' in await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    assert 'Could not verify' in await tools.set_contact_identifier(TYPE_ID, 'Travel')
 
 
 @pytest.mark.parametrize('field', ['id', 'fulcra_userid', *FIELDS])
 async def test_missing_readback_metadata(backend, field):
     backend['missing_readback'] = field
-    assert 'Could not verify' in await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    assert 'Could not verify' in await tools.set_contact_identifier(TYPE_ID, 'Travel')
 
 
 @pytest.mark.parametrize('response', [b'null', b'[]', b'not json', b'{}'])
 async def test_malformed_resource_no_write(backend, response):
     backend['raw_response'] = response
-    assert 'verified' not in await tools.set_mesh_identifier(TYPE_ID, 'Travel')
+    assert 'verified' not in await tools.set_contact_identifier(TYPE_ID, 'Travel')
     assert all(m == 'GET' for m, _, _ in backend['calls'])

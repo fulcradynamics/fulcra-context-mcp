@@ -1,4 +1,4 @@
-"""The server's identity (PLAT-617): one name, title and version across
+"""The server's identity: one name, title and version across
 server.json, the Server Card at /mcp/server-card, and the serverInfo clients see."""
 
 import json

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverThreads } from './meshes.js';
+import { discoverThreads } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 const entry = (id, owner, description) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}), description });

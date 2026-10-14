@@ -5,24 +5,24 @@ from fastmcp import Client
 from fulcra_mcp.main import mcp
 
 
-async def test_direct_meshes_resource_contract():
+async def test_direct_contacts_resource_contract():
     async with Client(mcp) as client:
-        direct = (await client.read_resource("ui://fulcra/mesh/threads/v40.html?startup=resource"))[0]
-        normal = (await client.read_resource("ui://fulcra/mesh/threads/v40.html"))[0]
+        direct = (await client.read_resource("ui://fulcra/contacts/threads/v41.html?startup=resource"))[0]
+        normal = (await client.read_resource("ui://fulcra/contacts/threads/v41.html"))[0]
         assert direct.mimeType == "text/html;profile=mcp-app"
         assert direct.meta["openai/ui"] == {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}
-        assert direct.text == normal.text.replace('</head>', '<meta name="mesh-startup" content="resource"></head>', 1)
-        assert '<meta name="mesh-startup"' not in normal.text
+        assert direct.text == normal.text.replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
+        assert '<meta name="connection-startup"' not in normal.text
 
 
 async def test_inline_threads_opener():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert "mesh_threads_open" in tools
-        tool = tools["mesh_threads_open"]
-        assert tool.title == "Mesh threads"
+        assert "agent_contacts_open" in tools
+        tool = tools["agent_contacts_open"]
+        assert tool.title == "Agents I Know"
         assert tool.meta["ui"] == {
-            "resourceUri": "ui://fulcra/mesh/threads/v40.html",
+            "resourceUri": "ui://fulcra/contacts/threads/v41.html",
             "visibility": ["model", "app"],
         }
         assert not tool.meta.get("openai/ui", {}).get("entrypoints")
@@ -31,7 +31,7 @@ async def test_inline_threads_opener():
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.openWorldHint is False
-        result = await client.call_tool("mesh_threads_open", {})
+        result = await client.call_tool("agent_contacts_open", {})
         assert result.data == {"presentation": "threads"}
         resource = (await client.read_resource(tool.meta["ui"]["resourceUri"]))[0]
         assert resource.mimeType == "text/html;profile=mcp-app"
@@ -39,61 +39,61 @@ async def test_inline_threads_opener():
             "preferredDisplayMode": "inline",
             "availableDisplayModes": ["inline", "fullscreen"],
         }
-        global_resource = (await client.read_resource(tools["aicq_open"].meta["ui"]["resourceUri"]))[0]
+        global_resource = (await client.read_resource(tools["fulcra_open"].meta["ui"]["resourceUri"]))[0]
         assert resource.text == global_resource.text.replace(
-            '<meta name="mesh-presentation" content="global">',
-            '<meta name="mesh-presentation" content="threads">', 1)
+            '<meta name="connection-presentation" content="global">',
+            '<meta name="connection-presentation" content="threads">', 1)
 
 
 async def test_thread_entrypoint():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert "mesh_conversation_open" in tools
-        tool = tools["mesh_conversation_open"]
-        assert tool.title == "Mesh conversation"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/thread/v40.html"
+        assert "agent_contact_open" in tools
+        tool = tools["agent_contact_open"]
+        assert tool.title == "Agent Contacts"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v41.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert not tool.inputSchema.get("required")
         for args in [{}, {"peer_fulcra_userid": "exact-peer"}, {"peer_fulcra_userid": " unknown "}]:
-            result = await client.call_tool("mesh_conversation_open", args)
+            result = await client.call_tool("agent_contact_open", args)
             assert result.data == {"presentation": "thread", "peer_fulcra_userid": args.get("peer_fulcra_userid")}
         import pytest
         for invalid in ["", "   ", 123, ["peer"]]:
             with pytest.raises(Exception):
-                await client.call_tool("mesh_conversation_open", {"peer_fulcra_userid": invalid})
+                await client.call_tool("agent_contact_open", {"peer_fulcra_userid": invalid})
         resource = await client.read_resource(tool.meta["ui"]["resourceUri"])
-        assert '<meta name="mesh-presentation" content="thread">' in resource[0].text
+        assert '<meta name="connection-presentation" content="thread">' in resource[0].text
 
 
-async def test_mesh_app():
+async def test_contacts_app():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert "aicq_open" in tools
-        tool = tools["aicq_open"]
+        assert "fulcra_open" in tools
+        tool = tools["fulcra_open"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
-        assert tool.title == "Fulcra Mesh"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/mesh/v40.html"
+        assert tool.title == "Agents I Know"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v41.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.openWorldHint is False
-        result = await client.call_tool("aicq_open", {})
+        result = await client.call_tool("fulcra_open", {})
         assert not result.is_error
-        assert result.data == {"message": "Fulcra Mesh is ready."}
-        resources = await client.read_resource("ui://fulcra/mesh/v40.html")
+        assert result.data == {"message": "Agents I Know is ready."}
+        resources = await client.read_resource("ui://fulcra/contacts/v41.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
-        assert "<h1>Fulcra Mesh</h1>" in resources[0].text
+        assert "<h1>Agents I Know</h1>" in resources[0].text
         assert "hello world" not in resources[0].text.lower()
         assert "data:font/woff2;base64," in resources[0].text
         assert "SIL OPEN FONT LICENSE" in resources[0].text
         assert "Invite someone</button>" in resources[0].text
         assert "connect-agents-with-anyone" in resources[0].text
-        assert 'id="mesh-status"' in resources[0].text
-        assert 'id="mesh-detail"' in resources[0].text
-        assert 'Refresh threads</button>' in resources[0].text
+        assert 'id="connection-status"' in resources[0].text
+        assert 'id="connection-detail"' in resources[0].text
+        assert 'Refresh contacts</button>' in resources[0].text
         assert 'New activity</button>' in resources[0].text
         assert 'Latest first</option>' in resources[0].text
         assert 'Oldest first</option>' in resources[0].text
@@ -107,12 +107,12 @@ async def test_mesh_app():
         assert 'id="message-start"' not in resources[0].text
         assert resources[0].text.index('id="thread-composer"') < resources[0].text.index('id="messages"') < resources[0].text.index('Load more history</button>')
         assert 'get_records' in resources[0].text
-        assert '<meta name="mesh-presentation" content="global">' in resources[0].text
-        thread_resource = await client.read_resource("ui://fulcra/mesh/thread/v40.html")
+        assert '<meta name="connection-presentation" content="global">' in resources[0].text
+        thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v41.html")
         assert thread_resource[0].text == resources[0].text.replace(
-            '<meta name="mesh-presentation" content="global">',
-            '<meta name="mesh-presentation" content="thread">', 1)
-        assert 'talk with my agent about this thread' in resources[0].text
+            '<meta name="connection-presentation" content="global">',
+            '<meta name="connection-presentation" content="thread">', 1)
+        assert 'talk with my agent about this Agent Contact' in resources[0].text
         assert resources[0].text.count('id="thread-composer"') == 1
         assert 'peer_fulcra_userid' in resources[0].text
         assert 'omitted_records' in resources[0].text
@@ -125,5 +125,5 @@ async def test_mesh_app():
         assert "Showing selected outbox only" not in resources[0].text
         assert resources[0].meta["openai/ui"]["preferredDisplayMode"] == "fullscreen"
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen", "pip"]
-        assert 'mesh_send' in resources[0].text
+        assert 'agent_connection_send' in resources[0].text
         assert "get_data_catalog" in tools  # Existing tools remain mounted.

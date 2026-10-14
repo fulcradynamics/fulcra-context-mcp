@@ -12,7 +12,7 @@ from fulcra_mcp.settings import settings
 from test_stateless import INITIALIZE, mcp_client
 
 
-async def test_mesh_identifier_http_auth_and_contract(tmp_path, monkeypatch):
+async def test_contact_identifier_http_auth_and_contract(tmp_path, monkeypatch):
     fake = create_autospec(FulcraAPI, instance=True)
     fake.get_fulcra_userid.return_value = 'own'
     type_id = 'MomentAnnotation/12345678-1234-4234-8234-123456789abc'
@@ -31,7 +31,7 @@ async def test_mesh_identifier_http_auth_and_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, 'fulcra_environment', 'test')
     monkeypatch.setattr(credentials, 'FulcraAPI', lambda **kwargs: fake)
     monkeypatch.setattr(oauth_provider, 'credentials_for_token', lambda token: ('synthetic', creds) if token == 'mcp_test' else None)
-    call = {'name': 'set_mesh_identifier', 'arguments': {'data_type': type_id, 'identifier': 'Travel'}}
+    call = {'name': 'set_contact_identifier', 'arguments': {'data_type': type_id, 'identifier': 'Travel'}}
     async with mcp_client(tmp_path) as http:
         async def rpc(method, params):
             response = await http.post('/mcp', json={'jsonrpc': '2.0', 'id': 2, 'method': method, 'params': params})
@@ -40,7 +40,7 @@ async def test_mesh_identifier_http_auth_and_contract(tmp_path, monkeypatch):
             return json.loads(next(line[6:] for line in body.splitlines() if line.startswith('data: ')) if body.startswith('event:') else body)
         assert (await http.post('/mcp', json=INITIALIZE)).status_code == 200
         listed = (await rpc('tools/list', {}))['result']['tools']
-        tool = next(t for t in listed if t['name'] == 'set_mesh_identifier')
+        tool = next(t for t in listed if t['name'] == 'set_contact_identifier')
         assert set(tool['inputSchema']['properties']) == {'data_type', 'identifier'}
         assert tool['inputSchema']['required'] == ['data_type', 'identifier']
         assert tool['annotations']['readOnlyHint'] is False

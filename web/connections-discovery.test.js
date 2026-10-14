@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverThreads, loadMeshes, parseMeshes } from './meshes.js';
+import { discoverThreads, loadConnections, parseConnections } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
 test('identifier is display only, outgoing preferred, stable type-ID tie break and fallback', async () => {
@@ -77,7 +77,7 @@ const text = result => ({ structuredContent: { result } });
 async function load(catalog, outgoing = [], own = 'me') {
   const rows = [], selections = [], calls = [], status = {};
   const list = { replaceChildren() {}, ownerDocument: { createElement: () => ({ addEventListener(_, fn) { this.click = fn; }, append(button) { this.button = button; } }) }, append: row => rows.push(row) };
-  await loadMeshes({ async callServerTool(call) {
+  await loadConnections({ async callServerTool(call) {
     calls.push(call);
     return text(call.name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) })
@@ -89,7 +89,7 @@ async function load(catalog, outgoing = [], own = 'me') {
 
 test('one exact peer row deduplicates both sides and multiple narrow channels; names do not group peers', async () => {
   const result = await load([entry('own'), entry('own'), entry('second'), entry('same', 'peer'), entry('same', 'peer'), entry('same', 'other')], [grant('own'), grant('second')]);
-  assert.match(result.status, /2 threads/);
+  assert.match(result.status, /2 Agent Contacts/);
   assert.deepEqual(result.rows.map(r => r.button.textContent), ['other', 'peer']);
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.equal(result.selections[1].sources.length, 3);
@@ -97,7 +97,7 @@ test('one exact peer row deduplicates both sides and multiple narrow channels; n
 });
 
 test('only catalog groups compatible with get_records are readable', () => {
-  assert.deepEqual(parseMeshes(text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types that cannot be queried (used only when recording data)': [entry('x')] }))), []);
+  assert.deepEqual(parseConnections(text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types that cannot be queried (used only when recording data)': [entry('x')] }))), []);
 });
 
 test('orphans and self do not become threads; broad/mixed grants cannot hide behind a narrow grant', async () => {
@@ -122,16 +122,16 @@ test('outgoing-only and incoming-only are usable, with explicit missing-side not
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   assert.match(result.selections[1].warnings.join(' '), /missing incoming/i);
-  assert.equal((await load([])).status, 'get_data_catalog/list_shares completed — 0 threads returned.');
+  assert.equal((await load([])).status, 'get_data_catalog/list_shares completed — 0 Agent Contacts returned.');
 });
 
 test('failed, malformed, and timed-out discovery shows errors, never zero', async () => {
   for (const result of [{ isError: true }, text('Error: unauthorized'), text('Available data types, grouped by compatible tool: []'), new Error('timeout')]) {
     const status = {};
-    await loadMeshes({ callServerTool: async () => { if (result instanceof Error) throw result; return result; } }, status, { replaceChildren() {} });
+    await loadConnections({ callServerTool: async () => { if (result instanceof Error) throw result; return result; } }, status, { replaceChildren() {} });
     assert.match(status.textContent, /Could not load/);
-    assert.doesNotMatch(status.textContent, /0 threads/);
+    assert.doesNotMatch(status.textContent, /0 Agent Contacts/);
   }
-  assert.match((await load([entry('own')], [grant('own')], undefined)).status, /threads/);
+  assert.match((await load([entry('own')], [grant('own')], undefined)).status, /Agent Contacts/);
   assert.match((await load([entry('own')], [grant('own')], '')).status, /Could not load/);
 });

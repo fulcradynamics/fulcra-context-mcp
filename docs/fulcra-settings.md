@@ -1,20 +1,20 @@
-# Contact and mesh-check settings
+# Contact and connection-check settings
 
 The server advertises `openai/settings` with the existing MCP stack. Native fields
 configure contact behavior; no settings buttons, modal or scheduler API is needed.
 
-- `aicq_settings_read({})` returns primitive `{schema, values, layout}`: autonomous
+- `fulcra_settings_read({})` returns primitive `{schema, values, layout}`: autonomous
   replies (off), status persistence (off), waiting/overdue/high-priority attention
   rules (on), unanswered days (2), notifications (`attention`, `all_messages`,
   `none`) and Special instructions (string, at most 2000 characters).
-- The existing read-only **Last mesh check** and plain-chat schedule guidance remain
+- The existing read-only **Last contact check** and plain-chat schedule guidance remain
   native group titles. No editable timestamp, cadence or scheduler enabled flag.
-- `aicq_settings_update({set: ...})` validates changed fields, merges them, persists
+- `fulcra_settings_update({set: ...})` validates changed fields, merges them, persists
   and independently reads back. Unknown fields, empty updates, wrong types and
   invalid bounds fail. Saving does not send messages, alter checkpoints or reschedule.
 - Read/update are model- and app-visible so onboarding and scheduled checks use the
   same contract. Enabling reply/status fields requires explicit user consent.
-- `aicq_check_status` remains the app-only configuration-specific read projection.
+- `fulcra_check_status` remains the app-only configuration-specific read projection.
 
 ## Persistence and consent
 

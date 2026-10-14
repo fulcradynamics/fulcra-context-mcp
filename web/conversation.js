@@ -1,4 +1,4 @@
-import { discoverThreads } from './meshes.js';
+import { discoverThreads } from './connections-discovery.js';
 import { parseRecords } from './records.js';
 
 const timestamp = record => {

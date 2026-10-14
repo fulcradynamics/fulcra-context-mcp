@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError
 
 import pytest
-from fulcra_mcp import mesh
+from fulcra_mcp import connection
 
 OWN = '00000000-0000-4000-8000-000000000001'
 PEER = '00000000-0000-4000-8000-000000000002'
@@ -39,12 +39,12 @@ class API:
 @pytest.fixture
 def api(monkeypatch):
     value = API()
-    monkeypatch.setattr(mesh.records, 'get_records', lambda api, entry, *args, **kw: api.rows if entry['fulcra_userid'] == OWN else [api.target])
-    monkeypatch.setattr(mesh, 'RETRY_DELAY', 0, raising=False)
+    monkeypatch.setattr(connection.records, 'get_records', lambda api, entry, *args, **kw: api.rows if entry['fulcra_userid'] == OWN else [api.target])
+    monkeypatch.setattr(connection, 'RETRY_DELAY', 0, raising=False)
     return value
 
 def send(api, **kw):
-    return mesh.send(api, **(dict(peer_userid=PEER, outbox=OUT, sender='test', body='hello', mid=MID) | kw))
+    return connection.send(api, **(dict(peer_userid=PEER, outbox=OUT, sender='test', body='hello', mid=MID) | kw))
 
 def test_event_exact_readback_and_same_id(api):
     result = send(api)
@@ -75,7 +75,7 @@ def test_retries_same_payload_and_never_auth_denial(api):
     assert len(api.writes) == 1
 
 def test_successful_upload_is_not_repeated_while_ingestion_is_pending(api, monkeypatch):
-    monkeypatch.setattr(mesh.records, 'get_records', lambda *args, **kwargs: [])
+    monkeypatch.setattr(connection.records, 'get_records', lambda *args, **kwargs: [])
     result = send(api)
     assert result['status'] == 'uncertain'
     assert result['retryable'] is False
@@ -113,7 +113,7 @@ async def test_event_identifier_preserves_conversion_provenance(api, monkeypatch
         entry.update(values)
     api.update_data_type = update
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
-    result = json.loads(await tools.set_mesh_identifier(OUT, 'New'))
+    result = json.loads(await tools.set_contact_identifier(OUT, 'New'))
     assert result['verified'] and result['changed']
     assert len(updates) == 1
     assert entry['description'] == description.replace('"Old"', '"New"')

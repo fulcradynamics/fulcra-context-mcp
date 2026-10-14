@@ -143,7 +143,7 @@ def write_overrides(description, overrides):
     match = PATTERN.search(description)
     if match:
         return description[:match.start()] + marker + description[match.end():]
-    from .mesh_identifier import _marker
+    from .contact_identifier import _marker
     label = _marker(description)
     index = label[0] if label else len(description)
     before = description[:index]

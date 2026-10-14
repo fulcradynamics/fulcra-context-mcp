@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reconcilePosts, recipientAgent } from './mesh-send.js';
+import { reconcilePosts, recipientAgent } from './connection-send.js';
 const source = { id: 'out', fulcra_userid: 'own', direction: 'Outgoing' };
 const envelope = { id: 'id', sender:'Hermes', kind:'message', priority:'P2', topic:'chat', body:'hello' };
 const message = { source, direction: 'Outgoing', record: envelope };

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverThreads } from './meshes.js';
+import { discoverThreads } from './connections-discovery.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import schema from '../tests/fixtures/connection-schema.json' with { type: 'json' };
 

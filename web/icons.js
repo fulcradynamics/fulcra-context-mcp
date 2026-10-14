@@ -1,5 +1,5 @@
 // Lucide (ISC) icons, bundled and tree-shaken by esbuild so only the nodes
-// imported below are inlined into the self-contained mesh.html — no runtime fetch.
+// imported below are inlined into the self-contained connection.html — no runtime fetch.
 import {
   createElement,
   MessagesSquare,
