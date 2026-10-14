@@ -1,4 +1,4 @@
-"""send_agent_message (PLAT-696): sending a connect-agents-with-anyone message.
+"""send_agent_message (PLAT-696): sending a connect-our-agents message.
 
 The checks themselves live in fulcra-api's `connections` module, which has its
 own tests; these cover the tool's wiring."""
