@@ -1,5 +1,4 @@
 import { setupReplySuggestions } from './reply-suggestions.js';
-import { renderThreadIdentity } from './identity.js';
 import { clearPostedDraft, matchesPost, messageId, postRecord } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
@@ -10,15 +9,25 @@ const options = { timeout: 15000 };
 // Drafts/posts belong to the peer; in-flight host operations belong to the app.
 export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, orderField, view, changed, presentation) {
   const doc = container.ownerDocument;
-  const label = doc.createElement('label'), caption = doc.createElement('span');
-  const input = doc.createElement('textarea'); input.rows = 2; input.maxLength = 4000;
-  input.value = draft.value; label.append(caption, input);
+  const label = doc.createElement('label');
+  const input = doc.createElement('textarea'); input.rows = 1; input.maxLength = 4000; input.className = 'composer-input';
+  input.value = draft.value; label.append(input);
+  // Grow the input line-by-line up to 4 lines; only then does it scroll.
+  const autosize = () => {
+    input.style.height = 'auto';
+    const s = getComputedStyle(input);
+    const border = parseFloat(s.borderTopWidth) + parseFloat(s.borderBottomWidth);
+    const max = (parseFloat(s.lineHeight) || 22) * 4 + parseFloat(s.paddingTop) + parseFloat(s.paddingBottom) + border;
+    const full = input.scrollHeight + border;
+    input.style.overflowY = full > max ? 'auto' : 'hidden';
+    input.style.height = `${Math.min(full, max)}px`;
+  };
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary send-to-peer';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
   // Reinforces that this input replies to the contact (not ChatGPT's composer).
   const hint = doc.createElement('p'); hint.className = 'composer-hint';
-  const handoff = doc.createElement('button'); handoff.type = 'button';
-  handoff.textContent = 'talk with my agent about this Agent Contact';
+  const handoff = doc.createElement('button'); handoff.type = 'button'; handoff.className = 'btn-secondary';
+  handoff.textContent = `Discuss in ${app.getHostVersion()?.name || 'chat'}`;
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
   const transfer = doc.createElement('details'); transfer.hidden = true; transfer.className = 'composer-advanced';
@@ -43,7 +52,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     doc.querySelector('#context-status').before(status);
   }
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
-  actions.append(send, handoff);
+  actions.append(handoff, send);
   if (orderField) actions.append(orderField);
   container.append(label, actions, hint);
   // Delivery address (and any setup-session handoff) lives in the Advanced panel.
@@ -74,10 +83,9 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   }
   const update = () => {
     const current = view();
-    renderThreadIdentity(caption, current.thread, 'Talk to ');
     const contactName = current.thread?.identifier || current.thread?.accountName || 'your contact';
     const placeholder = `Message ${contactName}…`;
-    if (input.placeholder !== placeholder) input.placeholder = placeholder;
+    if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = app.getHostVersion()?.name;
     const hintText = `Goes straight to ${contactName} — not your ${host || 'main'} chat.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
@@ -107,12 +115,13 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (session && !transfer.isConnected) address.before(transferHelp, transfer);
     if (!session) { transferHelp.remove(); transfer.remove(); }
     original.disabled = lifecycle.pending || !isCurrent();
-    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this Agent Contact';
+    handoff.textContent = session ? 'Ask in current chat' : `Discuss in ${host || 'chat'}`;
     const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';
     outboxId.hidden = !source?.name;
     if (input.value !== draft.value) input.value = draft.value;
+    autosize();
     send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !current.viewingAgent?.trim() || !input.value.trim()
       || draft.posts.some(p => p.state === 'sending' || p.state === 'uncertain');
     handoff.disabled = !supported || lifecycle.pending || !isCurrent() || !context();
