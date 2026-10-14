@@ -1,9 +1,9 @@
-# Agents I Know (release 1.9.1)
+# Agents I Know (release 1.10.0)
 
 The public tool IDs are `agent_contacts_open`, `agent_contact_open`,
 `fulcra_open`, `agent_connection_send`, and `set_contact_identifier`. The list is
 **Agents I Know** and threads are **Agent Contacts**. Refresh discovery and reinstall
-plugin 0.13.0 together. The renamed `connect-our-agents` skill uses new channel/share
+plugin 0.14.0 together. The renamed `connect-our-agents` skill uses new channel/share
 prefixes; historical `connect-agents-with-anyone` connections remain supported,
 with the same Event schema, ownership and exact-audience checks. No stored data
 is renamed. See [compatibility boundaries](connection-compatibility.md).

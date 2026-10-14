@@ -1,182 +1,156 @@
-"""Authenticated contact policy, separate from notification checkpoints."""
+"""Private contact preferences stored in one owned Event data type's description.
+
+The description holds a JSON document: global values plus per-connection
+overrides keyed by ``<own Event connection>|<peer user ID>``. Values are user
+configuration, not instructions.
+"""
 import json
 import re
 from threading import RLock
 
-ROOT = '/agent/chatgpt/contact-preferences'
-PATH = ROOT + '/settings.md'
+NAME = 'Fulcra Contact Preferences'
 LOCK = RLock()  # Serializes this worker only; storage has no compare-and-swap.
-DEFAULTS = dict(autonomous_replies=False, status_metadata=True,
+DEFAULTS = dict(acknowledge_messages=True, share_contact_status=True, pause_autonomous_replies=False,
                 attention_waiting=True, attention_overdue=True, unanswered_days=2,
                 attention_high_priority=True, attention_peer_membership_announcements=True,
-                notifications='attention', special_instructions='')
+                notifications='attention', checking_preferences='')
+# Native settings fields; checking_preferences is set by chatting with the agent.
 SCHEMA = {
-    'autonomous_replies': {'type': 'boolean', 'title': 'Allow autonomous replies',
-        'description': 'Opt in to bounded replies using known, authorized information. Existing task restrictions still apply; no commitments or unrelated actions.'},
-    'status_metadata': {'type': 'boolean', 'title': 'Save contact status',
-        'description': 'Allow neutral, peer-visible status labels on your own connections. Existing task restrictions still apply.'},
+    'acknowledge_messages': {'type': 'boolean', 'title': 'Acknowledge messages',
+        'description': 'Send read receipts for messages your agent reports to you.'},
+    'share_contact_status': {'type': 'boolean', 'title': 'Share contact status',
+        'description': 'Save a general status of each conversation, such as a priority message '
+                       'or time since the last reply, on your contact. Your contact can see it.'},
+    'pause_autonomous_replies': {'type': 'boolean', 'title': 'Pause autonomous replies',
+        'description': 'Scheduled reply-to-messages checks continue but do not reply.'},
     'attention_waiting': {'type': 'boolean', 'title': 'Flag contacts waiting for you'},
     'attention_overdue': {'type': 'boolean', 'title': 'Flag contacts that have not replied'},
-    'unanswered_days': {'type': 'integer', 'title': 'Days without a response', 'minimum': 1, 'maximum': 365},
+    'unanswered_days': {'type': 'integer', 'title': 'Days before flagging contacts that have not replied',
+                        'minimum': 1, 'maximum': 365},
     'attention_high_priority': {'type': 'boolean', 'title': 'Flag high-priority messages'},
     'attention_peer_membership_announcements': {'type': 'boolean',
         'title': 'Flag peers announcing added recipients',
-        'description': 'Notify about unverified peer membership announcements, even low-priority or addressed to another agent. Never grants sharing consent.'},
+        'description': 'Notify about unverified peer membership announcements. Never grants sharing consent.'},
     'notifications': {'type': 'string', 'title': 'Notify about', 'enum': ['attention', 'all_messages', 'none'],
         'description': 'Guides check summaries, not ChatGPT completion alerts or OS permissions.'},
-    'special_instructions': {'type': 'string', 'title': 'Special instructions', 'maxLength': 2000,
-        'description': 'Additional checking guidance; cannot grant reply, sharing or action permission.'},
 }
+FIELDS = {**SCHEMA, 'checking_preferences': {'type': 'string', 'maxLength': 2000}}
+UUID = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+SCOPE = re.compile(rf'Event/{UUID}\|{UUID}')
 
 
 def validate(values):
-    if not isinstance(values, dict) or values.keys() - DEFAULTS.keys():
+    if not isinstance(values, dict) or values.keys() - FIELDS.keys():
         raise ValueError('Unknown contact preference.')
     for key, value in values.items():
-        schema = SCHEMA[key]
-        expected = {'boolean': bool, 'integer': int, 'string': str}[schema['type']]
-        if type(value) is not expected:
+        schema = FIELDS[key]
+        if type(value) is not {'boolean': bool, 'integer': int, 'string': str}[schema['type']]:
             raise ValueError('Invalid preference type: ' + key)
         if 'enum' in schema and value not in schema['enum']:
             raise ValueError('Invalid preference choice: ' + key)
         if 'minimum' in schema and not schema['minimum'] <= value <= schema['maximum']:
             raise ValueError('Invalid preference range: ' + key)
         if 'maxLength' in schema and len(value) > schema['maxLength']:
-            raise ValueError('Special instructions are too long.')
+            raise ValueError('Checking preferences are too long.')
     return values
 
 
-def private_account(api):
-    account = api.get_fulcra_userid()
-    if not isinstance(account, str) or not account:
-        raise ValueError('Missing authenticated account.')
+def find_type(api, own):
+    entries = [e for e in api.v1_catalog(fulcra_userid=own)
+               if e.get('name') == NAME and e.get('fulcra_userid') == own and e.get('api_version') == 'v1'
+               and str(e.get('id')).startswith('Event/') and not e.get('deprecated')]
+    # Concurrent first saves may create duplicates; consistently use one.
+    return min(entries, key=lambda e: e['id']) if entries else None
+
+
+def _check_private(api, entry):
     shares = api.get_datashares()
     if not isinstance(shares, list):
         raise ValueError('Could not establish preference privacy.')
+    covering = {'*', 'Event', 'Event/*'} | ({entry['id']} if entry else set())
     for share in shares:
-        if type(share.get('share_all_data')) is not bool or share['share_all_data']:
-            raise ValueError('Preferences may be shared; repair privacy first.')
-        from .tools import _split_share_types
         selectors = share.get('fulcra_data_types', [])
-        if not isinstance(selectors, list) or any(not isinstance(s, str) for s in selectors):
-            raise ValueError('Could not establish preference privacy.')
-        files, history, _ = _split_share_types(selectors)
-        for field, encoded in (('file_paths', files), ('file_history_paths', history)):
-            paths = share.get(field, [])
-            if not isinstance(paths, list):
-                raise ValueError('Could not establish preference privacy.')
-            for path in paths + encoded:
-                if not isinstance(path, str) or not path or '*' in path:
-                    raise ValueError('Could not establish preference privacy.')
-                path = '/' + path.lstrip('/')
-                if PATH == path or PATH.startswith(path.rstrip('/') + '/'):
-                    raise ValueError('Preferences may be shared; repair privacy first.')
-        if share.get('files'):
-            raise ValueError('Could not establish preference privacy.')
-    return account
+        if share.get('share_all_data') is not False or not isinstance(selectors, list) or covering & set(selectors):
+            raise ValueError('Preferences may be shared; repair privacy first.')
+
+
+def _parse(entry):
+    if entry is None:
+        return dict(version=1, global_preferences={}, overrides={})
+    document = json.loads(entry['description'])
+    if (not isinstance(document, dict) or document.get('version') != 1
+            or not isinstance(document.get('overrides'), dict)):
+        raise ValueError('Invalid preferences.')
+    validate(document['global_preferences'])
+    for scope, overrides in document['overrides'].items():
+        if not SCOPE.fullmatch(scope):
+            raise ValueError('Invalid preference scope.')
+        validate(overrides)
+    return document
+
+
+def _state(api):
+    own = api.get_fulcra_userid()
+    if not isinstance(own, str) or not own:
+        raise ValueError('Missing authenticated account.')
+    entry = find_type(api, own)
+    _check_private(api, entry)
+    return own, entry, _parse(entry)
 
 
 def load(api):
-    account = private_account(api)
-    listing = api.list_files(ROOT)
-    matches = [f for f in listing['files'] if f['name'] == 'settings.md']
-    if not matches:
-        return dict(version=2, account_id=account, preferences={})
-    if len(matches) != 1:
-        raise ValueError('Ambiguous preferences.')
-    with api.download_file(matches[0]['id']) as response:
-        content = response.read(32001)
-    if len(content) > 32000:
-        raise ValueError('Preferences exceed read limit.')
-    blocks = re.findall(r'^```json\s*\n(.*?)^```\s*$', content.decode(), re.M | re.S)
-    if len(blocks) != 1:
-        raise ValueError('Invalid preferences.')
-    document = json.loads(blocks[0])
-    if (type(document.get('version')) is not int or document['version'] not in (1, 2)
-            or document.get('account_id') != account):
-        raise ValueError('Invalid preference identity.')
-    validate(document['preferences'])
-    return document
+    return _state(api)[2]
 
 
-def migrated(document):
-    # Project legacy testing defaults without writing from the native read tool.
-    # Persist the version on the next explicit update, before applying user edits.
-    if document['version'] == 1:
-        document = {**document, 'version': 2,
-                    'preferences': {**document['preferences'], 'status_metadata': True}}
-    return document
+def _save(api, change):
+    with LOCK:
+        own, entry, document = _state(api)
+        change(document)
+        description = json.dumps(document, ensure_ascii=False, separators=(',', ':'))
+        if entry is None:
+            api.create_data_type('Event', {'name': NAME, 'description': description})
+        else:
+            api.update_data_type('Event', entry['id'].split('/', 1)[1], {'description': description})
+        if (current := _state(api))[0] != own or current[2] != document:
+            raise ValueError('Preference save not verified; reload before retrying.')
+        return document
+
+
+def scope(data_type, peer_userid):
+    return data_type + '|' + peer_userid
 
 
 def read(api):
-    return {**DEFAULTS, **migrated(load(api))['preferences']}
+    return {**DEFAULTS, **load(api)['global_preferences']}
 
 
 def update(api, changes):
     validate(changes)
     if not changes:
         raise ValueError('Choose at least one preference.')
-    with LOCK:
-        document = migrated(load(api))
-        document['preferences'] = {**document['preferences'], **changes}
-        if private_account(api) != document['account_id']:
-            raise ValueError('Authenticated account changed.')
-        payload = ('---\ntype: Settings\ntitle: Contact preferences\n---\n\n```json\n'
-                   + json.dumps(document, ensure_ascii=False, indent=2) + '\n```\n').encode()
-        api.upload_file(payload, 'text/markdown', len(payload), PATH)
-        current = load(api)
-        if current != document:
-            raise ValueError('Preference save not verified; reload before retrying.')
-        return {**DEFAULTS, **current['preferences']}
+    document = _save(api, lambda d: d['global_preferences'].update(changes))
+    return {**DEFAULTS, **document['global_preferences']}
 
 
-TOKEN = '[contact_preferences:'
-PATTERN = re.compile(r'^\[contact_preferences: (\{[^\r\n]*\})\]$', re.M)
-VERSION_TOKEN = '[contact_preferences_version:'
-VERSION_MARKER = '[contact_preferences_version: 2]'
+def contact(api, key):
+    document = load(api)
+    overrides = document['overrides'].get(key, {})
+    return effective({**DEFAULTS, **document['global_preferences']}, overrides), overrides
 
 
-def parse_overrides(description):
-    if not isinstance(description, str):
-        raise ValueError('Missing connection description.')
-    versioned = VERSION_TOKEN in description
-    if versioned and (description.count(VERSION_TOKEN) != 1
-                      or VERSION_MARKER not in description.splitlines()):
-        raise ValueError('Malformed contact preference version; do not infer permission.')
-    if TOKEN not in description:
-        return {}
-    match = PATTERN.search(description)
-    if description.count(TOKEN) != 1 or not match:
-        raise ValueError('Malformed contact preferences; do not infer permission.')
-    overrides = validate(json.loads(match[1]))
-    # Legacy testing status defaults now inherit; reads never rewrite metadata.
-    # Other restrictions, including autonomous replies, remain untouched.
-    if not versioned:
-        overrides.pop('status_metadata', None)
-    return overrides
-
-
-def write_overrides(description, overrides):
+def set_overrides(api, key, overrides):
     validate(overrides)
-    parse_overrides(description)
-    marker = '[contact_preferences: ' + json.dumps(overrides, separators=(',', ':')) + ']'
-    if VERSION_TOKEN not in description:
-        marker = VERSION_MARKER + '\n' + marker
-    match = PATTERN.search(description)
-    if match:
-        return description[:match.start()] + marker + description[match.end():]
-    from .contact_identifier import _marker
-    label = _marker(description)
-    index = label[0] if label else len(description)
-    before = description[:index]
-    return before + ('' if before.endswith('\n') else '\n') + marker + ('\n' if label else '') + description[index:]
+    def change(document):
+        if overrides:
+            document['overrides'][key] = overrides
+        else:
+            document['overrides'].pop(key, None)
+    _save(api, change)
 
 
 def effective(global_values, overrides):
-    validate(global_values)
-    validate(overrides)
     result = {**global_values, **overrides}
-    # Owned overrides may restrict, never elevate, the global opt-in switches.
-    for key in ('autonomous_replies', 'status_metadata'):
-        result[key] = global_values[key] and overrides.get(key, True)
+    # A global pause applies to every contact.
+    result['pause_autonomous_replies'] = global_values['pause_autonomous_replies'] or overrides.get(
+        'pause_autonomous_replies', False)
     return result

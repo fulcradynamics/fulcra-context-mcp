@@ -1,17 +1,43 @@
-"""Owned override tools exercise real SDK metadata transport."""
+"""Contact override tools verify the connection, then store overrides privately."""
 import pytest
 from fastmcp import Client
 from fulcra_mcp.main import mcp
-from fulcra_mcp import tools
+from fulcra_mcp import contact_preferences as policy
 from test_contact_status import backend, DESCRIPTION
 from test_connection_send import OWN, PEER, OUT
 
 
-async def test_multiparty_overrides_require_exact_audience(backend, monkeypatch):
-    from fulcra_mcp import contact_preferences as policy
+@pytest.fixture
+def store(backend, monkeypatch):
+    document = dict(version=1, global_preferences={}, overrides={})
+    monkeypatch.setattr(policy, 'load', lambda api: document)
+    def save(api, change):
+        change(document)
+        return document
+    monkeypatch.setattr(policy, '_save', save)
+    return document
+
+
+async def test_override_save_and_read_never_touch_connection(backend, store):
+    args = {'data_type': OUT, 'peer_userid': PEER}
+    async with Client(mcp) as client:
+        saved = (await client.call_tool('set_contact_preferences', {**args, 'overrides': {
+            'pause_autonomous_replies': True, 'notifications': 'none'}})).structured_content
+        assert saved['verified'] is True
+        result = (await client.call_tool('get_contact_preferences', args)).structured_content
+        assert result['values']['pause_autonomous_replies'] is True
+        assert result['values']['notifications'] == 'none'
+        assert result['values']['acknowledge_messages'] is True
+        assert store['overrides'] == {OUT + '|' + PEER: {'pause_autonomous_replies': True, 'notifications': 'none'}}
+        await client.call_tool('set_contact_preferences', {**args, 'overrides': {}})
+        assert store['overrides'] == {}
+    assert not backend['writes']
+    assert backend['row']['description'] == DESCRIPTION
+
+
+async def test_multiparty_overrides_require_exact_audience(backend, store):
     other = '00000000-0000-4000-8000-000000000007'
     backend['shares'][0]['permissions'].append({'allowed_fulcra_userid': other})
-    monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)
     async with Client(mcp) as client:
         args = {'data_type': OUT, 'peer_userid': PEER}
         assert (await client.call_tool('get_contact_preferences', args, raise_on_error=False)).is_error
@@ -21,60 +47,15 @@ async def test_multiparty_overrides_require_exact_audience(backend, monkeypatch)
         assert saved.structured_content['verified'] is True
         readback = await client.call_tool('get_contact_preferences', args)
         assert readback.structured_content['values']['attention_peer_membership_announcements'] is False
-        backend['shares'][0]['permissions'].pop()
-        assert (await client.call_tool('get_contact_preferences', args, raise_on_error=False)).is_error
-        assert len(backend['writes']) == 1
 
 
-async def test_override_save_and_owned_read(backend, monkeypatch):
-    from fulcra_mcp import contact_preferences as policy
-    monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)
-    async with Client(mcp) as client:
-        saved = (await client.call_tool('set_contact_preferences', {
-            'data_type': OUT, 'peer_userid': PEER,
-            'overrides': {'autonomous_replies': True, 'notifications': 'none'}})).structured_content
-        assert saved['verified'] is True
-        result = (await client.call_tool('get_contact_preferences', {
-            'data_type': OUT, 'peer_userid': PEER})).structured_content
-        assert result['values']['autonomous_replies'] is False
-        assert result['values']['notifications'] == 'none'
-        assert result['owner'] == OWN
-        assert backend['row']['description'].endswith('[mesh_identifier: "Travel"]')
-        assert '[connection_setup_session:' in backend['row']['description']
-
-
-async def test_legacy_override_reads_do_not_write_and_explicit_opt_out_survives(backend, monkeypatch):
-    from fulcra_mcp import contact_preferences as policy
-    monkeypatch.setattr(policy, 'read', lambda api: policy.DEFAULTS)
-    original = backend['row']['description'] + '\n[contact_preferences: {"status_metadata":false,"autonomous_replies":false}]'
-    backend['row']['description'] = original
-    args = {'data_type': OUT, 'peer_userid': PEER}
-    async with Client(mcp) as client:
-        for _ in range(2):
-            result = (await client.call_tool('get_contact_preferences', args)).structured_content
-            assert result['values']['status_metadata'] is True
-            assert result['values']['autonomous_replies'] is False
-            assert not backend['writes']
-            assert backend['row']['description'] == original
-        saved = (await client.call_tool('set_contact_preferences', {
-            **args, 'overrides': {'status_metadata': False}})).structured_content
-        assert saved['verified'] is True
-        assert '[contact_preferences_version: 2]' in backend['row']['description']
-        for _ in range(2):
-            result = (await client.call_tool('get_contact_preferences', args)).structured_content
-            assert result['values']['status_metadata'] is False
-        assert len(backend['writes']) == 1
-
-
-@pytest.mark.parametrize('option', ['peer', 'denied', 'unverified', 'schema'])
-async def test_override_rejects_unowned_invalid_or_unverified(backend, option):
+@pytest.mark.parametrize('option', ['peer', 'schema', 'invalid'])
+async def test_override_rejects_unowned_or_invalid(backend, store, option):
     if option == 'peer': backend['row']['fulcra_userid'] = PEER
-    if option == 'denied': backend['denied'] = True
-    if option == 'unverified': backend['persist'] = False
     if option == 'schema': backend['schema'] = {'properties': {}}
+    overrides = {'autonomous_replies': True} if option == 'invalid' else {'notifications': 'none'}
     async with Client(mcp) as client:
         result = await client.call_tool('set_contact_preferences', {
-            'data_type': OUT, 'peer_userid': PEER, 'overrides': {'notifications': 'none'}}, raise_on_error=False)
+            'data_type': OUT, 'peer_userid': PEER, 'overrides': overrides}, raise_on_error=False)
         assert result.is_error
-    assert len(backend['writes']) <= 1
-    if option in ('peer', 'schema'): assert not backend['writes']
+    assert store['overrides'] == {}
