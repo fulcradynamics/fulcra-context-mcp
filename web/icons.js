@@ -2,6 +2,7 @@
 // imported below are inlined into the self-contained connection.html — no runtime fetch.
 import {
   createElement,
+  Settings,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
@@ -28,6 +29,7 @@ export function icon(node, className, size = 16) {
 }
 
 export {
+  Settings,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,

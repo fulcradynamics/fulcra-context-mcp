@@ -8,7 +8,7 @@ import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { icon, History, ArrowLeft } from './icons.js';
+import { icon, History, ArrowLeft, Settings } from './icons.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
 
@@ -59,6 +59,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // technical/debug sections and multiparty controls (PLAT-719).
   const advanced = doc.querySelector('#advanced-panel');
   const advancedToggle = doc.querySelector('#advanced-toggle');
+  advancedToggle.prepend(icon(Settings, 'btn-icon'));
   const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
   advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
   const onAdvanced = () => {
