@@ -1,16 +1,16 @@
-# Agents I Know (release 1.9.0)
+# Agents I Know (release 1.9.1)
 
 The public tool IDs are `agent_contacts_open`, `agent_contact_open`,
 `fulcra_open`, `agent_connection_send`, and `set_contact_identifier`. The list is
 **Agents I Know** and threads are **Agent Contacts**. Refresh discovery and reinstall
-plugin 0.11.0 together; tool and resource names changed. The
-`connect-agents-with-anyone` Event protocol is unchanged, not legacy note envelopes.
-See [compatibility boundaries](connection-compatibility.md) for preserved wire values
-and the deliberately unchanged packaged connection skill.
+plugin 0.13.0 together. The renamed `connect-our-agents` skill uses new channel/share
+prefixes; historical `connect-agents-with-anyone` connections remain supported,
+with the same Event schema, ownership and exact-audience checks. No stored data
+is renamed. See [compatibility boundaries](connection-compatibility.md).
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/contacts/v43.html`, `ui://fulcra/contacts/thread/v43.html`, and
-`ui://fulcra/contacts/threads/v43.html`. The direct-list resource adds
+`ui://fulcra/contacts/v44.html`, `ui://fulcra/contacts/thread/v44.html`, and
+`ui://fulcra/contacts/threads/v44.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/contacts.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
@@ -18,7 +18,7 @@ through server instructions and the plugin's main `fulcra-context` skill.
 
 ## Protocol and provenance
 
-Source skill: https://github.com/fulcradynamics/agent-skills/tree/32ee749fdad112e0e7a2889d792231f76c88367d/skills/connect-agents-with-anyone
+Source skill: https://github.com/fulcradynamics/agent-skills/tree/c419b169128effbbb8d74fb775a5f960655cf959/skills/connect-our-agents
 
 The server uses `fulcra-api>=0.1.51` and its canonical `connections.build_message`
 and `CHANNEL_FIELDS`. Messages are top-level Event fields: `id`, `sender`,

@@ -1,18 +1,17 @@
 """Stable persisted names, not current product or tool terminology.
 
-These values identify existing user data and the deliberately frozen connection
-skill. Changing them would hide channels/checkpoints or break its instructions.
+Keep historical channels/checkpoints readable alongside the renamed skill.
 """
 
 IDENTIFIER_TOKEN = "[mesh_identifier"
 LEGACY_OUTBOX_PATTERN = r"\bmesh outbox\b"
 CHECK_STATE_ROOT = "/agent/chatgpt/mesh-checks/"
-SHARE_NAME_PREFIX = "connect-agents-with-anyone"
+SHARE_NAME_PREFIX = ("connect-agents-with-anyone", "connect-our-agents")
+CHANNEL_PREFIXES = tuple(f"{name} channel" for name in SHARE_NAME_PREFIX)
 
-# The packaged connection skill stays byte-for-byte unchanged. Translate only
-# these tool references, never its consent, audience, retry or acknowledgement rules.
+# Translate tool references, never consent, audience, retry or acknowledgement rules.
 FROZEN_SKILL_GUIDANCE = """
-The packaged connect-agents-with-anyone skill retains historical tool references.
+The packaged connect-our-agents skill retains historical tool references.
 Use these currently advertised equivalents with unchanged arguments and safety rules:
 mesh_send -> agent_connection_send; set_mesh_identifier -> set_contact_identifier;
 aicq_settings_read -> fulcra_settings_read; aicq_settings_update -> fulcra_settings_update;

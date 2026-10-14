@@ -20,7 +20,7 @@ from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
 from .contact_identifier import normalize_catalog_description, parse_contact_identifier, validate_identifier, write_contact_identifier
-from .connection_compatibility import LEGACY_OUTBOX_PATTERN
+from .connection_compatibility import LEGACY_OUTBOX_PATTERN, CHANNEL_PREFIXES
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
@@ -908,7 +908,7 @@ async def send_agent_message(
     target_peer_userid: str | None = None,
 ) -> dict:
     """Send a message to another person's agent, over a connection made with
-    the connect-agents-with-anyone skill. Everyone in the connection can read
+    the connect-our-agents skill. Everyone in the connection can read
     it.
 
     Args:
@@ -937,7 +937,12 @@ async def send_agent_message(
                 raise ValueError('connection must be an exact peer UUID or Event/<uuid>.')
             if reply_to is not None and ack is not None:
                 raise ValueError('Give reply_to or ack, not both.')
-            channel, people = connections.resolve_connection(fulcra.get_datashares(), connection)
+            # The pinned SDK recognizes the historical prefix only. Translate a
+            # local discovery copy; send() rechecks untouched live grants below.
+            shares = [dict(s, datashare_name=connections.SHARE_NAME_PREFIX)
+                      if s.get('datashare_name', '').startswith('connect-our-agents') else s
+                      for s in fulcra.get_datashares()]
+            channel, people = connections.resolve_connection(shares, connection)
             if len(people) != 1 and (expected_peer_userids is None or not connection.startswith('Event/')):
                 raise ValueError('Multiparty sends require an exact owned channel and expected_peer_userids.')
             if len(people) > 1 and (reply_to or ack) and target_peer_userid is None:
@@ -1115,7 +1120,7 @@ async def get_data_catalog(
         # The field list is a bonus: if the schema can't be fetched, still
         # return the entry rather than failing the whole call.
         if _is_user_defined_v1(entry) and ((data_type and len(catalog) == 1)
-                or entry.get('description', '').startswith('connect-agents-with-anyone channel')):
+                or entry.get('description', '').startswith(CHANNEL_PREFIXES)):
             try:
                 schema = fulcra.v1_catalog_schema(
                     entry["id"], "v1", fulcra_userid=entry.get("fulcra_userid")

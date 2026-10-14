@@ -12,6 +12,7 @@ from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
 from .contact_identifier import parse_contact_identifier
+from .connection_compatibility import SHARE_NAME_PREFIX, CHANNEL_PREFIXES
 
 mentions_mcp = FastMCP("Agents I Know mentions")
 CHANNEL_SCHEMA = json.loads(files('fulcra_mcp').joinpath('static/connection-schema.json').read_text())
@@ -34,7 +35,7 @@ def _direct_recipient(share):
     recipients = share.get("with_user_ids")
     if (share.get("share_all_data") is False and not share.get("group_id")
             and not share.get('time_start') and not share.get('time_end')
-            and share.get('datashare_name', '').startswith('connect-agents-with-anyone')
+            and share.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
             and all(k not in share or share[k] == [] for k in ("with_group_ids", "file_paths", "file_history_paths"))
             and isinstance(share.get("data_types"), list) and len(share["data_types"]) == 1
             and isinstance(recipients, list) and recipients
@@ -52,7 +53,7 @@ async def _discover_threads() -> dict[str, str]:
         shares = json.loads((await list_shares(direction="both")).removeprefix("Shares: "))
         for entries in catalog.values():
             for entry in entries:
-                if not entry.get('fields') and entry.get('id', '').startswith('Event/') and entry.get('description', '').startswith('connect-agents-with-anyone channel'):
+                if not entry.get('fields') and entry.get('id', '').startswith('Event/') and entry.get('description', '').startswith(CHANNEL_PREFIXES):
                     exact = json.loads((await get_data_catalog(data_type=entry['id'],
                         fulcra_userid=entry.get('fulcra_userid') or shares['own_fulcra_userid'])).removeprefix(
                             'Available data types, grouped by compatible tool: '))
@@ -83,7 +84,7 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                     and ("fulcra_userid" not in entry or isinstance(entry["fulcra_userid"], str))):
                 raise ValueError("Invalid catalog identity")
             if (not entry['id'].startswith('Event/')
-                    or not entry.get('description', '').startswith('connect-agents-with-anyone channel')
+                    or not entry.get('description', '').startswith(CHANNEL_PREFIXES)
                     or not _compatible_schema(entry)):
                 continue
             peer = entry.get("fulcra_userid") or own
@@ -99,7 +100,7 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                     continue
                 peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
             elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
-                         and s.get('datashare_name', '').startswith('connect-agents-with-anyone')
+                         and s.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
                          and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))
                          and s.get('data_types') == [entry['id']] for s in shares['incoming']):
                 continue
