@@ -1,6 +1,6 @@
 # Agent connection compatibility
 
-Server 1.10.0 / UI v45 pairs with plugin 0.13.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
+Server 1.11.0 / UI v45 pairs with plugin 0.14.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
 
 ## Current interface
 
