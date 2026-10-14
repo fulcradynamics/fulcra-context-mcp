@@ -765,13 +765,16 @@ def test_an_expired_or_ended_upload_link_says_so(link_uploads, monkeypatch, put_
 class FakeBucket:
     """The state bucket seen through the GCS API, backed by the same files the
     tests' state directory holds (as gcsfuse would be). A file's generation is
-    its mtime. ``after_read`` runs once a blob's contents have been read."""
+    its mtime. ``after_read`` runs once a blob's contents have been read.
+    ``lost_replies`` writes land but report failure, as when the client retries
+    a write whose reply was lost and the retry fails its precondition."""
 
-    def __init__(self, after_read=lambda: None):
+    def __init__(self, after_read=lambda: None, lost_replies=0):
         import threading
 
         self.lock = threading.Lock()
         self.after_read = after_read
+        self.lost_replies = lost_replies
 
     def get_blob(self, name):
         path = settings.state_path / name
@@ -801,6 +804,9 @@ class FakeBlob:
             self._check(if_generation_match)
             time.sleep(0.001)  # so the write moves the mtime on
             self.path.write_text(data)
+            if self.bucket.lost_replies:
+                self.bucket.lost_replies -= 1
+                self._check(if_generation_match)
 
 
 def _race_two_uploads(token):
@@ -860,8 +866,15 @@ def test_racing_uploads_across_instances_store_one_file(link_uploads, put_chunks
     _, token, sessions = link_uploads
     # Both instances read the same generation of the link before either writes.
     both_read = threading.Barrier(2)
+    reads = iter(range(2))
+
+    def first_reads_meet():
+        # The loser's later read, checking whether its write landed, goes on.
+        if next(reads, None) is not None:
+            both_read.wait(timeout=5)
+
     monkeypatch.setattr(settings, "state_bucket", "state")
-    bucket = FakeBucket(lambda: both_read.wait(timeout=5))
+    bucket = FakeBucket(first_reads_meet)
     monkeypatch.setattr(ft, "_state_bucket", lambda: bucket)
 
     outcomes = _race_two_uploads(token)
@@ -878,3 +891,31 @@ def test_a_bucket_link_record_that_is_missing_or_expired_is_none(monkeypatch):
 
     assert ft._change_record("upload_links", "missing", lambda r: r) is None
     assert ft._change_record("upload_links", "old", lambda r: r) is None
+
+
+def test_a_retried_claim_that_had_landed_still_claims_the_link(link_uploads, put_chunks, monkeypatch):
+    client, token, sessions = link_uploads
+    monkeypatch.setattr(settings, "state_bucket", "state")
+    bucket = FakeBucket(lost_replies=1)
+    monkeypatch.setattr(ft, "_state_bucket", lambda: bucket)
+
+    response = client.put(f"/files/upload/{token}", content=b"abc")
+
+    assert bucket.lost_replies == 0
+    assert response.status_code == 200, response.text
+    assert len(sessions) == 1 and ft._load_record("upload_links", token)["state"] == "done"
+
+
+def test_a_bucket_write_beaten_by_another_still_reports_the_change(monkeypatch):
+    monkeypatch.setattr(settings, "state_bucket", "state")
+    ft._save_record("upload_links", "t", {"state": "new", "expires_at": time.time() + 60})
+
+    def other_writes_first():
+        ft._save_record("upload_links", "t", {"state": "other", "expires_at": time.time() + 60})
+
+    bucket = FakeBucket(after_read=other_writes_first)
+    monkeypatch.setattr(ft, "_state_bucket", lambda: bucket)
+
+    with pytest.raises(ft.RecordChanged):
+        ft._change_record("upload_links", "t", lambda r: dict(r, state="mine"))
+    assert ft._load_record("upload_links", "t")["state"] == "other"

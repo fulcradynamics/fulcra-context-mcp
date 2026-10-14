@@ -261,12 +261,30 @@ def _change_bucket_record(kind: str, key: str, change) -> dict | None:
         new = change(record)
         if new is None:
             return record
-        blob.upload_from_string(
-            json.dumps(new), content_type="application/json", if_generation_match=generation
-        )
+        try:
+            blob.upload_from_string(
+                json.dumps(new), content_type="application/json", if_generation_match=generation
+            )
+        except PreconditionFailed:
+            # The client retries this write after a timeout or 5xx. If an
+            # earlier attempt landed, the retry fails its precondition on our
+            # own write: the record holding exactly `new` means it succeeded.
+            if _read_bucket_record(name) == new:
+                return new
+            raise
         return new
     except PreconditionFailed as e:
         raise RecordChanged(f"{kind} record changed while being updated") from e
+    except (NotFound, ValueError):
+        return None
+
+
+def _read_bucket_record(name: str) -> dict | None:
+    from google.api_core.exceptions import NotFound
+
+    blob = _state_bucket().get_blob(name)
+    try:
+        return json.loads(blob.download_as_bytes(if_generation_match=blob.generation)) if blob else None
     except (NotFound, ValueError):
         return None
 
