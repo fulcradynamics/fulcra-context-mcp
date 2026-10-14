@@ -22,5 +22,5 @@ setupInvite(app, inviteButton, document.querySelector('#status')).then(connected
   applySafeArea(app.getHostContext());
   const status = document.querySelector('#connection-status');
   if (connected) return setupThreads(app, document, entrypoint);
-  status.textContent = 'Could not load threads: host connection failed. Reopen the app to retry.';
+  status.textContent = 'Could not load Agent Contacts: host connection failed. Reopen the app to retry.';
 });

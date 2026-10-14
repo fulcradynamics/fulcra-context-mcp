@@ -26,7 +26,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const rows = new Map();
   const refreshButton = doc.querySelector('#refresh-threads');
   refreshButton.prepend(icon(RefreshCw, 'btn-icon'));
-  status.textContent = 'Loading threads…';
+  status.textContent = 'Loading Agent Contacts…';
   const inlineList = entrypoint.presentation === 'threads';
   const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
   let displayPending = false, displayEpoch = 0, hostContext = app.getHostContext();
@@ -37,7 +37,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     const current = () => !disposed && epoch === displayEpoch && rows.get(entry.thread.peer) === entry;
     if (inlineList && hostContext?.displayMode !== 'fullscreen') {
       if (!hostContext?.availableDisplayModes?.includes('fullscreen')) {
-        launchStatus.textContent = 'This host does not advertise fullscreen support. The thread list remains open.';
+        launchStatus.textContent = 'This host does not advertise fullscreen support. The Agent Contacts list remains open.';
         return;
       }
       displayPending = true;
@@ -45,7 +45,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       try {
         const result = await app.requestDisplayMode({ mode: 'fullscreen' }, { timeout: 15000 });
         if (!current()) {
-          if (!disposed && epoch === displayEpoch) launchStatus.textContent = 'That peer is no longer available. Choose an accessible thread.';
+          if (!disposed && epoch === displayEpoch) launchStatus.textContent = 'That peer is no longer available. Choose an accessible Agent Contact.';
           return;
         }
         if (result.mode !== 'fullscreen') {
@@ -55,7 +55,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         // The response is host authority too; a notification need not follow it.
         hostContext = { ...hostContext, displayMode: result.mode };
       } catch {
-        if (current()) launchStatus.textContent = 'Could not confirm fullscreen mode change. The thread list remains open. Check the host before retrying.';
+        if (current()) launchStatus.textContent = 'Could not confirm fullscreen mode change. The Agent Contacts list remains open. Check the host before retrying.';
         return;
       } finally { displayPending = false; }
     }
@@ -147,17 +147,17 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           if (matches.length === 1) {
             launchStatus.textContent = '';
             detail.select(matches[0], rows.get(requestedPeer)?.button);
-          } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible threads. Choose a thread below; no other peer was selected.';
+          } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
         }
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
-        status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} threads returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
+        status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} Agent Contacts returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
         if (doc.visibilityState !== 'visible') return true;
         if (!listPanel.hidden) { await refreshPreviews(); return true; }
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
-        status.textContent = `Could not load threads — discovery failed. Stale last-good threads retained. Last success: ${lastSuccess ?? 'not yet'}.`;
+        status.textContent = `Could not load Agent Contacts — discovery failed. Stale last-good Agent Contacts retained. Last success: ${lastSuccess ?? 'not yet'}.`;
         detail.failed(error);
         return false;
       }
@@ -182,7 +182,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     if (context.displayMode !== 'fullscreen' && userSelected) {
       displayEpoch++;
       detail.back();
-      launchStatus.textContent = `The host returned to ${context.displayMode} mode. Choose a thread to request a conversation panel.`;
+      launchStatus.textContent = `The host returned to ${context.displayMode} mode. Choose an Agent Contact to request a conversation panel.`;
     }
     doc.documentElement.classList.toggle('compact-threads', context.displayMode !== 'fullscreen');
   });
@@ -204,13 +204,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   doc.defaultView.addEventListener('pagehide', dispose);
   app.onteardown = async () => { await dispose(); return {}; };
   if (inlineList && entrypoint.directResource) {
-    launchStatus.textContent = 'Choose a thread to request a conversation panel.';
+    launchStatus.textContent = 'Choose an Agent Contact to request a conversation panel.';
     scheduler.request();
   } else if (inlineList) entrypoint.consume(result => {
     if (disposed || userSelected) return;
     launchStatus.textContent = result.isError || result.structuredContent?.presentation !== 'threads'
-      ? 'The initial thread list result failed. Refresh threads to retry discovery.'
-      : 'Choose a thread to request a conversation panel.';
+      ? 'The initial Agent Contacts list result failed. Refresh Agent Contacts to retry discovery.'
+      : 'Choose an Agent Contact to request a conversation panel.';
     scheduler.request();
   });
   else if (entrypoint.presentation === 'thread') entrypoint.consume(result => {
@@ -218,11 +218,11 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     const data = result.structuredContent;
     if (result.isError || data?.presentation !== 'thread'
       || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
-      launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible thread below.';
+      launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
     } else {
       requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
       launchPending = requestedPeer != null;
-      launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : 'Choose an accessible thread.';
+      launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : 'Choose an accessible Agent Contact.';
     }
     scheduler.request();
   });

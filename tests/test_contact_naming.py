@@ -10,6 +10,7 @@ async def test_contact_tool_names_and_titles():
     assert tools['fulcra_open'].title == 'Agents I Know'
     assert tools['agent_contacts_open'].title == 'Agents I Know'
     assert tools['agent_contact_open'].title == 'Agent Contacts'
+    assert 'Open an Agent Contact' in tools['agent_contact_open'].description
     assert {'agent_connection_send', 'set_contact_identifier', 'fulcra_settings_read',
             'fulcra_settings_update', 'fulcra_check_status', 'agent_contacts_search'} <= tools.keys()
     assert not any('mesh' in name or 'aicq' in name for name in tools)

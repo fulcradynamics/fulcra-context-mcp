@@ -112,7 +112,7 @@ async def test_contacts_app():
         assert thread_resource[0].text == resources[0].text.replace(
             '<meta name="connection-presentation" content="global">',
             '<meta name="connection-presentation" content="thread">', 1)
-        assert 'talk with my agent about this thread' in resources[0].text
+        assert 'talk with my agent about this Agent Contact' in resources[0].text
         assert resources[0].text.count('id="thread-composer"') == 1
         assert 'peer_fulcra_userid' in resources[0].text
         assert 'omitted_records' in resources[0].text

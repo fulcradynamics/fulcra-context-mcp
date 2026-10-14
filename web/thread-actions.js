@@ -16,7 +16,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
   const handoff = doc.createElement('button'); handoff.type = 'button';
-  handoff.textContent = 'talk with my agent about this thread';
+  handoff.textContent = 'talk with my agent about this Agent Contact';
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
   const transfer = doc.createElement('details'); transfer.hidden = true;
@@ -96,7 +96,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (session && !transfer.isConnected) address.before(transferHelp, transfer);
     if (!session) { transferHelp.remove(); transfer.remove(); }
     original.disabled = lifecycle.pending || !isCurrent();
-    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this thread';
+    handoff.textContent = session ? 'Ask in current chat' : 'talk with my agent about this Agent Contact';
     const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';

@@ -56,7 +56,7 @@ def contacts_html() -> str:
 def agent_contact_open(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
     """Open an Agent Contact with an exact peer ID or discovered multiparty thread_id.
 
-    Omit both IDs to choose a thread. Accessible audiences are discovered by the app;
+    Omit both IDs to choose an Agent Contact. Accessible audiences are discovered by the app;
     names are not identifiers. Does not write account data or send messages.
     Use for a submitted Open Agent Contact: mention after resolving its exact peer ID.
     """

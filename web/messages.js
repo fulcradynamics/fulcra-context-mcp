@@ -90,7 +90,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer);
     if (!selected) return;
     let text = '';
-    if (unavailable) text = 'This thread is no longer available.';
+    if (unavailable) text = 'This Agent Contact is no longer available.';
     else if (loadFailed) {
       const state = refreshState;
       text = 'Could not load messages. ';
@@ -172,8 +172,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     });
   const setTitle = thread => {
     renderAssessment(assessment, thread.assessment);
-    if (thread.participants) renderThreadIdentity(title, thread, 'Thread with ');
-    else renderIdentity(title, thread.identifier, thread.peer, 'Thread with ',
+    if (thread.participants) renderThreadIdentity(title, thread, 'Agent Contact with ');
+    else renderIdentity(title, thread.identifier, thread.peer, 'Agent Contact with ',
       thread.accountName && thread.accountName !== thread.peer ? ` — Account: ${thread.accountName}` : '');
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;

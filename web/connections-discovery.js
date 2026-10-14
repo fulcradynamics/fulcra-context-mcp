@@ -180,7 +180,7 @@ export async function discoverThreads(app) {
 }
 
 export async function loadConnections(app, status, list, onSelect) {
-  status.textContent = 'Loading threads — calling get_data_catalog/list_shares…';
+  status.textContent = 'Loading Agent Contacts — calling get_data_catalog/list_shares…';
   list.replaceChildren();
   try {
     const { threads, warnings } = await discoverThreads(app);
@@ -193,9 +193,9 @@ export async function loadConnections(app, status, list, onSelect) {
       row.append(button);
       list.append(row);
     }
-    status.textContent = `get_data_catalog/list_shares completed — ${threads.length} threads returned.${warnings.length ? ' ' + warnings.join(' ') : ''}`;
+    status.textContent = `get_data_catalog/list_shares completed — ${threads.length} Agent Contacts returned.${warnings.length ? ' ' + warnings.join(' ') : ''}`;
   } catch {
     list.replaceChildren();
-    status.textContent = 'Could not load threads (get_data_catalog/list_shares failed, invalid result, or missing own user ID). Reopen the app to retry.';
+    status.textContent = 'Could not load Agent Contacts (get_data_catalog/list_shares failed, invalid result, or missing own user ID). Reopen the app to retry.';
   }
 }

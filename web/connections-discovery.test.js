@@ -89,7 +89,7 @@ async function load(catalog, outgoing = [], own = 'me') {
 
 test('one exact peer row deduplicates both sides and multiple narrow channels; names do not group peers', async () => {
   const result = await load([entry('own'), entry('own'), entry('second'), entry('same', 'peer'), entry('same', 'peer'), entry('same', 'other')], [grant('own'), grant('second')]);
-  assert.match(result.status, /2 threads/);
+  assert.match(result.status, /2 Agent Contacts/);
   assert.deepEqual(result.rows.map(r => r.button.textContent), ['other', 'peer']);
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.equal(result.selections[1].sources.length, 3);
@@ -122,7 +122,7 @@ test('outgoing-only and incoming-only are usable, with explicit missing-side not
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   assert.match(result.selections[1].warnings.join(' '), /missing incoming/i);
-  assert.equal((await load([])).status, 'get_data_catalog/list_shares completed — 0 threads returned.');
+  assert.equal((await load([])).status, 'get_data_catalog/list_shares completed — 0 Agent Contacts returned.');
 });
 
 test('failed, malformed, and timed-out discovery shows errors, never zero', async () => {
@@ -130,8 +130,8 @@ test('failed, malformed, and timed-out discovery shows errors, never zero', asyn
     const status = {};
     await loadConnections({ callServerTool: async () => { if (result instanceof Error) throw result; return result; } }, status, { replaceChildren() {} });
     assert.match(status.textContent, /Could not load/);
-    assert.doesNotMatch(status.textContent, /0 threads/);
+    assert.doesNotMatch(status.textContent, /0 Agent Contacts/);
   }
-  assert.match((await load([entry('own')], [grant('own')], undefined)).status, /threads/);
+  assert.match((await load([entry('own')], [grant('own')], undefined)).status, /Agent Contacts/);
   assert.match((await load([entry('own')], [grant('own')], '')).status, /Could not load/);
 });

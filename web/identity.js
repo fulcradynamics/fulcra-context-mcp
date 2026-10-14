@@ -1,6 +1,6 @@
 // Display metadata only; callers keep exact IDs for routing and stable keys.
 export function renderThreadIdentity(element, thread, prefix = '') {
-  if (!thread?.participants) return renderIdentity(element, thread?.identifier, thread?.peer ?? 'this thread', prefix);
+  if (!thread?.participants) return renderIdentity(element, thread?.identifier, thread?.peer ?? 'this Agent Contact', prefix);
   renderIdentity(element, thread.identifier || 'Multiparty connection',
     thread.participants.map(p => p.name === p.id ? p.id : `${p.name}: ${p.id}`).join(' · '), prefix);
 }

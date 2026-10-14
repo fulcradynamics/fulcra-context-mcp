@@ -68,5 +68,5 @@ test('navigation during attach blocks send and clears context; shared lock block
   await second.click(); assert.equal(contexts.length,1);
   current='next'; finish(); await pending;
   assert.equal(sends,0); assert.deepEqual(contexts.at(-1),{content:[]});
-  assert.match(status.textContent,/Thread changed/);
+  assert.match(status.textContent,/Agent Contact changed/);
 });
