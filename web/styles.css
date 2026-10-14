@@ -114,18 +114,21 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
    are divided by hairlines and lift on hover (Portal data-types row cards). */
-#connections, #pending-connections {
+#connections, #pending-connections, #legacy-connections {
   border: 1px solid var(--divider);
   border-radius: 12px;
   background: var(--raised);
   overflow: hidden;
 }
 ul, ol { list-style: none; padding: 0; margin: 0; }
-#connections > li, #pending-connections > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
-#connections > li:first-child, #pending-connections > li:first-child { border-top: 0; }
+#connections > li, #pending-connections > li, #legacy-connections > li { padding: 14px 16px; border-top: 1px solid rgba(56, 56, 58, .6); }
+#connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
 #pending-connections .pending-label { font-weight: 500; }
 #pending-connections p { margin: 2px 0 0; }
 #connections > li:hover { background: var(--row-hover); }
+/* Legacy rows aren't clickable as a whole (the Convert button is the action), so
+   the row itself doesn't highlight on hover. */
+.legacy-convert { flex: none; }
 
 /* Gradient initial avatar leading each contact row (matches the detail header),
    wrapped so the unread badge can anchor to its corner. */
@@ -156,7 +159,9 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .thread-text .contact-status { margin: 2px 0 0; }
 .contact-status.attention { color: #c79448; }
 .thread-preview { margin: 2px 0 0; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.thread-time { flex: none; margin-left: auto; align-self: center; color: var(--muted); font-size: 12px; font-weight: 400; }
+/* Last-activity time as a compact dark pill with lighter text. */
+.thread-time { flex: none; margin-left: auto; align-self: center; padding: 2px 7px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.thread-time:empty { display: none; }
 
 /* Conversation: a familiar chat layout. Bubbles align by direction — incoming
    left (gray), outgoing right (green) — with the date beneath each bubble. */

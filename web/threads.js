@@ -29,9 +29,14 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const pendingList = doc.querySelector('#pending-connections');
   const pendingRows = new Map();
   const legacySection = doc.createElement('section');
+  const legacyHeader = doc.createElement('div'); legacyHeader.className = 'section-header';
   const legacyTitle = doc.createElement('h2'); legacyTitle.textContent = 'Legacy connections';
+  const legacyCount = doc.createElement('span'); legacyCount.className = 'section-count';
+  const legacyRule = doc.createElement('span'); legacyRule.className = 'section-rule'; legacyRule.setAttribute('aria-hidden', 'true');
+  const legacyTag = doc.createElement('span'); legacyTag.className = 'section-tag'; legacyTag.textContent = 'legacy';
+  legacyHeader.append(legacyTitle, legacyCount, legacyRule, legacyTag);
   const legacyList = doc.createElement('ul'); legacyList.id = 'legacy-connections';
-  legacySection.append(legacyTitle, legacyList); pendingSection.after(legacySection);
+  legacySection.append(legacyHeader, legacyList); pendingSection.after(legacySection);
   legacySection.hidden = true;
   const legacyRows = new Map();
 
@@ -155,18 +160,28 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         for (const thread of discovery.legacy) {
           let entry = legacyRows.get(thread.peer);
           if (!entry) {
-            const row = doc.createElement('li'), label = doc.createElement('p'), button = doc.createElement('button');
-            label.textContent = thread.peer; button.textContent = 'Convert to Contact'; button.type = 'button';
+            const row = doc.createElement('li'); row.className = 'thread-row';
+            const inner = doc.createElement('div'); inner.className = 'thread-button';
+            const avatarWrap = doc.createElement('span'); avatarWrap.className = 'row-avatar-wrap';
+            const avatar = doc.createElement('span'); avatar.className = 'row-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = 'L';
+            avatarWrap.append(avatar);
+            const textCol = doc.createElement('div'); textCol.className = 'thread-text';
+            const name = doc.createElement('span'); name.className = 'thread-name'; name.textContent = 'Legacy connection';
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer;
+            textCol.append(name, id);
+            const button = doc.createElement('button'); button.type = 'button'; button.className = 'legacy-convert'; button.textContent = 'Convert to Contact';
+            inner.append(avatarWrap, textCol, button);
             entry = {row, thread};
             entry.refresh = legacyHandoff(app, button, status,
               'Convert this legacy connection to a Contact using connect-agents-with-anyone. Create and share a new Event channel with this exact peer, preserve the old records, record converted_from_mesh provenance, and send the authorized final legacy upgrade notice using the legacy instructions. Do not delete old records.',
               () => ({peer_fulcra_userid:entry.thread.peer, legacy_sources:entry.thread.sources.map(({id,fulcra_userid})=>({id,fulcra_userid}))}),
               {lifecycle:detail.contextLifecycle,isCurrent:()=>!disposed && row.isConnected && !list.closest('[hidden]')});
-            row.append(label, button); legacyList.append(row); legacyRows.set(thread.peer, entry);
+            row.append(inner); legacyList.append(row); legacyRows.set(thread.peer, entry);
           }
           entry.thread = thread;
           entry.refresh();
         }
+        legacyCount.textContent = legacyRows.size ? String(legacyRows.size) : '';
         legacySection.hidden = legacyRows.size === 0;
         if (launchPending) {
           launchPending = false;

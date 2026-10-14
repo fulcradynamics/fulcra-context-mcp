@@ -74,11 +74,18 @@ const contacts = [
 // yet, so it shows under "Pending" rather than as a contact.
 const pending = channelFixture({ id: 'Event/pending-1', name: 'Dana (outbox)', description: '[mesh_identifier: "Dana"]' });
 
+// A legacy mesh outbox (pre-"connect-agents-with-anyone"): a shared
+// MomentAnnotation named "... mesh outbox", which shows under "Legacy
+// connections" as a conversion candidate rather than as a Contact.
+const legacyOutbox = { id: 'MomentAnnotation/legacy-erin', name: 'Erin mesh outbox', description: '[mesh_identifier: "Erin"]' };
+const legacyPeer = '44444444-4444-4444-4444-444444444444';
+
 export const scenario = {
-  catalog: [...contacts.flatMap(c => c.catalog), pending],
+  catalog: [...contacts.flatMap(c => c.catalog), pending, legacyOutbox],
   shares: {
     own_fulcra_userid: own,
-    outgoing: contacts.flatMap(c => c.outgoing),
+    outgoing: [...contacts.flatMap(c => c.outgoing),
+      shareFixture({ data_types: [legacyOutbox.id], with_user_ids: [legacyPeer], share_all_data: false })],
     incoming: contacts.flatMap(c => c.incoming),
   },
   rows: Object.assign({}, ...contacts.map(c => c.rows)),

@@ -46,7 +46,7 @@ addEventListener('message', ({ data: r, source }) => {
     // Slow the whole-account discovery calls so the loading spinner is visible on
     // initial load and when "Refresh contacts" is clicked; keep reads snappy.
     const slow = name === 'list_shares' || (name === 'get_data_catalog' && !args.data_type);
-    if (slow) setTimeout(() => reply(r.id, result), 5000);
+    if (slow) setTimeout(() => reply(r.id, result), 2000);
     else reply(r.id, result);
   } else if (r.method === 'ui/request-display-mode') {
     reply(r.id, { mode: r.params?.mode ?? 'fullscreen' });
