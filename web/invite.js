@@ -3,7 +3,7 @@ import { getContextLifecycle } from './native-context.js';
 const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
   + 'First show me a copyable invitation prompt for the other person to give their agent, '
-  + 'using my own verified Fulcra user ID and the mesh skill URL. Do not ask for the other user\'s ID. '
+  + 'using my own verified Fulcra user ID and the connection skill URL. Do not ask for the other user\'s ID. '
   + 'Then ask whether I want to add optional context about who or what the invite is for, '
   + 'so you can personalize the prompt, prepare a dedicated outbox, and draft an outgoing message. '
   + 'Get my go-ahead before creating data or sharing anything; do not share or post a message until the peer ID is verified.';

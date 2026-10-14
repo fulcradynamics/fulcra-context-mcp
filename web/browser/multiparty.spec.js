@@ -8,11 +8,11 @@ test('own audience names, exact addressing, provenance and safe responsive label
  await expect(ui.locator('#messages .addressed-to-others')).toHaveCount(2);
  await expect(ui.locator('#messages img, #messages script')).toHaveCount(0);
  await expect(ui.locator('.message-source').first()).toContainText('association unverified');
- await ui.getByText('About this thread',{exact:true}).click();
+ await ui.getByText('About this Agent Contact',{exact:true}).click();
  await expect(ui.getByLabel('Viewing agent name')).toHaveValue('chatgpt');
  await ui.getByLabel('Viewing agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
- expect(await page.evaluate(()=>window.calls.every(c=>['get_data_catalog','get_records','list_shares','aicq_check_status'].includes(c.name)))).toBe(true);
+ expect(await page.evaluate(()=>window.calls.every(c=>['get_data_catalog','get_records','list_shares','fulcra_check_status'].includes(c.name)))).toBe(true);
 });
 test('incoming selection remains selectable across polling and context includes sources',async({page})=>{
  const ui=await open(page);
@@ -46,8 +46,8 @@ test('send carries full expected audience; widening invalidates context and pres
  const ui=await open(page);
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Exact authorized text');
  await ui.getByRole('button',{name:'Send',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='mesh_send').length)).toBe(1);
- const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='mesh_send').arguments);
+ await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send').length)).toBe(1);
+ const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send').arguments);
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
  await ui.getByRole('button',{name:'talk with my agent about this thread',exact:true}).click();

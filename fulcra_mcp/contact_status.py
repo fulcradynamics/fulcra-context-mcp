@@ -2,7 +2,7 @@
 import json
 import re
 from datetime import datetime
-from .mesh_identifier import validate_identifier
+from .contact_identifier import validate_identifier
 
 TOKEN = '[contact_status:'
 PATTERN = re.compile(r'^\[contact_status: (\{[^\r\n]*\})\]$', re.MULTILINE)
@@ -40,7 +40,7 @@ def write_status(description, value):
         match = PATTERN.search(description)
         return description[:match.start()] + marker + description[match.end():]
     # Insert before the final label suffix; every existing byte stays unchanged.
-    from .mesh_identifier import _marker
+    from .contact_identifier import _marker
     label = _marker(description)
     index = label[0] if label else len(description)
     before = description[:index]

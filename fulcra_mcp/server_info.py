@@ -1,4 +1,4 @@
-"""The server's identity, kept in step with server.json (PLAT-617).
+"""The server's identity, kept in step with server.json.
 
 server.json at the repo root is the source of truth: the MCP Registry publishes
 it, and the Server Card served at /mcp/server-card is built from it. The

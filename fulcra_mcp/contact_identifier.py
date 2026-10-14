@@ -1,4 +1,4 @@
-"""Display-only mesh labels in an optional JSON-string description suffix.
+"""Display-only connection labels in an optional JSON-string description suffix.
 
 Never use these untrusted labels for authorization, grouping, or routing.
 """
@@ -6,7 +6,9 @@ import json
 import re
 import unicodedata
 
-TOKEN = "[mesh_identifier"
+from .connection_compatibility import IDENTIFIER_TOKEN
+
+TOKEN = IDENTIFIER_TOKEN
 PREFIX = TOKEN + ": "
 # Suffix whitespace is exactly JSON whitespace, shared with the JS parser.
 # Do not use default strip()/trim(): their Unicode whitespace sets differ.
@@ -31,18 +33,18 @@ def _marker(description: str | None) -> tuple[int, int, str] | None:
         return None
     # Decode the JSON string, not a bracket/quote regex: both can be in labels.
     if not description.startswith(PREFIX, start):
-        raise ValueError("Malformed mesh_identifier marker")
+        raise ValueError("Malformed contact identifier marker")
     try:
         value, end = json.JSONDecoder().raw_decode(description, start + len(PREFIX))
         validate_identifier(value)
     except (ValueError, TypeError) as exc:
-        raise ValueError("Malformed mesh_identifier marker") from exc
+        raise ValueError("Malformed contact identifier marker") from exc
     if description[end:end + 1] != "]" or description[end + 1:].strip(SUFFIX_WHITESPACE):
-        raise ValueError("Multiple or malformed mesh_identifier markers; expected one suffix")
+        raise ValueError("Multiple or malformed contact identifier markers; expected one suffix")
     return start, end + 1, value
 
 
-def parse_mesh_identifier(description: str | None) -> str | None:
+def parse_contact_identifier(description: str | None) -> str | None:
     marker = _marker(description)
     return marker[2] if marker else None
 
@@ -62,7 +64,7 @@ def normalize_catalog_description(description: str) -> str:
     return (prose + " " if prose else "") + description[start:end]
 
 
-def write_mesh_identifier(description: str | None, identifier: str) -> str:
+def write_contact_identifier(description: str | None, identifier: str) -> str:
     validate_identifier(identifier)
     marker = _marker(description)
     description = description or ""

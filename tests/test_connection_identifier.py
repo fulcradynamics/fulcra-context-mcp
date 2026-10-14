@@ -32,11 +32,11 @@ def api(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tool_description_only_verified_and_noop(api):
-    fn = getattr(tools, 'set_mesh_identifier')
+    fn = getattr(tools, 'set_contact_identifier')
     original = dict(api.entry)
     result = json.loads(await fn(TYPE_ID, 'Travel'))
     assert result['identifier'] == 'Travel' and result['changed'] is True
-    assert api.entry == {**original, 'description': helper().write_mesh_identifier(original['description'], 'Travel')}
+    assert api.entry == {**original, 'description': helper().write_contact_identifier(original['description'], 'Travel')}
     api.update_data_type.assert_not_called()
     writes = [c for c in api.fulcra_api.call_args_list if c.kwargs['method'] == 'PUT']
     assert len(writes) == 1
@@ -52,10 +52,10 @@ async def test_tool_description_only_verified_and_noop(api):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('change', [{'fulcra_userid': 'peer'}, {'fulcra_userid': None}, {'name': 'Not mesh'}, {'id': 'MomentAnnotation/other'}, {'deprecated': True}])
+@pytest.mark.parametrize('change', [{'fulcra_userid': 'peer'}, {'fulcra_userid': None}, {'name': 'Not connection'}, {'id': 'MomentAnnotation/other'}, {'deprecated': True}])
 async def test_tool_ownership_and_scope(api, change):
     api.entry.update(change)
-    result = await getattr(tools, 'set_mesh_identifier')(TYPE_ID, 'Travel')
+    result = await getattr(tools, 'set_contact_identifier')(TYPE_ID, 'Travel')
     assert 'verified' not in result.lower()
     api.update_data_type.assert_not_called()
 
@@ -63,11 +63,11 @@ async def test_tool_ownership_and_scope(api, change):
 @pytest.mark.asyncio
 async def test_tool_ambiguous_resolution_and_malformed_marker(api):
     api.resolve_data_type.side_effect = lambda *a, **kw: [dict(api.entry), dict(api.entry)]
-    assert 'ambiguous' in (await getattr(tools, 'set_mesh_identifier')(TYPE_ID, 'Travel')).lower()
+    assert 'ambiguous' in (await getattr(tools, 'set_contact_identifier')(TYPE_ID, 'Travel')).lower()
     api.update_data_type.assert_not_called()
     api.resolve_data_type.side_effect = lambda *a, **kw: [dict(api.entry)]
     api.entry['description'] = 'Prose [mesh_identifier: bad]'
-    assert 'malformed' in (await getattr(tools, 'set_mesh_identifier')(TYPE_ID, 'Travel')).lower()
+    assert 'malformed' in (await getattr(tools, 'set_contact_identifier')(TYPE_ID, 'Travel')).lower()
     api.update_data_type.assert_not_called()
 
 
@@ -75,14 +75,14 @@ async def test_tool_ambiguous_resolution_and_malformed_marker(api):
 async def test_tool_readback_mismatch_is_not_success(api):
     original_transport = api.fulcra_api.side_effect
     api.fulcra_api.side_effect = lambda path, **kw: original_transport(path, **{**kw, 'method': 'GET'})
-    result = await getattr(tools, 'set_mesh_identifier')(TYPE_ID, 'Travel')
+    result = await getattr(tools, 'set_contact_identifier')(TYPE_ID, 'Travel')
     assert 'could not verify' in result.lower()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('value', ['MomentAnnotation/not-a-uuid', 'Metric/12345678-1234-4234-8234-123456789abc', '12345678-1234-4234-8234-123456789abc'])
 async def test_tool_rejects_invalid_id_without_lookup(api, value):
-    await getattr(tools, 'set_mesh_identifier')(value, 'Travel')
+    await getattr(tools, 'set_contact_identifier')(value, 'Travel')
     api.resolve_data_type.assert_not_called()
     api.update_data_type.assert_not_called()
 
@@ -94,48 +94,48 @@ async def test_tool_requires_auth(monkeypatch):
         raise ToolError('not connected')
     monkeypatch.setattr(tools, 'get_fulcra_object', denied)
     with pytest.raises(ToolError, match='not connected'):
-        await getattr(tools, 'set_mesh_identifier')(TYPE_ID, 'Travel')
+        await getattr(tools, 'set_contact_identifier')(TYPE_ID, 'Travel')
 
 import pytest
 
 
 def helper():
-    return importlib.import_module('fulcra_mcp.mesh_identifier')
+    return importlib.import_module('fulcra_mcp.contact_identifier')
 
 
 def test_marker_roundtrip_preserves_prose_and_json():
     h = helper()
     prose = 'Original prose [brackets] "quoted"\n  unchanged. '
     label = 'Trip  ["Paris"] \\ café'
-    description = h.write_mesh_identifier(prose, label)
+    description = h.write_contact_identifier(prose, label)
     assert description.startswith(prose)
-    assert h.parse_mesh_identifier(description) == label
-    assert h.write_mesh_identifier(description, label) == description
-    assert h.write_mesh_identifier(description, 'New').startswith(prose)
+    assert h.parse_contact_identifier(description) == label
+    assert h.write_contact_identifier(description, label) == description
+    assert h.write_contact_identifier(description, 'New').startswith(prose)
     # The catalog historically normalizes all whitespace.
     import re
-    assert h.parse_mesh_identifier(re.sub(r'\s+', ' ', description).strip()) == label
+    assert h.parse_contact_identifier(re.sub(r'\s+', ' ', description).strip()) == label
 
 
 @pytest.mark.parametrize('label', ['', ' ', ' x', 'x ', 'x\ny', 'x\ty', 'x\x00y', 'x\x7fy', 'x\u2028y', 'x\u200ey', 'x' * 81])
 def test_invalid_identifiers(label):
     with pytest.raises(ValueError):
-        helper().write_mesh_identifier('prose', label)
+        helper().write_contact_identifier('prose', label)
 
 
 @pytest.mark.parametrize('description', ['[mesh_identifier: bad]', '[mesh_identifier: "a"] trailing', '[mesh_identifier: "a"] [mesh_identifier: "b"]', '[mesh_identifier: "unterminated]', '[mesh_identifier: 12]', '[mesh_identifier: ""]', '[mesh_identifier "bad"]'])
 def test_malformed_ambiguous_fail_closed(description):
     with pytest.raises(ValueError):
-        helper().write_mesh_identifier(description, 'New')
+        helper().write_contact_identifier(description, 'New')
     with pytest.raises(ValueError):
-        helper().parse_mesh_identifier(description)
+        helper().parse_contact_identifier(description)
 
 
 def test_catalog_normalization_keeps_exact_marker_value():
     label = 'Trip  ["Paris"]'
     raw = 'Prose\n  folded.\n[mesh_identifier: ' + json.dumps(label) + ']'
     slim = tools._slim_entry({'id': TYPE_ID, 'description': raw})
-    assert helper().parse_mesh_identifier(slim['description']) == label
+    assert helper().parse_contact_identifier(slim['description']) == label
     assert slim['description'].startswith('Prose folded. ')
     malformed = 'Prose [mesh_identifier: "bad\nlabel"]'
     # Do not turn an invalid marker into a valid label by normalizing it.
@@ -145,5 +145,5 @@ def test_catalog_normalization_keeps_exact_marker_value():
 def test_marker_limits_and_embedded_marker_text():
     h = helper()
     for value in ['x' * 80, '🦊' * 80, '[mesh_identifier: "nested"]']:
-        assert h.parse_mesh_identifier(h.write_mesh_identifier(None, value)) == value
-    assert h.parse_mesh_identifier('ordinary prose') is None
+        assert h.parse_contact_identifier(h.write_contact_identifier(None, value)) == value
+    assert h.parse_contact_identifier('ordinary prose') is None

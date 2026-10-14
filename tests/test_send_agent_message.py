@@ -1,4 +1,4 @@
-"""Canonical MCP sender and mesh_send share authorization and readback."""
+"""Canonical MCP sender and agent_connection_send share authorization and readback."""
 import json
 import pytest
 from fulcra_mcp import tools

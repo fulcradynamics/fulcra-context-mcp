@@ -8,9 +8,10 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
 from . import tools
+from .connection_compatibility import CHECK_STATE_ROOT
 
-settings_mcp = FastMCP("Mesh check settings")
-STATE_ROOT = "/agent/chatgpt/mesh-checks/"
+settings_mcp = FastMCP("Agent Contact check settings")
+STATE_ROOT = CHECK_STATE_ROOT
 SCHEDULE_GUIDANCE = 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”'
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 SETTINGS_OUTPUT = {
@@ -80,7 +81,7 @@ def check_status(configuration_id: str | None = None) -> dict:
 
 @settings_mcp.tool(app={"visibility": ["app", "model"]}, annotations=READ_ONLY,
                    output_schema=SETTINGS_OUTPUT)
-def aicq_settings_read() -> dict:
+def fulcra_settings_read() -> dict:
     """Load current private reply/status/notification preferences each check; no scheduler edits."""
     from . import contact_preferences as policy
     try:
@@ -92,7 +93,7 @@ def aicq_settings_read() -> dict:
              if status["status"] == "choose_configuration" else status["label"])
     return {"schema": {"type": "object", "properties": policy.SCHEMA}, "values": values,
             "layout": [
-                {"kind": "group", "title": "Last mesh check: " + label, "items": []},
+                {"kind": "group", "title": "Last contact check: " + label, "items": []},
                 {"kind": "group", "title": SCHEDULE_GUIDANCE, "items": []},
                 {"kind": "group", "title": "Contact behavior", "items": [
                     {"kind": "property", "property": key} for key in policy.SCHEMA]},
@@ -101,7 +102,7 @@ def aicq_settings_read() -> dict:
 
 @settings_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
     "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
-def aicq_settings_update(set: dict) -> dict:
+def fulcra_settings_update(set: dict) -> dict:
     """Save explicitly chosen global preferences; enabling replies/status requires user consent.
 
     No messages, checkpoint changes or scheduler edits. Existing task restrictions
@@ -119,14 +120,14 @@ def aicq_settings_update(set: dict) -> dict:
 
 
 def _owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
-    from . import mesh
+    from . import connection
     from .mentions import _compatible_schema
-    if not re.fullmatch('Event/' + mesh.UUID_PATTERN, data_type) or not mesh._uuid(peer_userid):
+    if not re.fullmatch('Event/' + connection.UUID_PATTERN, data_type) or not connection._uuid(peer_userid):
         raise ValueError('Exact Event channel and peer UUID required.')
     own = api.get_fulcra_userid()
-    if not mesh._uuid(own) or own == peer_userid:
+    if not connection._uuid(own) or own == peer_userid:
         raise ValueError('Distinct authenticated owner required.')
-    entry = mesh._authorize(api, own, peer_userid, data_type, expected_peer_userids)
+    entry = connection._authorize(api, own, peer_userid, data_type, expected_peer_userids)
     fields, required = tools._user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
     if (entry.get('record_spec', {}).get('type') != 'event'
             or not _compatible_schema({'fields': fields, 'required_fields': required})):
@@ -184,6 +185,6 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
 
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
-def aicq_check_status(configuration_id: str | None = None) -> dict:
+def fulcra_check_status(configuration_id: str | None = None) -> dict:
     """Read a selected private check configuration; omit the ID to discover choices."""
     return check_status(configuration_id)

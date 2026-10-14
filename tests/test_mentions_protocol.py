@@ -65,37 +65,37 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
 
         initialized = (await rpc("initialize", INITIALIZE["params"] | {"protocolVersion": requested}))["result"]
         assert initialized["protocolVersion"] == negotiated
-        assert initialized["capabilities"]["experimental"]["openai/mentions"] == {"searchTool": "mesh_mentions_search"}
+        assert initialized["capabilities"]["experimental"]["openai/mentions"] == {"searchTool": "agent_contacts_search"}
         listed = (await rpc("tools/list"))["result"]["tools"]
-        tool = next(t for t in listed if t["name"] == "mesh_mentions_search")
+        tool = next(t for t in listed if t["name"] == "agent_contacts_search")
         assert "openai/extensions" not in tool["_meta"]
         assert tool["_meta"]["ui"] == {"visibility": ["app"]}
         templates = (await rpc("resources/templates/list"))["result"]["resourceTemplates"]
-        assert any(t["uriTemplate"] == "mesh://threads/id-{peer}" for t in templates)
-        call = {"name": "mesh_mentions_search", "arguments": {"query": ""}}
+        assert any(t["uriTemplate"] == "contacts://threads/id-{peer}" for t in templates)
+        call = {"name": "agent_contacts_search", "arguments": {"query": ""}}
         result = (await rpc("tools/call", call))["result"]
         assert result["content"] == []
         assert not result.get("isError")
         item, peer_item = result["structuredContent"]["items"]
         assert item == LIST_ITEM
-        assert peer_item["uri"] == "mesh://threads/id-peer%2F%252F"
+        assert peer_item["uri"] == "contacts://threads/id-peer%2F%252F"
         direct_read = {"uri": item["uri"]}
         descriptor, = (await rpc("resources/read", direct_read))["result"]["contents"]
         assert descriptor["uri"] == item["uri"]
         assert descriptor["mimeType"] == item["mimeType"]
-        assert json.loads(descriptor["text"])["open_tool"] == {"name": "mesh_threads_open", "arguments": {}}
+        assert json.loads(descriptor["text"])["open_tool"] == {"name": "agent_contacts_open", "arguments": {}}
         # Discovery failures must not masquerade as an empty peer list.
         factory.side_effect = RuntimeError("backend offline")
-        for query in ["anyquery", "Meshes", "unmatched"]:
-            assert (await rpc("tools/call", {"name": "mesh_mentions_search", "arguments": {"query": query}}))["result"]["isError"]
+        for query in ["anyquery", "Agent Contacts", "unmatched"]:
+            assert (await rpc("tools/call", {"name": "agent_contacts_search", "arguments": {"query": query}}))["result"]["isError"]
         factory.side_effect = lambda **kwargs: fake if kwargs["credentials"] is creds else other
         # Old references continue to resolve only with current account authorization.
-        read = {"uri": "mesh://threads/id-peer%2F%252F"}
+        read = {"uri": "contacts://threads/id-peer%2F%252F"}
         resource, = (await rpc("resources/read", read))["result"]["contents"]
         assert resource["mimeType"] == "application/json"
         assert json.loads(resource["text"]) == {
             "peer_fulcra_userid": "peer/%2F", "title": "peer/%2F",
-            "open_tool": {"name": "mesh_conversation_open", "arguments": {"peer_fulcra_userid": "peer/%2F"}}}
+            "open_tool": {"name": "agent_contact_open", "arguments": {"peer_fulcra_userid": "peer/%2F"}}}
 
         # A new account context on the next request must not inherit discovery.
         http.headers["Authorization"] = "Bearer mcp_other"

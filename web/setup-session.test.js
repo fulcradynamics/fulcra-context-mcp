@@ -19,5 +19,5 @@ test('linked handoff retains exact request and context with explicit navigation 
   assert.match(text, /Open the original setup session/);
   assert.match(text, /not authority/);
   assert.equal(sessionHandoff(request, context), request);
-  assert.match(sessionHandoff('', context, url), /Let’s talk about this mesh thread/);
+  assert.match(sessionHandoff('', context, url), /Let’s talk about this connection thread/);
 });

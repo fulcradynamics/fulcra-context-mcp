@@ -312,7 +312,7 @@ async def wait_until(check, what, seconds=60):
 
 
 async def test_connection_channel_lifecycle(call, local_fulcra):
-    """The tools a private agent-to-agent channel needs (PLAT-668): a record id
+    """The tools a private agent-to-agent channel needs: a record id
     from record_data, resending it, delete_records, an ended share reported as
     such, and declining someone's share with leave_share."""
     peer_id = os.environ.get("FULCRA_LOCAL_AUDIT_PEER")

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverThreads, conversionSources } from './meshes.js';
+import { discoverThreads, conversionSources } from './connections-discovery.js';
 import { messageText } from './messages.js';
-import { matchesPost } from './mesh-send.js';
+import { matchesPost } from './connection-send.js';
 import schema from '../tests/fixtures/connection-schema.json' with { type: 'json' };
 
 const own = '00000000-0000-4000-8000-000000000001', peer = '00000000-0000-4000-8000-000000000002';

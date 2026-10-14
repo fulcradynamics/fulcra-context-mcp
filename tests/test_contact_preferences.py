@@ -27,16 +27,16 @@ def storage(fake_fulcra):
 async def test_native_defaults_and_verified_partial_update(storage):
     api, files = storage
     async with Client(mcp) as client:
-        initial = (await client.call_tool('aicq_settings_read', {})).structured_content
+        initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
         assert initial['values']['autonomous_replies'] is False
         assert initial['values']['unanswered_days'] == 2
         assert initial['values']['attention_waiting'] is True
         assert initial['values']['attention_overdue'] is True
         assert initial['values']['attention_high_priority'] is True
         api.upload_file.assert_not_called()
-        saved = (await client.call_tool('aicq_settings_update', {'set': {'special_instructions': 'Keep replies brief.'}})).structured_content
+        saved = (await client.call_tool('fulcra_settings_update', {'set': {'special_instructions': 'Keep replies brief.'}})).structured_content
         assert saved['verified'] is True
-        current = (await client.call_tool('aicq_settings_read', {})).structured_content
+        current = (await client.call_tool('fulcra_settings_read', {})).structured_content
         assert current['values']['special_instructions'] == 'Keep replies brief.'
         assert current['values']['autonomous_replies'] is False
         assert len(files) == 1
@@ -49,7 +49,7 @@ async def test_native_defaults_and_verified_partial_update(storage):
 async def test_invalid_updates_do_not_write(storage, changes):
     api, _ = storage
     async with Client(mcp) as client:
-        result = await client.call_tool('aicq_settings_update', {'set': changes}, raise_on_error=False)
+        result = await client.call_tool('fulcra_settings_update', {'set': changes}, raise_on_error=False)
         assert result.is_error
     api.upload_file.assert_not_called()
 
@@ -57,11 +57,11 @@ async def test_invalid_updates_do_not_write(storage, changes):
 async def test_peer_membership_notification_default_and_persistence(storage):
     api, _ = storage
     async with Client(mcp) as client:
-        initial = (await client.call_tool('aicq_settings_read', {})).structured_content
+        initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
         assert initial['values']['attention_peer_membership_announcements'] is True
-        result = await client.call_tool('aicq_settings_update', {'set': {'attention_peer_membership_announcements': False}})
+        result = await client.call_tool('fulcra_settings_update', {'set': {'attention_peer_membership_announcements': False}})
         assert result.structured_content['verified'] is True
-        current = (await client.call_tool('aicq_settings_read', {})).structured_content
+        current = (await client.call_tool('fulcra_settings_read', {})).structured_content
         assert current['values']['attention_peer_membership_announcements'] is False
         assert current['values']['autonomous_replies'] is False
 

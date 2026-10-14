@@ -19,7 +19,8 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
 from .credentials import get_fulcra_object
-from .mesh_identifier import normalize_catalog_description, parse_mesh_identifier, validate_identifier, write_mesh_identifier
+from .contact_identifier import normalize_catalog_description, parse_contact_identifier, validate_identifier, write_contact_identifier
+from .connection_compatibility import LEGACY_OUTBOX_PATTERN
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
@@ -346,9 +347,9 @@ async def create_data_type(
 
 
 @tools_mcp.tool(app={"visibility": ["model", "app"]},
-                annotations={"title": "Send Mesh Message", "readOnlyHint": False,
+                annotations={"title": "Send Agent Contact Message", "readOnlyHint": False,
                              "destructiveHint": False, "idempotentHint": False})
-async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
+async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
                     recipients: list[str] | None = None,
                     kind: Literal["message", "reply", "ack"] = "message",
                     in_reply_to: str | None = None,
@@ -381,7 +382,7 @@ async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: 
         slug: Topic; omitted messages use chat, answers inherit.
         artifacts: File references (path, optional version and owner), not share requests.
     """
-    from .mesh import send
+    from .connection import send
     fulcra = get_fulcra_object()
     return await asyncio.to_thread(send, fulcra, peer_userid=peer_userid, outbox=outbox,
                                    sender=sender, body=body, mid=mid, recipients=recipients,
@@ -390,20 +391,20 @@ async def mesh_send(peer_userid: str, outbox: str, sender: str, body: str, mid: 
                                    artifacts=artifacts)
 
 
-def _own_mesh_outbox(fulcra, data_type: str, own: str) -> dict:
+def _own_legacy_outbox(fulcra, data_type: str, own: str) -> dict:
     entries = fulcra.resolve_data_type(data_type, fulcra_userid=own)
     if len(entries) != 1:
-        raise ValueError("Missing or ambiguous own Mesh Outbox catalog entry")
+        raise ValueError("Missing or ambiguous own legacy outbox catalog entry")
     entry = entries[0]
     if (entry.get("id") != data_type or entry.get("fulcra_userid") != own
             or not isinstance(entry.get("name"), str)
-            or not re.search(r"\bmesh outbox\b", entry["name"], re.IGNORECASE)
+            or not re.search(LEGACY_OUTBOX_PATTERN, entry["name"], re.IGNORECASE)
             or entry.get("deprecated")):
-        raise ValueError("Only the authenticated user's active MomentAnnotation Mesh Outbox can be labeled")
+        raise ValueError("Only the authenticated user's active MomentAnnotation legacy outbox can be labeled")
     return entry
 
 
-def _mesh_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
+def _legacy_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
     """Read the legacy resource; never invent missing replacement metadata."""
     row = json.loads(fulcra.fulcra_api(path, method="GET", authenticated=True))
     fields = ("name", "description", "annotation_type", "spec", "measurement_spec", "tags")
@@ -426,11 +427,11 @@ def _mesh_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
     return {key: row[key] for key in fields}
 
 
-@tools_mcp.tool(annotations={"title": "Set Mesh Identifier", "readOnlyHint": False,
+@tools_mcp.tool(annotations={"title": "Set Agent Contact Identifier", "readOnlyHint": False,
                             "destructiveHint": False, "idempotentHint": True})
 @_friendly_http_errors
-async def set_mesh_identifier(data_type: str, identifier: str) -> str:
-    """Set a display-only label on your own Event channel or legacy Mesh Outbox.
+async def set_contact_identifier(data_type: str, identifier: str) -> str:
+    """Set a display-only label on your own Event channel or legacy outbox.
 
     Changes only its description marker, preserving prose, type name, records
     and shares. Requires an unambiguous own catalog entry; reads back before
@@ -453,10 +454,10 @@ async def set_mesh_identifier(data_type: str, identifier: str) -> str:
     if not isinstance(own, str) or not own:
         return "Could not establish the authenticated user's identity"
     if base == 'Event':
-        from .mesh import channel_entry
+        from .connection import channel_entry
         try:
             original = channel_entry(fulcra, own, data_type)
-            description = write_mesh_identifier(original.get('description'), identifier)
+            description = write_contact_identifier(original.get('description'), identifier)
             changed = description != original.get('description')
             if changed:
                 fulcra.update_data_type('Event', type_id, {'description': description})
@@ -469,9 +470,9 @@ async def set_mesh_identifier(data_type: str, identifier: str) -> str:
             return str(exc)
     path = f"/user/v1alpha1/annotation/{type_id}"
     try:
-        _own_mesh_outbox(fulcra, data_type, own)
-        original = _mesh_annotation_body(fulcra, path, type_id, own)
-        description = write_mesh_identifier(original["description"], identifier)
+        _own_legacy_outbox(fulcra, data_type, own)
+        original = _legacy_annotation_body(fulcra, path, type_id, own)
+        description = write_contact_identifier(original["description"], identifier)
     except (ValueError, TypeError, KeyError) as exc:
         return str(exc)
     changed = description != original["description"]
@@ -482,14 +483,14 @@ async def set_mesh_identifier(data_type: str, identifier: str) -> str:
         fulcra.fulcra_api(path, method="PUT", data=body, authenticated=True)
     try:
         # The SDK follows the PUT's 303; that response is NOT this readback.
-        current = _mesh_annotation_body(fulcra, path, type_id, own)
-        if current != body or parse_mesh_identifier(current["description"]) != identifier:
+        current = _legacy_annotation_body(fulcra, path, type_id, own)
+        if current != body or parse_contact_identifier(current["description"]) != identifier:
             raise ValueError("annotation metadata readback mismatch")
-        catalog = _own_mesh_outbox(fulcra, data_type, own)
-        if parse_mesh_identifier(catalog.get("description")) != identifier:
+        catalog = _own_legacy_outbox(fulcra, data_type, own)
+        if parse_contact_identifier(catalog.get("description")) != identifier:
             raise ValueError("catalog identifier readback mismatch")
     except (ValueError, TypeError, KeyError) as exc:
-        return f"Could not verify mesh identifier after readback: {exc}. Check the catalog before retrying."
+        return f"Could not verify connection identifier after readback: {exc}. Check the catalog before retrying."
     return json.dumps({"data_type": data_type, "fulcra_userid": own,
                        "identifier": identifier, "changed": changed, "verified": True})
 
@@ -513,22 +514,22 @@ async def set_contact_status(data_type: str, peer_userid: str, attention: bool, 
         reason: Neutral trimmed single-line Unicode label, 1..80 code points, without control characters.
     """
     from datetime import datetime, timezone
-    from . import mesh
+    from . import connection
     from .contact_status import write_status, parse_status, validate_status
     from .mentions import _compatible_schema
 
     result = {'data_type': data_type, 'peer_userid': peer_userid, 'verified': False}
     try:
-        if not re.fullmatch('Event/' + mesh.UUID_PATTERN, data_type) or not mesh._uuid(peer_userid):
+        if not re.fullmatch('Event/' + connection.UUID_PATTERN, data_type) or not connection._uuid(peer_userid):
             raise ValueError('Use an exact Event/<uuid> channel and peer UUID.')
         assessment = dict(attention=attention, reason=reason,
                           assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
         validate_status(assessment)
         api = get_fulcra_object()
         own = api.get_fulcra_userid()
-        if not mesh._uuid(own) or own == peer_userid:
+        if not connection._uuid(own) or own == peer_userid:
             raise ValueError('Distinct authenticated owner and peer required.')
-        original = mesh._authorize(api, own, peer_userid, data_type)
+        original = connection._authorize(api, own, peer_userid, data_type)
         fields, required = _user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
         if (original.get('record_spec', {}).get('type') != 'event'
                 or not _compatible_schema({'fields': fields, 'required_fields': required})):
@@ -537,7 +538,7 @@ async def set_contact_status(data_type: str, peer_userid: str, attention: bool, 
         if api.get_fulcra_userid() != own:
             raise ValueError('Authenticated account changed.')
         api.update_data_type('Event', data_type.split('/')[1], {'description': description})
-        current = mesh._authorize(api, own, peer_userid, data_type)
+        current = connection._authorize(api, own, peer_userid, data_type)
         # Catalog update timestamps may legitimately change. The SDK PUT sends
         # only description; verify target content plus stable type metadata.
         if (current.get('description') != description
@@ -927,7 +928,7 @@ async def send_agent_message(
         target_peer_userid: Exact owner of a multiparty reply/ack target; never inferred from sender.
     """
     from uuid import uuid4
-    from .mesh import send, _uuid, UUID_PATTERN
+    from .connection import send, _uuid, UUID_PATTERN
     mid = record_id if record_id is not None else str(uuid4())
     fulcra = get_fulcra_object()
     def checked_send():

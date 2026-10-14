@@ -1,11 +1,12 @@
-import { parseMeshIdentifier, threadIdentifier, threadTitle } from './mesh-identifier.js';
+import { parseContactIdentifier, threadIdentifier, threadTitle } from './contact-identifier.js';
+import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX } from './connection-compatibility.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
 
 const prefix = 'Available data types, grouped by compatible tool: ';
 
-export function parseMeshes(result) {
+export function parseConnections(result) {
   if (result.isError) throw new Error('Tool failed');
   const text = result.structuredContent?.result ?? result.content?.find(p => p.type === 'text')?.text;
   if (typeof text !== 'string' || !text.startsWith(prefix)) throw new Error('Unexpected result');
@@ -25,15 +26,15 @@ export function parseMeshes(result) {
 }
 
 export const isConnection = e => e.id.startsWith('Event/') && e.description?.startsWith('connect-agents-with-anyone channel');
-const isLegacy = e => e.id.startsWith('MomentAnnotation/') && /\bmesh outbox\b/i.test(e.name);
+const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
 const namedShare = s => s.datashare_name?.startsWith('connect-agents-with-anyone');
 const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
 export function conversionSources(description, own, peer) {
-  const lines = (description ?? '').split('\n').filter(l => l.startsWith('converted_from_mesh: '));
+  const lines = (description ?? '').split('\n').filter(l => l.startsWith(CONVERSION_PREFIX));
   if (lines.length !== 1) return [];
   try {
-    const refs = JSON.parse(lines[0].slice('converted_from_mesh: '.length));
+    const refs = JSON.parse(lines[0].slice(CONVERSION_PREFIX.length));
     const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
     if (!Array.isArray(refs) || refs.length > 32 || !refs.every(r => r && new RegExp('^MomentAnnotation/' + uuid + '$').test(r.id)
       && [own, peer].includes(r.fulcra_userid))) return [];
@@ -66,7 +67,7 @@ function directRecipients(share) {
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_data_catalog', {}).then(parseMeshes),
+    call('get_data_catalog', {}).then(parseConnections),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
   if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
@@ -84,7 +85,7 @@ export async function discoverThreads(app) {
     seen.add(key);
     let peer = owner;
     const direction = owner === own ? 'Outgoing' : 'Incoming';
-    const identifier = parseMeshIdentifier(entry.description);
+    const identifier = parseContactIdentifier(entry.description);
     const source = { id: entry.id, name: entry.name, fulcra_userid: owner, direction,
       ...(identifier ? { identifier } : {}) };
     const connection = isConnection(entry);
@@ -113,7 +114,7 @@ export async function discoverThreads(app) {
       omitted++; continue;
     }
     if (connection) {
-      const exact = entry.fields ? [entry] : parseMeshes(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
+      const exact = entry.fields ? [entry] : parseConnections(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
       const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
       if (!schema || !compatibleSchema(schema)) { omitted++; continue; }
       const setupSession = owner === own && parseSetupSession(entry.description);
@@ -178,7 +179,7 @@ export async function discoverThreads(app) {
   return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
 }
 
-export async function loadMeshes(app, status, list, onSelect) {
+export async function loadConnections(app, status, list, onSelect) {
   status.textContent = 'Loading threads — calling get_data_catalog/list_shares…';
   list.replaceChildren();
   try {

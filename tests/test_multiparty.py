@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 import pytest
-from fulcra_mcp import mesh
+from fulcra_mcp import connection
 from test_connection_send import api, send, OWN, PEER, OUT, TARGET
 
 OTHER = '00000000-0000-4000-8000-000000000007'

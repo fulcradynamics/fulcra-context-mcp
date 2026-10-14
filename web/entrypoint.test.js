@@ -7,7 +7,7 @@ for (const presentation of ['global', 'thread', 'threads']) {
     test(`direct startup requires both server markers: ${presentation}/${startup}`, () => {
       const app = { addEventListener() {} };
       const launch = receiveEntrypoint(app, { querySelector: selector => ({
-        content: selector.includes('mesh-presentation') ? presentation : startup,
+        content: selector.includes('connection-presentation') ? presentation : startup,
       }) });
       assert.equal(launch.directResource, presentation === 'threads' && startup === 'resource');
     });

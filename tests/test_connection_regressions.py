@@ -5,7 +5,7 @@ from urllib.error import HTTPError
 
 import pytest
 from fulcra_api.connections import CHANNEL_FIELDS
-from fulcra_mcp import mesh, mentions, tools
+from fulcra_mcp import connection, mentions, tools
 from test_connection_send import API, OWN, PEER, OUT, MID
 
 
@@ -26,9 +26,9 @@ async def test_timeout_then_authorization_stop_is_emitted_nonretryable(monkeypat
         raise TimeoutError()
     api.record_data_type = write
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
-    monkeypatch.setattr(mesh, 'RETRY_DELAY', 0)
-    monkeypatch.setattr(mesh.records, 'get_records', lambda *a, **kw: [])
-    result = await tools.mesh_send(peer_userid=PEER, outbox=OUT, sender='test', body='hello', mid=MID)
+    monkeypatch.setattr(connection, 'RETRY_DELAY', 0)
+    monkeypatch.setattr(connection.records, 'get_records', lambda *a, **kw: [])
+    result = await tools.agent_connection_send(peer_userid=PEER, outbox=OUT, sender='test', body='hello', mid=MID)
     assert result['status'] == 'uncertain'
     assert len(writes) == 1
     assert result.get('retryable') is False

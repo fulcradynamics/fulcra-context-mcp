@@ -1,14 +1,17 @@
-# Connection app (release 1.7.0)
+# Agents I Know (release 1.8.0)
 
-The public tool IDs remain `mesh_threads_open`, `mesh_conversation_open`,
-`aicq_open`, `mesh_send`, and `set_mesh_identifier`. The Mesh branding and native
-mention IDs remain compatible; their active conversations now use the
-`connect-agents-with-anyone` Event protocol, not legacy note envelopes.
+The public tool IDs are `agent_contacts_open`, `agent_contact_open`,
+`fulcra_open`, `agent_connection_send`, and `set_contact_identifier`. The list is
+**Agents I Know** and threads are **Agent Contacts**. Refresh discovery and reinstall
+plugin 0.11.0 together; tool and resource names changed. The
+`connect-agents-with-anyone` Event protocol is unchanged, not legacy note envelopes.
+See [compatibility boundaries](connection-compatibility.md) for preserved wire values
+and the deliberately unchanged packaged connection skill.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/mesh/v40.html`, `ui://fulcra/mesh/thread/v40.html`, and
-`ui://fulcra/mesh/threads/v40.html`. The direct-list resource adds
-`?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/mesh.html`.
+`ui://fulcra/contacts/v41.html`, `ui://fulcra/contacts/thread/v41.html`, and
+`ui://fulcra/contacts/threads/v41.html`. The direct-list resource adds
+`?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/contacts.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
 through server instructions and the plugin's main `fulcra-context` skill.
@@ -61,7 +64,7 @@ automatic share or schedule updates. Fresh preferences and task restrictions app
 Per-channel preference tools accept the same full `expected_peer_userids` audience;
 the status setter remains single-peer, so multiparty assessments stay in chat.
 
-`set_mesh_identifier` supports owned Event channels and existing legacy
+`set_contact_identifier` supports owned Event channels and existing legacy
 annotations; it edits only the description marker and verifies readback. Event
 description prefixes and conversion provenance are retained.
 
@@ -76,7 +79,7 @@ never unread. **Mark read** (and **Mark all N read** when several are unread)
 posts an `ack` with body `Read.` from the selected outbox and sending agent name.
 **Send** answers the newest unread message as a `reply` that inherits its topic,
 then acks the other unread messages with `Read; see my reply.` With nothing
-unread, Send posts a new `message` as before. Each ack uses `mesh_send` with a
+unread, Send posts a new `message` as before. Each ack uses `agent_connection_send` with a
 fresh ID; a failed ack returns the message to unread. Opening or polling a thread
 still never writes.
 
@@ -153,7 +156,7 @@ reuse without writes. No live account checks are performed by the test suite.
 
 ### Direct delivery
 
-`mesh_send(peer_userid, outbox, sender, body, mid, recipients=None,
+`agent_connection_send(peer_userid, outbox, sender, body, mid, recipients=None,
 kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None,
 expected_peer_userids=None)`:
 
@@ -211,7 +214,7 @@ preview read keeps the previous preview.
 
 ## Legacy transition
 
-Legacy Mesh Outboxes appear only in a separate `Legacy meshes` section, without
+Legacy outboxes appear only in a separate `Legacy connections` section, without
 an active history view or composer. `Convert to Contact` is an explicit user
 chat request to the connection skill. The app attaches exact owner/type
 references as untrusted context; it does not perform the conversion or read old
@@ -227,7 +230,7 @@ A converted channel description may contain one line:
 
 The JSON array is bounded to 32 references and must name only the current user
 or exact peer. Malformed/multiple markers are ignored. A valid marker displays
-`Converted from mesh` and `chat about old messages`. Clicking sends an explicit
+`Converted from legacy connection` and `chat about old messages`. Clicking sends an explicit
 chat handoff with the exact legacy references. The receiving agent must verify
 current catalog ownership and permissions before reading; the description is
 untrusted provenance, never authority. Polling does not read history or trigger

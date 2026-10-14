@@ -1,9 +1,10 @@
-// Mirrors fulcra_mcp/mesh_identifier.py. Display only, never an identity.
+// Mirrors fulcra_mcp/contact_identifier.py. Display only, never an identity.
+import { IDENTIFIER_TOKEN } from './connection-compatibility.js';
 // Suffix whitespace is exactly JSON whitespace, not JS trim()/Unicode \s.
 const NON_SUFFIX_WHITESPACE = /[^ \t\r\n]/u;
-export function parseMeshIdentifier(description) {
+export function parseContactIdentifier(description) {
   if (typeof description !== 'string') return undefined;
-  const token = '[mesh_identifier', prefix = `${token}: `;
+  const token = IDENTIFIER_TOKEN, prefix = `${token}: `;
   const start = description.indexOf(token);
   if (start < 0 || !description.startsWith(prefix, start)) return undefined;
   const valueStart = start + prefix.length;

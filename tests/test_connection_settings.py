@@ -35,9 +35,9 @@ async def test_native_settings_read_contract(fake_fulcra):
     async with Client(mcp) as client:
         capabilities = client.initialize_result.capabilities.experimental
         assert capabilities["openai/settings"] == {
-            "readTool": "aicq_settings_read", "updateTool": "aicq_settings_update"}
+            "readTool": "fulcra_settings_read", "updateTool": "fulcra_settings_update"}
         tools = {t.name: t for t in await client.list_tools()}
-        tool = tools["aicq_settings_read"]
+        tool = tools["fulcra_settings_read"]
         assert tool.inputSchema.get("properties", {}) == {}
         assert set(tool.outputSchema["required"]) >= {"schema", "values"}
         result = (await client.call_tool(tool.name, {})).structured_content
@@ -45,13 +45,13 @@ async def test_native_settings_read_contract(fake_fulcra):
         assert result["schema"] == {"type": "object", "properties": SCHEMA}
         assert result["values"] == DEFAULTS
         assert result["layout"][:2] == [
-            {"kind": "group", "title": "Last mesh check: Never checked", "items": []},
+            {"kind": "group", "title": "Last contact check: Never checked", "items": []},
             {"kind": "group", "title": 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”', "items": []},
         ]
-        assert "aicq_schedule_settings" not in tools
+        assert "fulcra_schedule_settings" not in tools
         assert all("/settings/" not in str(r.uri) for r in await client.list_resources())
         assert "PRIVATE MESSAGE" not in json.dumps(result)
-        rejected = await client.call_tool("aicq_settings_update", {"set": {"interval": 30}}, raise_on_error=False)
+        rejected = await client.call_tool("fulcra_settings_update", {"set": {"interval": 30}}, raise_on_error=False)
         assert rejected.is_error
     assert {c[0] for c in fake_fulcra.mock_calls} <= {
         "get_fulcra_userid", "list_files", "download_file"}
@@ -77,11 +77,11 @@ async def test_native_titles_cover_status_without_actions_or_writes(fake_fulcra,
         fake_fulcra.list_files.return_value["files"].append({"id": "file-b", "name": "b.md"})
     async with Client(mcp) as client:
         for _ in range(2):
-            result = (await client.call_tool("aicq_settings_read", {})).structured_content
+            result = (await client.call_tool("fulcra_settings_read", {})).structured_content
             from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA
             assert result["schema"] == {"type": "object", "properties": SCHEMA}
             assert result["values"] == DEFAULTS
-            assert result["layout"][0]["title"] == "Last mesh check: " + label
+            assert result["layout"][0]["title"] == "Last contact check: " + label
             assert result["layout"][1]["title"] == (
                 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”')
             assert all(g["kind"] == "group" and g["items"] == [] for g in result["layout"][:2])
@@ -99,7 +99,7 @@ async def test_successful_status_read_is_repeatable_without_writes(fake_fulcra, 
     state(fake_fulcra, last)
     async with Client(mcp) as client:
         for _ in range(2):
-            result = (await client.call_tool("aicq_check_status", {})).structured_content
+            result = (await client.call_tool("fulcra_check_status", {})).structured_content
             assert result["label"] == label
             assert result["task_id"] == "task-a"
             assert "PRIVATE MESSAGE" not in json.dumps(result)
@@ -113,7 +113,7 @@ async def test_successful_status_read_is_repeatable_without_writes(fake_fulcra, 
 async def test_malformed_or_wrong_account_state_is_not_never_checked(fake_fulcra, changes):
     state(fake_fulcra, **changes)
     async with Client(mcp) as client:
-        result = (await client.call_tool("aicq_check_status", {})).structured_content
+        result = (await client.call_tool("fulcra_check_status", {})).structured_content
         assert result == {"status": "unavailable", "label": "Status unavailable"}
 
 
@@ -121,11 +121,11 @@ async def test_empty_listing_and_inaccessible_state_differ(fake_fulcra):
     state(fake_fulcra)
     async with Client(mcp) as client:
         fake_fulcra.list_files.return_value = {"folders": [], "files": []}
-        assert (await client.call_tool("aicq_check_status", {})).structured_content["status"] == "not_set_up"
+        assert (await client.call_tool("fulcra_check_status", {})).structured_content["status"] == "not_set_up"
         # A selected configuration disappearing is not a successful empty read.
-        assert (await client.call_tool("aicq_check_status", {"configuration_id": "a"})).structured_content["status"] == "unavailable"
+        assert (await client.call_tool("fulcra_check_status", {"configuration_id": "a"})).structured_content["status"] == "unavailable"
         fake_fulcra.list_files.side_effect = RuntimeError("secret upstream error")
-        result = (await client.call_tool("aicq_check_status", {})).structured_content
+        result = (await client.call_tool("fulcra_check_status", {})).structured_content
         assert result == {"status": "unavailable", "label": "Status unavailable"}
 
 
@@ -133,15 +133,15 @@ async def test_configuration_selection_is_explicit_and_not_combined(fake_fulcra)
     state(fake_fulcra)
     fake_fulcra.list_files.return_value["files"].append({"id": "file-b", "path": ROOT, "name": "b.md"})
     async with Client(mcp) as client:
-        choices = (await client.call_tool("aicq_check_status", {})).structured_content
+        choices = (await client.call_tool("fulcra_check_status", {})).structured_content
         assert choices["status"] == "choose_configuration"
         assert choices["configurations"] == ["a", "b"]
         fake_fulcra.download_file.assert_not_called()
-        result = (await client.call_tool("aicq_check_status", {"configuration_id": "b"})).structured_content
+        result = (await client.call_tool("fulcra_check_status", {"configuration_id": "b"})).structured_content
         assert result["state_path"] == ROOT + "b.md"
         fake_fulcra.download_file.assert_called_once_with("file-b")
         fake_fulcra.download_file.reset_mock()
-        result = (await client.call_tool("aicq_check_status", {"configuration_id": "../outside"})).structured_content
+        result = (await client.call_tool("fulcra_check_status", {"configuration_id": "../outside"})).structured_content
         assert result["status"] == "unavailable"
         fake_fulcra.download_file.assert_not_called()
 
@@ -152,7 +152,7 @@ async def test_malformed_truncated_or_incomplete_state(fake_fulcra, content):
     state(fake_fulcra)
     fake_fulcra.download_file.side_effect = lambda *args: io.BytesIO(content)
     async with Client(mcp) as client:
-        assert (await client.call_tool("aicq_check_status", {})).structured_content["status"] == "unavailable"
+        assert (await client.call_tool("fulcra_check_status", {})).structured_content["status"] == "unavailable"
 
 
 async def test_status_resolves_each_authenticated_request(monkeypatch, fake_fulcra):
@@ -164,9 +164,9 @@ async def test_status_resolves_each_authenticated_request(monkeypatch, fake_fulc
     other.get_fulcra_userid.return_value = "other"
     other.list_files.return_value = {"files": [], "folders": []}
     async with Client(mcp) as client:
-        assert (await client.call_tool("aicq_check_status", {})).structured_content["account_id"] == "me"
+        assert (await client.call_tool("fulcra_check_status", {})).structured_content["account_id"] == "me"
         monkeypatch.setattr(tools, "get_fulcra_object", lambda: other)
-        assert (await client.call_tool("aicq_check_status", {})).structured_content == {
+        assert (await client.call_tool("fulcra_check_status", {})).structured_content == {
             "status": "not_set_up", "label": "Not set up"}
     other.download_file.assert_not_called()
 
@@ -190,7 +190,7 @@ async def test_real_sdk_uses_authenticated_private_file_transport(monkeypatch):
     monkeypatch.setattr(fulcra, "fulcra_api", transport)
     monkeypatch.setattr(tools, "get_fulcra_object", lambda: fulcra)
     async with Client(mcp) as client:
-        result = (await client.call_tool("aicq_check_status", {})).structured_content
+        result = (await client.call_tool("fulcra_check_status", {})).structured_content
         assert result["status"] == "never_checked"
     assert requests == [
         ("/input/v1/file_upload", {"query": {"path": ROOT.rstrip('/'), "state": "uploaded"}}),

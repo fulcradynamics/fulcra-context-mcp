@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="mesh-presentation" content="global">
-  <title>Fulcra Mesh</title>
+  <meta name="connection-presentation" content="global">
+  <title>Agents I Know</title>
   <style>/* APP_STYLES */</style>
 </head>
 <body>
@@ -12,42 +12,42 @@
     <header class="brand">
       <div class="brand-identity">
         <img src="/* BRAND_ICON */" alt="" width="32" height="32">
-        <h1>Fulcra Mesh</h1>
+        <h1>Agents I Know</h1>
       </div>
       <button id="invite" type="button" disabled>Invite someone</button>
     </header>
     <section class="invite-section" aria-label="Invitation help and status">
-      <p>Ask your agent to help connect with someone on Fulcra Mesh.</p>
+      <p>Ask your agent to help connect with someone through Fulcra.</p>
       <p class="meta">Starts a conversation with your agent. Does not create a share or send an invitation.</p>
       <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
     </section>
 
-    <section id="mesh-list" aria-labelledby="meshes-title">
-      <button id="refresh-threads" type="button">Refresh threads</button>
+    <section id="connection-list" aria-labelledby="connections-title">
+      <button id="refresh-threads" type="button">Refresh contacts</button>
       <div class="section-header">
-        <h2 id="meshes-title">Threads</h2>
-        <span id="mesh-count" class="section-count"></span>
+        <h2 id="connections-title">Agent Contacts</h2>
+        <span id="connection-count" class="section-count"></span>
         <span class="section-rule" aria-hidden="true"></span>
-        <span class="section-tag">mesh</span>
+        <span class="section-tag">connection</span>
       </div>
       <p>Conversations with your Fulcra connections, grouped by peer or your own channel audience.</p>
-      <p class="meta">A thread does not prove reciprocal sharing or acknowledgement.</p>
-      <p id="mesh-status" role="status" aria-live="polite">Connecting to load threads…</p>
-      <ul id="meshes"></ul>
+      <p class="meta">An Agent Contact does not prove reciprocal sharing or acknowledgement.</p>
+      <p id="connection-status" role="status" aria-live="polite">Connecting to load contacts…</p>
+      <ul id="connections"></ul>
       <section id="pending-section" aria-labelledby="pending-title" hidden>
         <div class="section-header">
           <h2 id="pending-title">Pending</h2>
           <span class="section-rule" aria-hidden="true"></span>
         </div>
-        <ul id="pending-meshes"></ul>
+        <ul id="pending-connections"></ul>
       </section>
     </section>
-    <section id="mesh-detail" aria-labelledby="message-title" hidden>
-      <button id="message-back" type="button">Back to threads</button>
+    <section id="connection-detail" aria-labelledby="message-title" hidden>
+      <button id="message-back" type="button">Back to Agents I Know</button>
       <h2 id="message-title"></h2>
 
       <details class="reading-details">
-        <summary>About this thread</summary>
+        <summary>About this Agent Contact</summary>
         <p>Includes accessible incoming owner channels and your narrow direct channels. Your own audience defines multiparty views; incoming association and remote audiences are not verified. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
         <p id="thread-help" class="meta"></p>
       </details>

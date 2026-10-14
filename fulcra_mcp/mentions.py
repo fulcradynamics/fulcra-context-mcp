@@ -11,9 +11,9 @@ from fastmcp.resources.resource import ResourceContent, ResourceResult
 from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
-from .mesh_identifier import parse_mesh_identifier
+from .contact_identifier import parse_contact_identifier
 
-mentions_mcp = FastMCP("Fulcra Mesh mentions")
+mentions_mcp = FastMCP("Agents I Know mentions")
 CHANNEL_SCHEMA = json.loads(files('fulcra_mcp').joinpath('static/connection-schema.json').read_text())
 
 
@@ -65,11 +65,11 @@ async def _discover_threads() -> dict[str, str]:
     except ToolError:
         raise  # Preserve the existing reconnect/sign-in guidance.
     except Exception:
-        raise ToolError("Mesh thread discovery failed; retry after checking the connection.") from None
+        raise ToolError("Agent Contact thread discovery failed; retry after checking the connection.") from None
 
 
 def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
-    # Keep identity/discovery rules in parity with web/meshes.js. Names are labels only.
+    # Keep identity/discovery rules in parity with web/connections-discovery.js. Names are labels only.
     own = shares["own_fulcra_userid"]
     if not isinstance(own, str) or not own:
         raise ValueError("Missing own identity")
@@ -105,14 +105,14 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                 continue
             candidates = peers.setdefault(peer, [])
             try:
-                identifier = parse_mesh_identifier(entry.get("description"))
+                identifier = parse_contact_identifier(entry.get("description"))
             except ValueError:
                 identifier = None  # Like the UI, ignore malformed display metadata.
             if identifier:
                 candidates.append((0 if outgoing else 1, entry["id"], identifier))
     threads = {}
     for peer in sorted(peers):
-        # Match web/mesh-identifier.js: own/outgoing first, then exact type ID.
+        # Match web/contact-identifier.js: own/outgoing first, then exact type ID.
         identifier = min(peers[peer], key=lambda candidate: candidate[:2])[2] if peers[peer] else None
         if peer.startswith('connection:'):
             people = json.loads(peer.removeprefix('connection:'))
@@ -129,43 +129,43 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
 
 
 @mentions_mcp.tool(
-    title="Search Mesh mentions",
+    title="Search Agent Contact mentions",
     meta={"ui": {"visibility": ["app"]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
-async def mesh_mentions_search(query: str) -> ToolResult:
-    """Find Mesh opening actions for the composer without reading messages."""
+async def agent_contacts_search(query: str) -> ToolResult:
+    """Find Agent Contact opening actions for the composer without reading messages."""
     threads = await _discover_threads()
-    items = [{"type": "resource_link", "uri": "mesh://threads",
-              "name": "List Meshes", "title": "List Meshes", "mimeType": "application/json",
-              "description": "Open the clickable mesh list in chat with mesh_threads_open({})."}]
+    items = [{"type": "resource_link", "uri": "contacts://threads",
+              "name": "Agents I Know", "title": "Agents I Know", "mimeType": "application/json",
+              "description": "Open the clickable connection list in chat with agent_contacts_open({})."}]
     items += [
-        {"type": "resource_link", "uri": "mesh://threads/id-" + quote(peer, safe=""),
-         "name": f"Open Mesh: {title}", "title": f"Open Mesh: {title}",
+        {"type": "resource_link", "uri": "contacts://threads/id-" + quote(peer, safe=""),
+         "name": f"Open Agent Contact: {title}", "title": f"Open Agent Contact: {title}",
          "mimeType": "application/json",
-         "description": "Open this exact thread with mesh_conversation_open; resolve this reference for its peer ID or multiparty thread_id."}
+         "description": "Open this exact thread with agent_contact_open; resolve this reference for its peer ID or multiparty thread_id."}
         for peer, title in threads.items() if query.strip().casefold() in title.casefold()
     ][:20]
     return ToolResult(content=[], structured_content={"items": items})
 
 
-@mentions_mcp.resource("mesh://threads", mime_type="application/json")
-def mesh_list_descriptor() -> dict:
+@mentions_mcp.resource("contacts://threads", mime_type="application/json")
+def contact_list_descriptor() -> dict:
     """Describe the list-opening action, not account data or an HTML attachment."""
-    return {"title": "List Meshes",
-            "open_tool": {"name": "mesh_threads_open", "arguments": {}}}
+    return {"title": "Agents I Know",
+            "open_tool": {"name": "agent_contacts_open", "arguments": {}}}
 
 
-@mentions_mcp.resource("mesh://threads/id-{peer}", mime_type="application/json")
-async def mesh_thread_descriptor(peer: str) -> ResourceResult:
+@mentions_mcp.resource("contacts://threads/id-{peer}", mime_type="application/json")
+async def contact_thread_descriptor(peer: str) -> ResourceResult:
     """Revalidate a referenced exact peer; return identity only, never message history."""
     # FastMCP decodes the template parameter once. Do not unquote it again.
     threads = await _discover_threads()
     if peer not in threads:
-        raise ResourceError("Mesh thread is not available to this account.")
+        raise ResourceError("Agent Contact thread is not available to this account.")
     return ResourceResult([ResourceContent(
         json.dumps({"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer, "title": threads[peer],
-                    "open_tool": {"name": "mesh_conversation_open",
+                    "open_tool": {"name": "agent_contact_open",
                                   "arguments": {"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer}}}),
         mime_type="application/json",
     )])
