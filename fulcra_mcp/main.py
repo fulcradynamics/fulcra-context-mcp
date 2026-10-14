@@ -1,12 +1,13 @@
 import hashlib
 import json
 import socket
+import urllib.parse
 from pathlib import Path
 
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastmcp import FastMCP
 from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.session import ServerSession
@@ -14,8 +15,9 @@ from pydantic import AnyHttpUrl
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
-from . import server_info
+from . import file_transfer, server_info
 from .apps import app_mcp
+from .credentials import fulcra_for_grant
 from .logging_config import configure_logging
 from .mentions import mentions_mcp
 from .mesh_settings import settings_mcp
@@ -159,6 +161,91 @@ for _route in create_protected_resource_routes(
     scopes_supported=oauth_provider.client_registration_options.valid_scopes,
 ):
     app.router.routes.append(_route)
+
+
+@app.get("/files/download/{token}")
+def file_download(token: str) -> Response:
+    """Serve a link made by read_file(as_link=True): the file, as an attachment.
+
+    The link is the only credential, so it's short-lived; it acts for the login
+    that made it."""
+    target = file_transfer.download_link_target(token)
+    if target is None:
+        return Response(
+            "This download link has expired. Ask your assistant for a new one.",
+            status_code=410,
+            media_type="text/plain",
+        )
+    creds = oauth_provider.reload_grant(target["grant_id"])
+    if creds is None:
+        return Response(
+            "The Fulcra sign-in behind this link has ended. Reconnect Fulcra and ask for a new link.",
+            status_code=410,
+            media_type="text/plain",
+        )
+    try:
+        fulcra = fulcra_for_grant(target["grant_id"], creds)
+        upstream = fulcra.download_file(
+            target["file_id"], fulcra_userid=target.get("fulcra_userid")
+        )
+    except Exception as exc:
+        logger.warning("file_download_failed", exc_info=exc)
+        return Response(
+            "Couldn't fetch this file from Fulcra. Ask your assistant for a new link.",
+            status_code=502,
+            media_type="text/plain",
+        )
+    name = target["name"]
+    ascii_name = name.encode("ascii", "replace").decode().replace('"', "'")
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_name}"; '
+            f"filename*=UTF-8''{urllib.parse.quote(name)}"
+        ),
+        "Cache-Control": "no-store",
+    }
+    length = upstream.headers.get("Content-Length")
+    if length:
+        headers["Content-Length"] = length
+    return StreamingResponse(
+        iter(lambda: upstream.read(256 * 1024), b""),
+        media_type=file_transfer.guess_content_type(name),
+        headers=headers,
+    )
+
+
+@app.put("/files/upload/{token}")
+async def file_upload(token: str, request: Request) -> Response:
+    """Receive a file sent to a link made by write_file(encoding="upload_link"),
+    e.g. with `curl -T report.xlsx <link>`. The link is the only credential, so
+    it's short-lived; it acts for the login that made it."""
+
+    def fulcra_for(grant_id: str):
+        creds = oauth_provider.reload_grant(grant_id)
+        if creds is None:
+            raise file_transfer.LinkUploadError(
+                410, "The Fulcra sign-in behind this link has ended. Reconnect Fulcra and ask for a new link."
+            )
+        return fulcra_for_grant(grant_id, creds)
+
+    length = request.headers.get("content-length")
+    try:
+        result = await file_transfer.receive_link_upload(
+            token,
+            int(length) if length and length.isdigit() else None,
+            request.stream(),
+            fulcra_for,
+        )
+    except file_transfer.LinkUploadError as e:
+        return Response(f"{e}\n", status_code=e.status, media_type="text/plain")
+    except Exception as exc:
+        logger.warning("file_link_upload_failed", exc_info=exc)
+        return Response(
+            "Couldn't save this file to Fulcra. Try again, or ask for a new link.\n",
+            status_code=502,
+            media_type="text/plain",
+        )
+    return Response(json.dumps(result) + "\n", media_type="application/json")
 
 
 @app.get("/callback")

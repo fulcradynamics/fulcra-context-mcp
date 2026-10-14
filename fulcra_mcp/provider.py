@@ -26,6 +26,12 @@ from .settings import settings
 
 OIDC_SCOPES = ["openid", "profile", "name", "email"]
 
+# How long a rotated refresh token still works. A client that never got the
+# reply to its refresh (a timeout, two refreshes at once, an instance stopping
+# mid-request) retries with the old token; within this window it gets the same
+# new tokens again instead of having to sign in again.
+REFRESH_REUSE_SECONDS = 120
+
 logger = structlog.getLogger(__name__)
 
 
@@ -60,7 +66,10 @@ class FulcraOAuthProvider(OAuthProvider):
                                         credentials; every MCP access/refresh token
                                         issued from that login points at it.
     * ``access_tokens/<sha256>.json``   ``{"token": <AccessToken>, "grant_id": ...}``
-    * ``refresh_tokens/<sha256>.json``  ``{"token": <RefreshToken>, "grant_id": ...}``
+    * ``refresh_tokens/<sha256>.json``  ``{"token": <RefreshToken>, "grant_id": ...}``;
+                                        once used, also ``rotated_at`` and the
+                                        ``replacement`` tokens it was exchanged
+                                        for, kept for ``REFRESH_REUSE_SECONDS``
 
     Older records embedded a private copy of the credentials in every token
     record instead. That meant a Fulcra token refresh only reached the access-
@@ -101,6 +110,9 @@ class FulcraOAuthProvider(OAuthProvider):
         # In-memory cache in front of the on-disk token records.
         self.tokens: dict[str, AccessToken] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
+        # Refresh tokens already exchanged: their on-disk record, rotation
+        # details included. See ``REFRESH_REUSE_SECONDS``.
+        self.rotated_refresh: dict[str, dict] = {}
 
         # Fulcra credentials, exactly one object per grant, plus the token ->
         # grant indexes. Anything that needs the credentials for a token must go
@@ -529,11 +541,46 @@ class FulcraOAuthProvider(OAuthProvider):
         )
         return access_token
 
+    def _rotation(self, refresh_token: str) -> dict | None:
+        """The record of a refresh token that has already been exchanged, or
+        ``None`` if it hasn't been (or is unknown)."""
+        record = self.rotated_refresh.get(refresh_token)
+        if record is not None:
+            return record
+        path = self._token_record_path("refresh_tokens", refresh_token)
+        if path is None:
+            return None
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return None
+        if "rotated_at" not in record:
+            return None
+        self.rotated_refresh[refresh_token] = record
+        return record
+
+    def _forget_refresh_token(self, refresh_token: str) -> None:
+        self.refresh_tokens.pop(refresh_token, None)
+        self.refresh_grant.pop(refresh_token, None)
+        self.rotated_refresh.pop(refresh_token, None)
+        self._delete_token_record("refresh_tokens", refresh_token)
+
     async def load_refresh_token(
         self, client: OAuthClientInformationFull, refresh_token: str
     ) -> RefreshToken | None:
         token_obj = self.refresh_tokens.get(refresh_token)
-        if not token_obj:
+        rotation = None if token_obj else self._rotation(refresh_token)
+        if rotation is not None:
+            if time.time() - rotation["rotated_at"] > REFRESH_REUSE_SECONDS:
+                logger.warning(
+                    "refresh_token_reused_after_rotation",
+                    token_prefix=refresh_token[:12],
+                    seconds_since_rotation=int(time.time() - rotation["rotated_at"]),
+                )
+                self._forget_refresh_token(refresh_token)
+                return None
+            token_obj = RefreshToken.model_validate_json(rotation["token"])
+        elif not token_obj:
             # Rehydrate from disk (e.g. after a restart or redeploy).
             record = self._load_token_record("refresh_tokens", refresh_token)
             if record is None:
@@ -555,9 +602,7 @@ class FulcraOAuthProvider(OAuthProvider):
             return None
         if token_obj.expires_at is not None and token_obj.expires_at < time.time():
             logger.info("refresh_token_expired", client_id=client.client_id)
-            self.refresh_tokens.pop(refresh_token, None)
-            self.refresh_grant.pop(refresh_token, None)
-            self._delete_token_record("refresh_tokens", refresh_token)
+            self._forget_refresh_token(refresh_token)
             return None
         return token_obj
 
@@ -567,17 +612,53 @@ class FulcraOAuthProvider(OAuthProvider):
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
+        rotation = self._rotation(refresh_token.token)
+        if rotation is not None:
+            # Already exchanged, within REFRESH_REUSE_SECONDS (load_refresh_token
+            # refuses it after that): the client missed the reply, so send the
+            # same tokens again rather than a second pair.
+            replacement = rotation["replacement"]
+            logger.info(
+                "refresh_token_reused",
+                client_id=client.client_id,
+                grant_id=rotation.get("grant_id"),
+                seconds_since_rotation=int(time.time() - rotation["rotated_at"]),
+            )
+            return OAuthToken(
+                access_token=replacement["access_token"],
+                token_type="bearer",
+                expires_in=max(0, int(replacement["expires_at"] - time.time())),
+                scope=replacement["scope"],
+                refresh_token=replacement["refresh_token"],
+            )
+
         # The grant travels with the refresh token; the credentials themselves
         # are never copied, so a Fulcra refresh made through any earlier access
         # token is what the new tokens see.
         grant_id = self.refresh_grant.pop(refresh_token.token, None)
-
-        # Clean up old refresh token (rotation)
-        self.refresh_tokens.pop(refresh_token.token, None)
-        self._delete_token_record("refresh_tokens", refresh_token.token)
-
         resolved_scopes = scopes if scopes else refresh_token.scopes
         tokens = self._issue_tokens(client.client_id, resolved_scopes, grant_id)
+
+        # Rotate: the old token now only replays these tokens, and only briefly.
+        self.refresh_tokens.pop(refresh_token.token, None)
+        rotation = {
+            "token": refresh_token.model_dump_json(),
+            "grant_id": grant_id,
+            "rotated_at": time.time(),
+            "replacement": {
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "scope": tokens.scope,
+                "expires_at": self.tokens[tokens.access_token].expires_at,
+            },
+        }
+        self.rotated_refresh[refresh_token.token] = rotation
+        path = self._token_record_path("refresh_tokens", refresh_token.token)
+        if path is not None:
+            try:
+                path.write_text(json.dumps(rotation))
+            except Exception as exc:
+                logger.error("failed to record refresh token rotation", exc_info=exc)
 
         logger.info(
             "tokens_refreshed",
@@ -596,10 +677,8 @@ class FulcraOAuthProvider(OAuthProvider):
         same login may still reference it."""
         self.tokens.pop(token, None)
         self.token_grant.pop(token, None)
-        self.refresh_tokens.pop(token, None)
-        self.refresh_grant.pop(token, None)
         self._delete_token_record("access_tokens", token)
-        self._delete_token_record("refresh_tokens", token)
+        self._forget_refresh_token(token)
 
 
 oauth_provider = FulcraOAuthProvider(

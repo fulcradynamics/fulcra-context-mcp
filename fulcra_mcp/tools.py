@@ -1,10 +1,12 @@
 import asyncio
 import base64
+import codecs
 from datetime import datetime
 import functools
 import json
 import re
 import urllib.error
+import urllib.parse
 from enum import Enum
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
@@ -1798,21 +1800,34 @@ async def read_file(
     max_bytes: int = 100000,
     include_binary: bool = False,
     fulcra_userid: str | None = None,
+    as_link: bool = False,
 ) -> str:
     """Read a file from the user's Fulcra account, or one another user shares.
+    Spreadsheets (.xlsx) come back as CSV, one section per sheet.
 
     Args:
         path: The full path of the file to read.
         max_bytes: Truncate text content beyond this many bytes (default 100000).
             Pass a larger value only when the full content is truly needed;
             large files consume a lot of context.
-        include_binary: Return non-UTF-8 files base64-encoded (default false).
-            Otherwise binary files are refused with their size.
+        include_binary: Return other binary files base64-encoded (default
+            false); this uses a lot of context.
         fulcra_userid: Read a file of another Fulcra user (if shared).
+        as_link: Instead of the contents, return a link the user opens to
+            download the file, e.g. a spreadsheet. It works for 10 minutes.
     Returns:
         The file's text content (possibly truncated), or its base64-encoded
         content for binary files.
     """
+    from .file_transfer import (
+        MAX_RESOURCE_BYTES,
+        MAX_SPREADSHEET_FILE_BYTES,
+        download_link_for,
+        file_resource_uri,
+        is_spreadsheet,
+        spreadsheet_as_csv,
+    )
+
     fulcra = get_fulcra_object()
     path = _file_path(path)
     try:
@@ -1821,15 +1836,58 @@ async def read_file(
         if fulcra_userid:
             return _not_shared_message(path, fulcra_userid)
         return f"No file found at {path!r}. Use list_files to see available files."
-    data = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid).read()
+    if as_link:
+        return json.dumps(download_link_for(fulcra, file_record, path, fulcra_userid))
+    # Never more than this, however large max_bytes is: the whole of what's
+    # read is held in memory.
+    max_bytes = max(1, min(max_bytes, MAX_RESOURCE_BYTES))
+    size = file_record.get("size")
+    size_text = f"{size} bytes" if size is not None else "size unknown"
+    link_hint = (
+        "To give it to the user, call read_file with as_link=true. Clients that read "
+        f"MCP resources can fetch it as {file_resource_uri(path, fulcra_userid)}."
+    )
+
+    if is_spreadsheet(path) and not include_binary:
+        # A spreadsheet is a zip file: it has to be read whole to convert it.
+        if size is not None and size > MAX_SPREADSHEET_FILE_BYTES:
+            return (
+                f"{path} is a {size}-byte spreadsheet, too large to convert here "
+                f"(the most is {MAX_SPREADSHEET_FILE_BYTES}). {link_hint}"
+            )
+        response = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid)
+        data = response.read(MAX_SPREADSHEET_FILE_BYTES + 1)
+        if len(data) > MAX_SPREADSHEET_FILE_BYTES:
+            return (
+                f"{path} is too large to convert here (more than "
+                f"{MAX_SPREADSHEET_FILE_BYTES} bytes). {link_hint}"
+            )
+        # Converting takes a while for a big workbook; keep it off the event
+        # loop so other requests aren't held up.
+        text = await asyncio.to_thread(spreadsheet_as_csv, data, max_bytes)
+        if text is not None:
+            return f"Content of {path} (as CSV, {size_text}): {text}"
+        return f"{path} looks like a spreadsheet but couldn't be read as one. {link_hint}"
+
+    # Read only as much as can be returned, plus a little to tell whether
+    # there's more and to complete a character cut off at the end.
+    response = fulcra.download_file(file_record["id"], fulcra_userid=fulcra_userid)
+    data = response.read(max_bytes + 4)
+    more = len(data) > max_bytes or (size is not None and size > len(data))
+    head = data[:max_bytes]
     try:
-        text = data.decode("utf-8")
+        text = codecs.getincrementaldecoder("utf-8")().decode(head, final=not more)
     except UnicodeDecodeError:
         if not include_binary:
             return (
-                f"{path} is a binary file ({len(data)} bytes). Pass "
-                "include_binary=true to receive it base64-encoded; note that "
-                "this can consume a large amount of context."
+                f"{path} is a binary file ({size_text}). {link_hint} Pass "
+                "include_binary=true to receive it base64-encoded here; that uses "
+                "a lot of context."
+            )
+        if more:
+            return (
+                f"{path} is a binary file larger than max_bytes={max_bytes}. "
+                f"Binary content is not truncated. {link_hint}"
             )
         encoded = base64.b64encode(data).decode("ascii")
         if len(encoded) > max_bytes:
@@ -1837,22 +1895,27 @@ async def read_file(
                 f"{path} is a binary file ({len(data)} bytes, {len(encoded)} "
                 f"base64 characters), exceeding max_bytes={max_bytes}. Binary "
                 f"content is not truncated; pass max_bytes={len(encoded)} or "
-                "more if you truly need it."
+                "more if you truly need it, or use as_link=true to give it to "
+                "the user."
             )
         return f"Content of {path} (base64-encoded binary): {encoded}"
-    if len(data) > max_bytes:
-        truncated = data[:max_bytes].decode("utf-8", errors="replace")
+    if more:
         return (
-            f"Content of {path} (truncated to the first {max_bytes} of "
-            f"{len(data)} bytes; pass a larger max_bytes for more): {truncated}"
+            f"Content of {path} (truncated to the first {max_bytes} bytes of "
+            f"{size_text}; pass a larger max_bytes for more): {text}"
         )
     return f"Content of {path}: {text}"
 
 
 @tools_mcp.tool(annotations={"title": "Write File", "destructiveHint": False})
 @_friendly_http_errors
-async def write_file(path: str, content: str, content_type: str = "text/plain") -> str:
-    """Write a text file to the user's Fulcra account.
+async def write_file(
+    path: str,
+    content: str = "",
+    content_type: str | None = None,
+    encoding: Literal["text", "base64", "upload_link"] = "text",
+) -> str:
+    """Write a file to the user's Fulcra account.
 
     Writing to an existing path creates a new version; earlier versions are
     kept and can be restored with `restore_file`. Other agents can detect the
@@ -1861,15 +1924,77 @@ async def write_file(path: str, content: str, content_type: str = "text/plain") 
 
     Args:
         path: The full path to write to (e.g. "/agents/state.json").
-        content: The text content to write.
-        content_type: Optional MIME type. Defaults to "text/plain"; use e.g.
-            "application/json" when writing JSON.
+        content: The text to write, or with encoding="base64", the file's bytes
+            base64-encoded (up to 5 MB). For larger files, or files the user
+            has on their computer, use open_file_manager.
+        content_type: Optional MIME type; guessed from the file name when left
+            out (e.g. "application/json" for .json).
+        encoding: "text" (default) or "base64". "upload_link" leaves content
+            empty and returns a link to send a file on disk to, e.g. from a
+            sandbox: `curl -T <file> <link>` (up to 30 MB).
     Returns:
         A JSON string describing the written file.
     """
+    from .file_transfer import (
+        MAX_LINK_UPLOAD_BYTES,
+        MAX_WRITE_BASE64_BYTES,
+        UPLOAD_LINK_TTL_SECONDS,
+        guess_content_type,
+        make_upload_link,
+    )
+
     fulcra = get_fulcra_object()
     path = _file_path(path)
-    data = content.encode("utf-8")
+    if encoding == "upload_link":
+        if content:
+            return 'With encoding="upload_link", leave content empty: the file is sent to the link.'
+        if not PurePath(path).name:
+            return "path must end in a file name, e.g. /reports/q3.xlsx."
+        if settings.fulcra_environment == "stdio":
+            return (
+                "This server runs on the user's computer, so it has no upload link. "
+                "Use the Fulcra CLI (`uvx fulcra-api file upload <file> "
+                f"{path}`), or encoding=\"base64\" for files up to 5 MB."
+            )
+        from . import file_transfer
+
+        grant_id = file_transfer.current_grant_id()
+        if grant_id is None:
+            return "This session isn't connected to a Fulcra account."
+        url = make_upload_link(path, grant_id)
+        return (
+            f"Send the file to this link within {UPLOAD_LINK_TTL_SECONDS // 60} "
+            f"minutes to save it as {path} (up to {MAX_LINK_UPLOAD_BYTES // 1024**2} MB; "
+            "an existing file there gets a new version):\n"
+            f"curl -sS -T <local file> '{url}'\n"
+            "It replies with the saved file's details. The link saves one file; "
+            "sending to it again returns the same result.\n"
+            f"If curl can't connect (e.g. \"Could not resolve host\" or a 403 from a "
+            f"proxy), the sandbox is blocking {urllib.parse.urlsplit(url).hostname}. In "
+            "Claude, the user can add it under Settings > Capabilities > Domain "
+            "allowlist, or ask their organization's admin. Until then, use "
+            "encoding=\"base64\" for files up to 5 MB, or open_file_manager so the "
+            "user can upload the file."
+        )
+    if encoding == "base64":
+        try:
+            data = base64.b64decode(content, validate=True)
+        except ValueError:
+            return (
+                "content isn't valid base64. Pass text with encoding=\"text\", or "
+                "the file's bytes base64-encoded."
+            )
+        if len(data) > MAX_WRITE_BASE64_BYTES:
+            return (
+                f"That's {len(data)} bytes; write_file takes at most "
+                f"{MAX_WRITE_BASE64_BYTES} in base64. Use start_file_upload and "
+                "upload_file_chunk, or open_file_manager so the user can upload "
+                "it directly."
+            )
+        content_type = content_type or guess_content_type(path)
+    else:
+        data = content.encode("utf-8")
+        content_type = content_type or guess_content_type(path, "text/plain")
     result = fulcra.upload_file(data, content_type, len(data), path)
     return f"Wrote {path}: " + json.dumps(_slim_file(result.get("file", result)))
 
@@ -2464,3 +2589,8 @@ async def get_user_info() -> str:
     user_info = fulcra.get_user_info()
     user_info.pop("intercom_token", None)
     return "User information: " + json.dumps(user_info)
+
+
+# Resources, the file manager panel and download links. Imported last: it
+# registers on tools_mcp and uses helpers defined above.
+from . import file_transfer  # noqa: E402,F401
