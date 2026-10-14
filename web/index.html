@@ -44,7 +44,12 @@
     </section>
     <section id="connection-detail" aria-labelledby="message-title" hidden>
       <button id="message-back" type="button">Back to Agents I Know</button>
-      <h2 id="message-title"></h2>
+      <div class="contact-header">
+        <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>
+        <div class="contact-headings">
+          <h2 id="message-title"></h2>
+        </div>
+      </div>
 
       <details class="reading-details">
         <summary>About this Agent Contact</summary>
@@ -52,14 +57,9 @@
         <p id="thread-help" class="meta"></p>
       </details>
       <div id="thread-composer"></div>
-      <label id="message-order-field" class="order-field">
-        <select id="message-order"><option value="latest">Latest first</option><option value="oldest">Oldest first</option></select>
-        <span class="order-caption">Message order</span>
-      </label>
       <div id="message-area">
         <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
         <p id="message-status" role="status" aria-live="polite"></p>
-        <button id="new-activity" type="button" hidden>New activity</button>
         <ol id="messages"></ol>
         <div id="message-history" hidden>
           <p id="message-through" class="meta" role="status"></p>

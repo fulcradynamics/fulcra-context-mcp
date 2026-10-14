@@ -9,7 +9,7 @@ import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { icon, ArrowUpRight, ArrowDownLeft, History, ArrowLeft, ChevronDown } from './icons.js';
+import { icon, History, ArrowLeft } from './icons.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
 
@@ -17,6 +17,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const panel = doc.querySelector('#connection-detail');
   const listPanel = doc.querySelector('#connection-list');
   const title = doc.querySelector('#message-title');
+  const headerAvatar = doc.querySelector('#contact-avatar');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   const markAll = doc.createElement('button'); markAll.type = 'button'; markAll.id = 'mark-all-read'; markAll.hidden = true;
   assessment.after(markAll);
@@ -66,8 +67,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // display) keeps its space reserved so the button never shifts.
   const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
   const back = doc.querySelector('#message-back');
-  const order = doc.querySelector('#message-order');
-  const orderField = doc.querySelector('#message-order-field');
+  // Messages show oldest-first (newest at the bottom), like a chat thread; the
+  // order toggle was removed.
+  const order = { value: 'oldest' };
   back.prepend(icon(ArrowLeft, 'btn-icon'));
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'), presentation);
   const drafts = new Map();
@@ -104,66 +106,69 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     } else if (displayed && !displayed.messages.length) text = 'No messages yet.';
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
-  const messageList = createMessageList(messages, doc.querySelector('#new-activity'), order,
+  const messageList = createMessageList(messages, order,
     (item, { record, source, direction, state, unread: isUnread }) => {
-      let title, date, body;
+      const incoming = direction === 'Incoming';
+      let avatar, bubble, body, date, meta;
       if (!item.firstChild) {
+        // Chat layout: an avatar (incoming only) beside a content column holding
+        // the bubble and a meta line (date, etc.). Incoming left, outgoing right.
         item.className = 'message-row';
-        // The direction tile is placed in grid column 1; header/date/body stay
-        // direct <li> children so each sits in column 2 and keeps a flat shape.
-        const incoming = direction === 'Incoming';
-        const tile = doc.createElement('span');
-        tile.className = incoming ? 'row-tile incoming' : 'row-tile';
-        tile.append(icon(incoming ? ArrowDownLeft : ArrowUpRight, 'row-icon'));
-        // The header is a toggle: clicking it collapses/expands the body (below).
-        const header = doc.createElement('p');
-        header.className = 'message-header message-toggle';
-        header.setAttribute('role', 'button');
-        header.tabIndex = 0;
-        header.setAttribute('aria-expanded', 'true');
-        title = doc.createElement('span'); title.className = 'message-title';
-        header.append(title, icon(ChevronDown, 'message-chevron'));
-        date = doc.createElement('p'); date.className = 'message-date';
-        body = doc.createElement('pre');
-        // The body is wrapped so collapse can animate via grid-template-rows.
-        const bodyWrap = doc.createElement('div'); bodyWrap.className = 'message-body';
-        bodyWrap.append(body);
-        item.append(tile, header, date, bodyWrap);
+        avatar = doc.createElement('span'); avatar.className = 'bubble-avatar'; avatar.setAttribute('aria-hidden', 'true');
+        bubble = doc.createElement('div'); bubble.className = 'bubble';
+        body = doc.createElement('pre'); body.className = 'bubble-body';
+        bubble.append(body);
+        meta = doc.createElement('div'); meta.className = 'message-meta';
+        date = doc.createElement('span'); date.className = 'message-date';
+        meta.append(date);
+        const content = doc.createElement('div'); content.className = 'msg-content';
+        content.append(bubble, meta);
+        item.append(avatar, content);
       } else {
-        title = item.querySelector('.message-title');
+        avatar = item.querySelector('.bubble-avatar');
+        bubble = item.querySelector('.bubble');
+        body = item.querySelector('.bubble-body');
+        meta = item.querySelector('.message-meta');
         date = item.querySelector('.message-date');
-        body = item.querySelector('pre');
       }
-      const rawTime = record.recorded_at ?? record.start_time;
-      const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
-      const name = typeof source.name === 'string' && source.name.trim() ? source.name : 'Catalog name unavailable';
-      const text = direction === 'Outgoing' ? 'Outgoing' : `${record.sender || direction} (${name})`;
-      if (title.textContent !== text) title.textContent = text;
+      item.classList.toggle('incoming', incoming);
+      item.classList.toggle('outgoing', !incoming);
+      // Avatar initial from the message sender (incoming); hidden for outgoing.
+      const senderName = typeof record.sender === 'string' && record.sender.trim()
+        ? record.sender : (selected?.identifier || selected?.peer || '?');
+      const initial = [...senderName.trim()][0]?.toUpperCase() || '?';
+      if (avatar.textContent !== initial) avatar.textContent = initial;
       const addressing = messageAddressing(record, activeViewer);
       item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
       item.classList.toggle('addressed-to-others', addressing === 'other');
+      // Recipients line (multiparty only; hidden for ordinary 1:1 threads).
       let recipients = item.querySelector('.message-recipients');
-      if (!recipients) { recipients = doc.createElement('p'); recipients.className = 'message-recipients'; date.after(recipients); }
+      if (!recipients) { recipients = doc.createElement('span'); recipients.className = 'message-recipients'; meta.append(recipients); }
       recipients.hidden = record.recipients === undefined;
       const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
       if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
+      // Channel provenance (multiparty participants view only).
       let provenance = item.querySelector('.message-source');
-      if (!provenance) { provenance = doc.createElement('p'); provenance.className = 'message-source'; recipients.after(provenance); }
+      if (!provenance) { provenance = doc.createElement('span'); provenance.className = 'message-source'; meta.append(provenance); }
       provenance.hidden = !selected?.participants;
       provenance.textContent = selected?.participants ? `${source.fulcra_userid} / ${source.id}${source.association ? ' — association unverified' : ''}` : '';
+      // Optimistic send state for outgoing posts.
       let badge = item.querySelector('.send-badge');
-      if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; title.after(badge); }
+      if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
       if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
+      // Unread + mark-read.
       item.classList.toggle('unread', Boolean(isUnread));
       let mark = item.querySelector('.mark-read');
       if (isUnread && !mark) {
         const label = doc.createElement('span'); label.className = 'unread-badge'; label.textContent = 'Unread';
-        title.after(label);
+        meta.append(label);
         mark = doc.createElement('button'); mark.type = 'button'; mark.className = 'mark-read'; mark.textContent = 'Mark read';
         mark.addEventListener('click', () => markRead(unread.filter(m => m.record.id === record.id)));
-        item.append(mark);
-      } else if (!isUnread && mark) { mark.remove(); item.querySelector('.unread-badge').remove(); }
+        meta.append(mark);
+      } else if (!isUnread && mark) { mark.remove(); item.querySelector('.unread-badge')?.remove(); }
       if (mark) mark.disabled = !ready;
+      const rawTime = record.recorded_at ?? record.start_time;
+      const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const dateText = timestamp && Number.isFinite(+timestamp)
         ? `${timestamp.toLocaleString()} (your local time)` : 'Timestamp unavailable';
       if (date.textContent !== dateText) date.textContent = dateText;
@@ -171,6 +176,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (body.textContent !== bodyText) body.textContent = bodyText;
     });
   const setTitle = thread => {
+    const label = thread.identifier || thread.accountName || thread.peer || '?';
+    headerAvatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
     renderAssessment(assessment, thread.assessment);
     if (thread.participants) renderThreadIdentity(title, thread, 'Agent Contact with ');
     else renderIdentity(title, thread.identifier, thread.peer, 'Agent Contact with ',
@@ -294,7 +301,6 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     loadingMore = true; updateMore();
     requestRefresh();
   };
-  const onOrder = () => { if (displayed) render(displayed, ready); };
   // Marking read posts an ack from your own channel, like your agent would.
   async function markRead(targets) {
     if (!ready || !targets.length) return;
@@ -317,27 +323,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
   };
-  // Collapse a message by clicking its header (title/date/tile); the body is
-  // left clickable for text selection. Collapse state lives on the reused row.
-  function toggleMessage(target) {
-    if (target.closest('pre, button')) return;
-    const li = target.closest('.message-row');
-    if (!li || !messages.contains(li)) return;
-    const collapsed = li.classList.toggle('collapsed');
-    li.querySelector('.message-toggle')?.setAttribute('aria-expanded', String(!collapsed));
-  }
-  const onMessageClick = e => toggleMessage(e.target);
-  const onMessageKey = e => {
-    if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.closest('.message-toggle')) return;
-    e.preventDefault();
-    toggleMessage(e.target);
-  };
   more.addEventListener('click', onMore);
-  order.addEventListener('change', onOrder);
   viewer.addEventListener('input', onViewer);
   back.addEventListener('click', onBack);
-  messages.addEventListener('click', onMessageClick);
-  messages.addEventListener('keydown', onMessageKey);
   function select(thread, button) {
     contextLifecycle.invalidate();
     generation++;
@@ -349,7 +337,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), orderField,
+    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), undefined,
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
       () => { if (selected && displayed) render(displayed, ready); });
     setTitle(thread);
@@ -366,11 +354,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     messageList.dispose();
     more.removeEventListener('click', onMore);
     markAll.removeEventListener('click', onMarkAll);
-    order.removeEventListener('change', onOrder);
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
-    messages.removeEventListener('click', onMessageClick);
-    messages.removeEventListener('keydown', onMessageKey);
     return contextLifecycle.dispose();
   } };
 }

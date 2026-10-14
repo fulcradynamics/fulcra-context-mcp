@@ -9,7 +9,7 @@ export function messageKeys(messages) {
   });
 }
 
-export function createMessageList(list, activity, order, renderRow) {
+export function createMessageList(list, order, renderRow) {
   const doc = list.ownerDocument, win = doc.defaultView;
   let rows = new Map();
   const latest = () => order.value === 'latest' ? list.firstElementChild : list.lastElementChild;
@@ -21,11 +21,7 @@ export function createMessageList(list, activity, order, renderRow) {
   function follow() {
     const edge = latest()?.getBoundingClientRect();
     if (edge) win.scrollBy(0, order.value === 'latest' ? edge.top : edge.bottom - bottom());
-    activity.hidden = true;
   }
-  activity.addEventListener('click', follow);
-  const onScroll = () => { if (atLatest()) activity.hidden = true; };
-  win.addEventListener('scroll', onScroll, { passive: true });
   return {
     preservePosition(change) {
       // Status wrapping can change height between countdown, retry and pause.
@@ -75,14 +71,16 @@ export function createMessageList(list, activity, order, renderRow) {
       }
       // Status and open context preview can also change height above the anchor.
       afterRender();
-      if (hadRows && followEdge && added && !doc.activeElement?.matches('input, textarea, summary, select')) follow();
+      // First populate jumps to the newest message; live updates follow only when
+      // already at the newest edge, otherwise the reader's position is preserved.
+      if (!hadRows && messages.length) follow();
+      else if (hadRows && followEdge && added && !doc.activeElement?.matches('input, textarea, summary, select')) follow();
       else {
         const anchor = anchors.find(({ el }) => el.isConnected);
         if (anchor) win.scrollBy(0, anchor.el.getBoundingClientRect().top - anchor.top);
-        if (hadRows && added && !followEdge) activity.hidden = false;
       }
     },
-    clear() { rows.clear(); list.replaceChildren(); activity.hidden = true; },
-    dispose() { activity.removeEventListener('click', follow); win.removeEventListener('scroll', onScroll); },
+    clear() { rows.clear(); list.replaceChildren(); },
+    dispose() {},
   };
 }
