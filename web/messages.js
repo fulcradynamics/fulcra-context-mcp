@@ -19,9 +19,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const title = doc.querySelector('#message-title');
   const headerAvatar = doc.querySelector('#contact-avatar');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
-  const markAll = doc.createElement('button'); markAll.type = 'button'; markAll.id = 'mark-all-read'; markAll.hidden = true;
-  assessment.after(markAll);
-  let unread = [];
+  let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
@@ -37,6 +35,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   readingOptions.append(readingSummary, viewerLabel, addressingHelp);
   const incoming = incomingSelector(doc, (key, checked) => {
     if (!selected) return;
+    acknowledgeOnOpen = false;
     const draft = drafts.get(selected.peer);
     draft.excludedSources = [...new Set([...(draft.excludedSources ?? []).filter(k => k !== key), ...(!checked ? [key] : [])])];
     contextLifecycle.invalidate();
@@ -107,7 +106,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages, order,
-    (item, { record, source, direction, state, unread: isUnread }) => {
+    (item, { record, source, direction, state }) => {
       const incoming = direction === 'Incoming';
       let avatar, bubble, body, date, meta;
       if (!item.firstChild) {
@@ -156,17 +155,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
       if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
-      // Unread + mark-read.
-      item.classList.toggle('unread', Boolean(isUnread));
-      let mark = item.querySelector('.mark-read');
-      if (isUnread && !mark) {
-        const label = doc.createElement('span'); label.className = 'unread-badge'; label.textContent = 'Unread';
-        meta.append(label);
-        mark = doc.createElement('button'); mark.type = 'button'; mark.className = 'mark-read'; mark.textContent = 'Mark read';
-        mark.addEventListener('click', () => markRead(unread.filter(m => m.record.id === record.id)));
-        meta.append(mark);
-      } else if (!isUnread && mark) { mark.remove(); item.querySelector('.unread-badge')?.remove(); }
-      if (mark) mark.disabled = !ready;
+
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
       const dateText = timestamp && Number.isFinite(+timestamp)
@@ -201,11 +190,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
     result = { ...result, assessment: selected.assessment, participants: selected.participants,
       viewingAgent: activeViewer, sources: selected.sources, messages: [...result.messages, ...posts] };
-    unread = unavailable ? [] : unreadMessages(result.messages, draft.acks);
-    const unreadIds = new Set(unread.map(m => m.record.id));
-    result = { ...result, messages: result.messages.map(m => unreadIds.has(m.record.id) && m.direction === 'Incoming' ? { ...m, unread: true } : m) };
-    markAll.textContent = `Mark all ${unread.length} read`;
-    markAll.hidden = unread.length < 2; markAll.disabled = !ready;
+
     result = { ...result, messages: [...result.messages].sort((a, b) => {
       const at = Date.parse(a.record.recorded_at ?? a.record.start_time);
       const bt = Date.parse(b.record.recorded_at ?? b.record.start_time);
@@ -223,6 +208,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
 
   function failed(error, revoked = false) {
     if (!selected) return;
+    acknowledgeOnOpen = false;
     firstAttempt = false; loading.hidden = true;
     loadFailed = true; unavailable = revoked || unavailable;
     const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
@@ -280,6 +266,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       loading.hidden = true;
       displayed = result;
       render(result);
+      // Consume the explicit opening gesture once, never on later polling.
+      if (acknowledgeOnOpen) {
+        acknowledgeOnOpen = false;
+        const latest = [...result.messages].filter(m => ['message', 'reply'].includes(m.record.kind))
+          .sort((a, b) => Date.parse(b.record.start_time) - Date.parse(a.record.start_time))[0];
+        if (success && !result.warnings.some(w => w.startsWith('Partial result'))
+          && latest?.direction === 'Incoming' && unreadMessages(result.messages, drafts.get(selected.peer).acks).includes(latest)) {
+          await updateComposer.markRead([latest]);
+        }
+      }
       return success;
     } catch (error) {
       if (current()) failed(error, /no longer available/.test(error.message));
@@ -301,13 +297,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     loadingMore = true; updateMore();
     requestRefresh();
   };
-  // Marking read posts an ack from your own channel, like your agent would.
-  async function markRead(targets) {
-    if (!ready || !targets.length) return;
-    if (!await updateComposer.markRead(targets)) doc.querySelector('#send-status').textContent = 'Choose your outbox and sending agent name under Delivery address to mark messages read.';
-  }
-  const onMarkAll = () => markRead(unread);
-  markAll.addEventListener('click', onMarkAll);
+
   const onViewer = () => {
     if (!selected) return;
     drafts.get(selected.peer).viewingAgent = viewer.value;
@@ -326,7 +316,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   more.addEventListener('click', onMore);
   viewer.addEventListener('input', onViewer);
   back.addEventListener('click', onBack);
-  function select(thread, button) {
+  function select(thread, button, { acknowledge = false } = {}) {
+    acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
@@ -339,7 +330,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer), undefined,
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready }),
-      () => { if (selected && displayed) render(displayed, ready); });
+      () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     panel.hidden = false; listPanel.hidden = true; back.focus();
@@ -353,7 +344,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
-    markAll.removeEventListener('click', onMarkAll);
+
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
     return contextLifecycle.dispose();

@@ -65,7 +65,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         if (response.isError || result.status !== 'posted') throw new Error('Not posted');
       } catch { draft.acks.delete(m.record.id); failed++; }
     }
-    if (failed) status.textContent = `Could not mark ${failed} message${failed === 1 ? '' : 's'} read. Try again.`;
+    if (failed && isCurrent()) status.textContent = `Could not mark ${failed} message${failed === 1 ? '' : 's'} read. Reopen the contact to try again.`;
     changed();
     return true;
   }

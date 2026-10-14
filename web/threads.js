@@ -4,6 +4,7 @@ import { renderThreadIdentity } from './identity.js';
 import { renderStatus } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
+import { contactPreview } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { icon, MessagesSquare, RefreshCw } from './icons.js';
 
@@ -61,7 +62,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     }
     launchStatus.textContent = '';
     if (inlineList) doc.documentElement.classList.remove('compact-threads');
-    detail.select(entry.thread, entry.button);
+    detail.select(entry.thread, entry.button, { acknowledge: true });
   }
   let requestedPeer, launchPending = false, userSelected = false;
   const launchStatus = doc.createElement('p');
@@ -89,15 +90,18 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const account = doc.createElement('p'); account.className = 'thread-account';
             const assessment = doc.createElement('p');
             const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
+            const previewState = doc.createElement('p'); previewState.className = 'thread-preview-state'; previewState.hidden = true;
+            const dot = doc.createElement('span'); dot.className = 'unread-dot'; dot.hidden = true;
+            dot.setAttribute('aria-label', 'Last message not acknowledged');
             button.type = 'button'; button.id = `thread-${++nextRow}`;
             button.className = 'thread-button';
             const tile = doc.createElement('span'); tile.className = 'row-tile';
             tile.append(icon(MessagesSquare, 'row-icon'));
             const peer = doc.createElement('span'); peer.className = 'thread-peer';
-            button.append(tile, peer);
-            entry = { row, button, peer, account, assessment, preview, thread };
+            button.append(tile, peer, dot);
+            entry = { row, button, peer, account, assessment, preview, previewState, dot, thread };
             button.addEventListener('click', () => choose(entry));
-            row.append(button, assessment, account, preview); list.append(row); rows.set(thread.peer, entry);
+            row.append(button, assessment, account, preview, previewState); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
           renderThreadIdentity(entry.peer, thread);
@@ -153,7 +157,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         count.textContent = String(discovery.threads.length);
         status.textContent = `get_data_catalog/list_shares completed — ${discovery.threads.length} Agent Contacts returned. ${discovery.warnings.join(' ')} Last success: ${lastSuccess}.`;
         if (doc.visibilityState !== 'visible') return true;
-        if (!listPanel.hidden) { await refreshPreviews(); return true; }
+        if (!listPanel.hidden) { void refreshPreviews(); return true; }
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
@@ -166,13 +170,22 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   // Latest sent or received message per thread. A failed read keeps the previous preview.
   async function refreshPreviews() {
     await Promise.all([...rows.values()].map(async entry => {
+      if (entry.reading) return;
       const thread = entry.thread;
       let latest;
-      try { [latest] = await readLatest(app, thread.sources); } catch { return; }
-      if (disposed || rows.get(thread.peer) !== entry) return;
-      const text = latest ? `${latest.direction === 'Outgoing' ? 'You: ' : ''}${messageText(latest.record)}` : '';
+      entry.reading = true;
+      try { latest = await readLatest(app, thread.sources); } catch { return; }
+      finally { entry.reading = false; }
+      if (disposed || rows.get(thread.peer) !== entry
+        || JSON.stringify(entry.thread.sources) !== JSON.stringify(thread.sources)) return;
+      const summary = contactPreview(latest);
+      const message = summary?.message;
+      const text = message ? `${message.direction === 'Outgoing' ? 'You: ' : ''}${messageText(message.record)}` : '';
       if (entry.preview.textContent !== text) entry.preview.textContent = text;
       entry.preview.hidden = !text;
+      entry.previewState.textContent = summary ? (summary.acknowledged ? 'Acknowledged' : 'Not acknowledged') : '';
+      entry.previewState.hidden = !summary;
+      entry.dot.hidden = !summary || summary.acknowledged;
     }));
   }
   const stopHost = entrypoint.observeHost?.(context => {

@@ -12,7 +12,7 @@ test('own audience names, exact addressing, provenance and safe responsive label
  await expect(ui.getByLabel('Viewing agent name')).toHaveValue('chatgpt');
  await ui.getByLabel('Viewing agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
- expect(await page.evaluate(()=>window.calls.every(c=>['get_data_catalog','get_records','list_shares','fulcra_check_status'].includes(c.name)))).toBe(true);
+ expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send').map(c=>c.arguments.kind))).toEqual(['ack']);
 });
 test('incoming selection remains selectable across polling and context includes sources',async({page})=>{
  const ui=await open(page);
@@ -46,8 +46,8 @@ test('send carries full expected audience; widening invalidates context and pres
  const ui=await open(page);
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Exact authorized text');
  await ui.getByRole('button',{name:'Send',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send').length)).toBe(1);
- const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send').arguments);
+ await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').length)).toBe(1);
+ const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').arguments);
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
  await ui.getByRole('button',{name:'talk with my agent about this Agent Contact',exact:true}).click();

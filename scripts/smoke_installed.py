@@ -45,9 +45,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v41.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v41.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v41.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v42.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v42.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v42.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
@@ -60,7 +60,7 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v41 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v42 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
