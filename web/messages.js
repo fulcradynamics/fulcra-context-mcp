@@ -18,6 +18,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const title = doc.querySelector('#message-title');
   const headerAvatar = doc.querySelector('#contact-avatar');
   const contactSubtitle = doc.querySelector('#contact-subtitle');
+  const contactTopic = doc.querySelector('#contact-topic');
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
@@ -161,7 +162,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       // Recipients line (multiparty only; hidden for ordinary 1:1 threads).
       let recipients = item.querySelector('.message-recipients');
       if (!recipients) { recipients = doc.createElement('span'); recipients.className = 'message-recipients'; meta.append(recipients); }
-      recipients.hidden = record.recipients === undefined;
+      recipients.hidden = !selected?.participants || !Array.isArray(record.recipients);
       const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
       if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
       // Channel provenance (multiparty participants view only).
@@ -205,6 +206,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     converted.hidden = !thread.convertedFrom?.length;
     refreshLegacyHandoff();
   };
+  // The thread's current topic (latest meaningful one), shown under the name.
+  const setThreadTopic = messages => {
+    const topic = messages.map(m => m.record.topic)
+      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) ?? '';
+    contactTopic.textContent = topic;
+    contactTopic.hidden = !topic;
+  };
 
   function render(result, canSend = true) {
     ready = canSend;
@@ -229,6 +237,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     }) };
     messageList.update(result.messages, () => {
       setTitle(selected);
+      setThreadTopic(result.messages);
       renderStatus();
       placeMore();
       updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
@@ -363,6 +372,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
+    contactTopic.hidden = true; contactTopic.textContent = '';
     panel.hidden = false; listPanel.hidden = true; back.focus();
     status.textContent = '';
     requestRefresh();

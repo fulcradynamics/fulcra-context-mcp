@@ -190,6 +190,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
 .contact-headings { min-width: 0; }
 .contact-headings h2 { margin: 0; }
+.contact-topic { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .contact-subtitle { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a70; overflow-wrap: anywhere; }
 .contact-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--avatar-gradient); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; line-height: 1; }
 
