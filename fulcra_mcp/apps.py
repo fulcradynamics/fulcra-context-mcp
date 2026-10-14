@@ -5,9 +5,9 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 app_mcp = FastMCP("Agents I Know UI")
-UI_URI = "ui://fulcra/contacts/v41.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v41.html"
-THREADS_UI_URI = "ui://fulcra/contacts/threads/v41.html"
+UI_URI = "ui://fulcra/contacts/v42.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v42.html"
+THREADS_UI_URI = "ui://fulcra/contacts/threads/v42.html"
 CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 

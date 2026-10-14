@@ -199,11 +199,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 /* Reply composer action buttons (Send + handoff) on one wrapping row. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
-/* Unread: an incoming message nobody on your side has acknowledged or answered. */
-.unread-badge { color: var(--teal); font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-.message-row.unread .bubble { box-shadow: 0 0 0 1px var(--teal); }
-.message-row .mark-read { min-height: 28px; padding: 3px 9px; font-size: 11px; }
-#mark-all-read { min-height: 32px; margin: 0 0 8px; padding: 4px 10px; font-size: 12px; }
+.thread-preview-state { margin: 2px 0 0; padding-left: 48px; color: var(--muted); font-size: 12px; }
+.unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #e34d59; flex-shrink: 0; }
+.unread-dot[hidden] { display: none; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 #thread-composer:not(:empty) { margin-top: 12px; padding-top: 24px; border-top: 1px solid var(--divider); }

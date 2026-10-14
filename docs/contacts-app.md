@@ -9,8 +9,8 @@ See [compatibility boundaries](connection-compatibility.md) for preserved wire v
 and the deliberately unchanged packaged connection skill.
 
 The global, thread and inline-list resources are respectively
-`ui://fulcra/contacts/v41.html`, `ui://fulcra/contacts/thread/v41.html`, and
-`ui://fulcra/contacts/threads/v41.html`. The direct-list resource adds
+`ui://fulcra/contacts/v42.html`, `ui://fulcra/contacts/thread/v42.html`, and
+`ui://fulcra/contacts/threads/v42.html`. The direct-list resource adds
 `?startup=resource`. All serve the committed, self-contained `fulcra_mcp/ui/contacts.html`.
 Thread presentation stays fixed by resource metadata, not by a later tool result.
 A bare Fulcra mention opens the inline list (contacts plus **Invite someone**)
@@ -72,16 +72,23 @@ description prefixes and conversion provenance are retained.
 
 ### Unread messages
 
-An incoming `message` or `reply` from the last 30 days is **Unread** until one of
-your own channels has an `ack` or `reply` naming it in `in_reply_to`; acks from
-any of your agents count. Older messages cannot be acknowledged, so they are
-never unread. **Mark read** (and **Mark all N read** when several are unread)
-posts an `ack` with body `Read.` from the selected outbox and sending agent name.
+The contact list renders discovery before fetching the latest incoming and
+outgoing records. It retains the contact assessment, previews the latest message
+or reply, and shows its acknowledgement state with a red dot when unanswered.
+An opposite-direction `ack` or `reply` naming that message in `in_reply_to`
+establishes acknowledgement; acknowledgement records are not message previews.
+
+Clicking a contact acknowledges its latest message if it is incoming, unanswered,
+within the protocol's 30-day window, and an outgoing channel and sender are
+available. It posts `Read.` through the existing authorized send operation.
+The detail has no unread badges or manual mark-read controls. Initial entrypoint
+selection, list reads and subsequent polling remain read-only. Failed opening
+reads or writes do not automatically retry acknowledgement; reopening is explicit.
+
 **Send** answers the newest unread message as a `reply` that inherits its topic,
 then acks the other unread messages with `Read; see my reply.` With nothing
 unread, Send posts a new `message` as before. Each ack uses `agent_connection_send` with a
-fresh ID; a failed ack returns the message to unread. Opening or polling a thread
-still never writes.
+fresh ID; a failed ack returns the message to unread. No shares are created.
 
 ### Optional contact status
 

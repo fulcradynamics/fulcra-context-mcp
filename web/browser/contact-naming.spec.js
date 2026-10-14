@@ -13,8 +13,9 @@ for (const kind of ['direct', 'multiparty']) {
     await expect(ui.getByRole('button', {
       name: 'talk with my agent about this Agent Contact', exact: true,
     })).toBeEnabled();
-    expect(await page.evaluate(() => window.calls.map(call => call.name)))
-      .not.toContain('agent_connection_send');
+    const writes = await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'));
+    expect(writes).toHaveLength(1);
+    expect(writes[0].arguments.kind).toBe('ack');
   });
 }
 
@@ -24,5 +25,6 @@ test('contact branding uses the compiled app without changing polling writes', a
   await expect(ui.locator('#connections-title')).toHaveText('Agent Contacts');
   const names = await page.evaluate(() => window.calls.map(call => call.name));
   expect(names.every(name => !name.includes('mesh') && !name.includes('aicq'))).toBe(true);
-  expect(names).not.toContain('agent_connection_send');
+  await page.clock.runFor(11000);
+  expect(await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'))).toHaveLength(1);
 });
