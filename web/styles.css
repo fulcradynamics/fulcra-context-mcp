@@ -110,7 +110,12 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 .composer-input:focus-visible { outline-width: 1px; outline-offset: 2px; }
 #message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0; }
 #message-through { margin: 0; color: #6a6a70; }
-#message-status { margin-block: 20px; }
+.message-status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-block: 20px; }
+#message-status { margin: 0; }
+/* Borderless teal inline retry, matching the quiet "Load more history" link. */
+.retry-now { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 0 2px; }
+.retry-now:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
+.message-status-row .refresh-spinner { align-self: center; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
 
 /* Card-container lists: a bordered, rounded panel on a raised surface whose rows
    are divided by hairlines and lift on hover (Portal data-types row cards). */

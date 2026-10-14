@@ -63,7 +63,11 @@
       <div id="thread-composer"></div>
       <div id="message-area">
         <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span> Loading messages…</p>
-        <p id="message-status" role="status" aria-live="polite"></p>
+        <div class="message-status-row">
+          <p id="message-status" role="status" aria-live="polite"></p>
+          <span id="message-retry-spinner" class="refresh-spinner" aria-hidden="true" hidden></span>
+          <button id="message-retry" type="button" class="retry-now" hidden>Retry now</button>
+        </div>
         <ol id="messages"></ol>
         <div id="message-history" hidden>
           <p id="message-through" class="meta" role="status"></p>

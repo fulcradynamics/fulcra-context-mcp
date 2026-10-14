@@ -22,6 +22,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
+  const retry = doc.querySelector('#message-retry');
+  const retrySpinner = doc.querySelector('#message-retry-spinner');
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
@@ -99,7 +101,12 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   let refreshState = { running: false, paused: false, nextAt: null };
   function renderStatus() {
     clearTimeout(statusTimer);
-    if (!selected) return;
+    if (!selected) { retry.hidden = true; retrySpinner.hidden = true; return; }
+    // Offer a manual retry while a load has failed and nothing is in flight; show
+    // a spinner instead while a retry is actually running.
+    const failedIdle = loadFailed && !refreshState.paused;
+    retry.hidden = !(failedIdle && !refreshState.running);
+    retrySpinner.hidden = !(failedIdle && refreshState.running);
     let text = '';
     if (unavailable) text = 'This Agent Contact is no longer available.';
     else if (loadFailed) {
@@ -355,7 +362,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     panel.hidden = true; listPanel.hidden = false;
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
   };
+  const onRetry = () => requestRefresh();
   more.addEventListener('click', onMore);
+  retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
   back.addEventListener('click', onBack);
   function select(thread, button, { acknowledge = false } = {}) {
@@ -388,6 +397,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true;
     messageList.dispose();
     more.removeEventListener('click', onMore);
+    retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);
     viewer.removeEventListener('input', onViewer);
     back.removeEventListener('click', onBack);
