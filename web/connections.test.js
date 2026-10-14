@@ -21,6 +21,16 @@ test('discovers Event contacts and isolates legacy without reading records', asy
   assert.equal(result.threads.length,1); assert.equal(result.legacy.length,1);
   assert.deepEqual(result.threads[0].sources.map(s=>s.id),[id]);
 });
+for (const prefix of ['connect-agents-with-anyone', 'connect-our-agents']) {
+  test(`discovers ${prefix} channels and preserves grant checks`, async () => {
+    const channel = { ...entry, description: `${prefix} channel` };
+    const incoming = { grant_type: 'user', sharing_fulcra_userid: peer, data_types: [id], datashare_name: `${prefix}: test` };
+    assert.equal((await discoverThreads(app([{ ...channel, fulcra_userid: peer }], [], [incoming]))).threads.length, 1);
+    assert.equal((await discoverThreads(app([channel], [{ ...share, datashare_name: `${prefix}: test` }]))).threads.length, 1);
+    assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 0);
+    assert.equal((await discoverThreads(app([{ ...channel, fields: {} }]))).threads.length, 0);
+  });
+}
 test('all covering grants and channel schema are checked', async () => {
   assert.equal((await discoverThreads(app([entry],[share,{share_all_data:true}]))).threads.length,0);
   assert.equal((await discoverThreads(app([{...entry,fields:{}}]))).threads.length,0);

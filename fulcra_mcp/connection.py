@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 
 import jsonschema
 from fulcra_api import connections, records
-from .connection_compatibility import SHARE_NAME_PREFIX
+from .connection_compatibility import SHARE_NAME_PREFIX, CHANNEL_PREFIXES
 
 UUID_PATTERN = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 RETRY_DELAY = 1
@@ -25,7 +25,7 @@ def channel_entry(api, owner, channel):
         raise ValueError('Missing or ambiguous channel.')
     entry = entries[0]
     if (entry.get('id') != channel or entry.get('fulcra_userid') != owner
-            or not entry.get('description', '').startswith('connect-agents-with-anyone channel')
+            or not entry.get('description', '').startswith(CHANNEL_PREFIXES)
             or entry.get('deprecated') or entry.get('deleted_at')
             or entry.get('api_version') != 'v1'):
         raise ValueError('An active Event connection channel with exact owner identity is required.')

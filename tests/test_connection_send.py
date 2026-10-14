@@ -36,9 +36,16 @@ class API:
         self.rows = deepcopy(rows)
         return {'upload_id':'synthetic'}
 
-@pytest.fixture
-def api(monkeypatch):
+@pytest.fixture(params=['connect-agents-with-anyone', 'connect-our-agents'])
+def api(monkeypatch, request):
     value = API()
+    if request.param == 'connect-our-agents':
+        value.shares[0]['datashare_name'] = 'connect-our-agents: Test'
+        resolve = value.resolve_data_type
+        value.resolve_data_type = lambda *a, **kw: [dict(e, description='connect-our-agents channel') for e in resolve(*a, **kw)]
+        incoming = value.get_shared_datasets()
+        incoming[0]['datashare_name'] = 'connect-our-agents: Test'
+        value.get_shared_datasets = lambda: incoming
     monkeypatch.setattr(connection.records, 'get_records', lambda api, entry, *args, **kw: api.rows if entry['fulcra_userid'] == OWN else [api.target])
     monkeypatch.setattr(connection, 'RETRY_DELAY', 0, raising=False)
     return value

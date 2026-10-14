@@ -176,7 +176,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             inner.append(avatarWrap, textCol, button);
             entry = {row, thread};
             entry.refresh = legacyHandoff(app, button, status,
-              'Convert this legacy connection to a Contact using connect-agents-with-anyone. Create and share a new Event channel with this exact peer, preserve the old records, record converted_from_mesh provenance, and send the authorized final legacy upgrade notice using the legacy instructions. Do not delete old records.',
+              'Convert this legacy connection to a Contact using connect-our-agents. Create and share a new Event channel with this exact peer, preserve the old records, record converted_from_mesh provenance, and send the authorized final legacy upgrade notice using the legacy instructions. Do not delete old records.',
               () => ({peer_fulcra_userid:entry.thread.peer, legacy_sources:entry.thread.sources.map(({id,fulcra_userid})=>({id,fulcra_userid}))}),
               {lifecycle:detail.contextLifecycle,isCurrent:()=>!disposed && row.isConnected && !list.closest('[hidden]')});
             row.append(inner); legacyList.append(row); legacyRows.set(thread.peer, entry);

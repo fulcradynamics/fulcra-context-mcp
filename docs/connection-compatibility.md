@@ -1,29 +1,27 @@
 # Agent connection compatibility
 
-The top-level list is **Agents I Know**; threads are **Agent Contacts**. Underlying channels are agent connections. Server 1.8.0 / UI v41 pairs with plugin 0.11.0.
+Server 1.9.1 / UI v44 pairs with plugin 0.13.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
 
 ## Current interface
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v41.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v41.html`.
-- `agent_contact_open`: selected contact; `ui://fulcra/contacts/thread/v41.html`.
-- `agent_contacts_search`: composer actions; `contacts://threads` descriptors.
-- `agent_connection_send`, `set_contact_identifier`: existing checked send and display-label operations, with unchanged arguments.
-- `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: general settings and check status.
+- `fulcra_open`: global list; `ui://fulcra/contacts/v44.html`.
+- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v44.html`.
+- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v44.html`.
+- `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
+- `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
+- `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: settings/check status.
+- Existing model-visible `open_file_manager`, file and sharing tools support the plugin's new files/send entry skills; no additional file server or upload mechanism.
 
-Refresh discovery and reinstall together. Old tool registrations and UI resource names are not advertised as aliases. No storage migration is performed.
+## Renamed connection skill
 
-## Deliberate exceptions
+The adapted plugin workflow is now `connect-our-agents`, tracking the upstream rename at c419b169128effbbb8d74fb775a5f960655cf959. New channel/share names use that prefix. Server and UI accept both it and `connect-agents-with-anyone`, including mixed peer generations, without changing stored descriptions or grants. Schema, ownership, exact audience, target-owner, retry and readback rules remain unchanged.
 
-`connection_compatibility.py` and `web/connection-compatibility.js` isolate persisted identifiers:
+The pinned SDK's canonical connection resolver understands only historical share names. `send_agent_message` translates the new name in a local discovery copy; the common send implementation rechecks untouched live grants before writing. No API mutation or permission widening is involved.
 
-- `[mesh_identifier: ...]` remains the display-label description suffix.
-- `converted_from_mesh: ...` remains historical owner/type provenance. The UI says **Converted from legacy connection**.
-- Legacy `Mesh Outbox` names still identify existing MomentAnnotation channels.
-- `/agent/chatgpt/mesh-checks/` remains the private schedule/checkpoint root.
+Existing tool-name translations still apply to historical references inside the adapted skill. Initialization and the plugin compatibility reference explain them without granting extra permission or lower-level fallback. Existing task prompts need consented same-task dependency updates/readback, preserving task identity, permissions and checkpoints. Reinstalling alone does not update schedules.
 
-Synthetic fixtures retain these strings to exercise compatibility, not new branding. Do not rename user-owned catalog entries, rewrite existing descriptions, reset notification or acknowledgement state, or move files for terminology changes.
+## Preserved data
 
-The plugin's packaged `connect-agents-with-anyone` directory is deliberately unchanged, including its source pins and historical language. Initialization instructions translate its old send/label/settings references to the current tools. The plugin's callers load a matching compatibility reference outside that directory. This is a tool-name translation only: no extra permission, lower-level fallback, acknowledgement, message, share or schedule is authorized. Existing scheduled prompts require consented updates on the same task with every permission ceiling and checkpoint preserved.
+Keep `[mesh_identifier: ...]`, `converted_from_mesh: ...`, legacy `Mesh Outbox` names and `/agent/chatgpt/mesh-checks/` unchanged. Do not rename channels, rewrite descriptions, reset notification/acknowledgement state, recreate connections or move files for this update.
 
-New resources and renamed tools keep existing authorization, exact-audience checks, acknowledgement and polling behavior. Live host rendering and model interpretation still require acceptance; local tests are not deployment evidence.
+Automated prefix tests cover send/readback, grants, discovery, schema projection and revocation. Native host/model/file-sharing acceptance remains separate from synthetic protocol and package verification.

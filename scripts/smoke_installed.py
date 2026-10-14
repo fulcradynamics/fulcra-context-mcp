@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.9.0'
+                assert initialized.serverInfo.version == '1.9.1'
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
@@ -45,22 +45,22 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v43.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v43.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v43.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v44.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v44.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v44.html', 'thread'),
                 ):
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="connection-presentation" content="{marker}"' in text
-                    for value in ('use the invite skill', 'connect-agents-with-anyone', 'Converted from legacy connection', 'Convert to Contact', 'chat about old messages',
+                    for value in ('use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v43 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v44 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

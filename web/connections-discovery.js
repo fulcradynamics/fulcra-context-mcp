@@ -1,5 +1,5 @@
 import { parseContactIdentifier, threadIdentifier, threadTitle } from './contact-identifier.js';
-import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX } from './connection-compatibility.js';
+import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX, CONNECTION_PREFIXES } from './connection-compatibility.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
@@ -25,9 +25,9 @@ export function parseConnections(result) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export const isConnection = e => e.id.startsWith('Event/') && e.description?.startsWith('connect-agents-with-anyone channel');
+export const isConnection = e => e.id.startsWith('Event/') && CONNECTION_PREFIXES.some(prefix => e.description?.startsWith(`${prefix} channel`));
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
-const namedShare = s => s.datashare_name?.startsWith('connect-agents-with-anyone');
+const namedShare = s => CONNECTION_PREFIXES.some(prefix => s.datashare_name?.startsWith(prefix));
 const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
 export function conversionSources(description, own, peer) {
