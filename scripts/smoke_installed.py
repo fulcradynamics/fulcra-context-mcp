@@ -25,6 +25,9 @@ async def main():
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
                 assert initialized.serverInfo.version == '1.11.0'
+                icons = initialized.serverInfo.icons
+                assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
+                assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
@@ -53,6 +56,7 @@ async def main():
                     ('agent_contacts_open', 'ui://fulcra/contacts/threads/v46.html', 'threads'),
                     ('agent_contact_open', 'ui://fulcra/contacts/thread/v46.html', 'thread'),
                 ):
+                    assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text

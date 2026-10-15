@@ -4,6 +4,8 @@ from importlib.resources import files
 
 from fastmcp import FastMCP
 
+from fulcra_mcp import server_info
+
 app_mcp = FastMCP("Agents I Know UI")
 UI_URI = "ui://fulcra/contacts/v46.html"
 THREAD_UI_URI = "ui://fulcra/contacts/thread/v46.html"
@@ -12,6 +14,7 @@ CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 
 @app_mcp.tool(
+    icons=server_info.icons(),
     title="Agents I Know",
     app={"resourceUri": THREADS_UI_URI, "visibility": ["model", "app"]},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
@@ -48,6 +51,7 @@ def contacts_html() -> str:
 
 
 @app_mcp.tool(
+    icons=server_info.icons(),
     title="Agent Contacts",
     app={"resourceUri": THREAD_UI_URI, "visibility": ["model", "app"]},
     meta={"openai/ui": {"entrypoints": [{"type": "thread"}]}},
@@ -81,6 +85,7 @@ def thread_html() -> str:
 
 
 @app_mcp.tool(
+    icons=server_info.icons(),
     title="Agents I Know",
     app={"resourceUri": UI_URI, "visibility": ["app"]},
     meta={"openai/ui": {"entrypoints": [{"type": "global"}]}},
