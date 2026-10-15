@@ -363,7 +363,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
-    (returnFocus?.isConnected ? returnFocus : doc.querySelector('#refresh-threads'))?.focus();
+    (returnFocus?.isConnected ? returnFocus : doc.querySelector('#connections .thread-button'))?.focus();
   };
   const onRetry = () => requestRefresh();
   more.addEventListener('click', onMore);

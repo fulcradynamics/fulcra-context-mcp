@@ -5,7 +5,6 @@ import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
-import { icon, RefreshCw } from './icons.js';
 
 // Compact "time since last message" for contact rows: now / 5m / 3h / 2d, then a
 // short local date once it's a week old.
@@ -41,10 +40,14 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const legacyRows = new Map();
 
   let disposed = false, disposal, lastSuccess, nextRow = 0, firstLoad = true;
+  // Contacts-list refresh state, mirroring the messages view: a failed discovery
+  // surfaces the scheduler's retry countdown + a manual "Retry now" control.
+  let listFailed = false, listWarnings = '', connStatusTimer;
+  let refreshState = { running: false, paused: false, nextAt: null };
   const rows = new Map();
   const loadingEl = doc.querySelector('#connections-loading');
-  const refreshButton = doc.querySelector('#refresh-threads');
-  refreshButton.prepend(icon(RefreshCw, 'btn-icon'));
+  const connRetry = doc.querySelector('#connection-retry');
+  const connRetrySpinner = doc.querySelector('#connection-retry-spinner');
   status.textContent = '';
   const inlineList = entrypoint.presentation === 'threads';
   const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
@@ -91,7 +94,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   }
   const scheduler = createRefreshScheduler({
     isVisible: () => doc.visibilityState === 'visible',
-    onState: state => detail.refreshState(state),
+    onState: state => { refreshState = state; renderConnectionStatus(); detail.refreshState(state); },
     async refresh() {
       try {
         const discovery = await discoverThreads(app);
@@ -196,7 +199,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
-        status.textContent = discovery.warnings.join(' ');
+        listFailed = false; listWarnings = discovery.warnings.join(' '); renderConnectionStatus();
         if (doc.visibilityState !== 'visible') return true;
         // Reveal the contacts as soon as discovery returns — the per-thread reads
         // that inform unread state and timestamps fill in after, with a small
@@ -209,12 +212,33 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       } catch (error) {
         if (disposed) return false;
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; list.hidden = false; }
-        status.textContent = lastSuccess ? 'Couldn’t refresh — showing the last results.' : 'Couldn’t load your contacts.';
+        listFailed = true; renderConnectionStatus();
         detail.failed(error);
         return false;
       }
     },
   });
+  // Discovery status, matching the messages view: on failure, show the scheduler's
+  // retry countdown with a manual "Retry now" (and a spinner while a retry runs);
+  // otherwise surface any discovery warnings.
+  function renderConnectionStatus() {
+    clearTimeout(connStatusTimer);
+    const failedIdle = listFailed && !refreshState.paused;
+    connRetry.hidden = !(failedIdle && !refreshState.running);
+    connRetrySpinner.hidden = !(failedIdle && refreshState.running);
+    let text = listWarnings;
+    if (listFailed) {
+      text = lastSuccess ? 'Couldn’t refresh contacts. ' : 'Couldn’t load contacts. ';
+      if (refreshState.paused) text += 'Retries paused while this app is hidden.';
+      else if (refreshState.running) text += 'Retrying…';
+      else if (refreshState.nextAt !== null) {
+        text += `Retrying in ${Math.max(0, Math.ceil((refreshState.nextAt - Date.now()) / 1000))} seconds.`;
+        // Display-only tick. The scheduler alone owns retry requests/deadlines.
+        connStatusTimer = setTimeout(renderConnectionStatus, 1000);
+      } else text += 'Automatic retries are paused.';
+    }
+    if (status.textContent !== text) status.textContent = text;
+  }
   // Never present an incomplete read as a current preview or unread state.
   async function refreshPreviews() {
     await Promise.all([...rows.values()].map(async entry => {
@@ -287,13 +311,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     }
     doc.documentElement.classList.toggle('compact-threads', context.displayMode !== 'fullscreen');
   });
-  const manual = () => {
-    // An explicit refresh shows the prominent loader again (when the list is the
-    // visible panel); completion reveals the re-sorted list via the first-load path.
-    if (!listPanel.hidden && !firstLoad) { firstLoad = true; loadingEl.hidden = false; list.hidden = true; }
-    scheduler.request();
-  };
-  refreshButton.addEventListener('click', manual);
+  const onRetry = () => scheduler.request();
+  connRetry.addEventListener('click', onRetry);
   const visibility = () => scheduler.visibilityChanged();
   function dispose() {
     if (disposed) return disposal;
@@ -301,7 +320,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     stopHost?.();
     scheduler.dispose();
     disposal = detail.dispose();
-    refreshButton.removeEventListener('click', manual);
+    clearTimeout(connStatusTimer);
+    connRetry.removeEventListener('click', onRetry);
     doc.removeEventListener('visibilitychange', visibility);
     doc.defaultView.removeEventListener('pagehide', dispose);
     return disposal;

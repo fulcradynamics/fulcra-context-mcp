@@ -9,9 +9,10 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.env.PORT) || 5050;
-// Dev-only: render the app on a dark gray (not its production black :root) so
-// non-black-host contrast issues surface here. Hosts supply their own background.
-const DEV_BG = '#2a2a2e';
+// Dev-only: render the app on the same background the real host shows behind it
+// (rgb 13,13,13) rather than the app's production black :root, so the preview
+// matches what the app actually looks like in the host.
+const DEV_BG = '#0d0d0d';
 const webDir = fileURLToPath(new URL('../', import.meta.url));
 const appHtmlPath = fileURLToPath(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url));
 const hostHtmlPath = fileURLToPath(new URL('./host.html', import.meta.url));
