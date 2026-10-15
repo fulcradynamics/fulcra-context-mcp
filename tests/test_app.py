@@ -2,7 +2,15 @@
 
 from fastmcp import Client
 
+from fulcra_mcp import server_info
 from fulcra_mcp.main import mcp
+
+
+async def test_app_tools_advertise_navigation_icons():
+    async with Client(mcp) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+        for name in ("fulcra_open", "agent_contact_open", "agent_contacts_open"):
+            assert tools[name].icons == server_info.icons()
 
 
 async def test_direct_contacts_resource_contract():
