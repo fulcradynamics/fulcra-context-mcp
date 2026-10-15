@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.11.0 / contacts UI v46 / file manager v2 pairs with plugin 0.14.0.
+Server 1.12.0 / contacts UI v47 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v46.html`, `ui://fulcra/contacts/threads/v46.html` and
-`ui://fulcra/contacts/thread/v46.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v47.html`, `ui://fulcra/contacts/threads/v47.html` and
+`ui://fulcra/contacts/thread/v47.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**.
 
@@ -83,7 +83,7 @@ must not block read/report/checkpoint work. Multiparty status stays in chat.
 
 Optional `[connection_setup_session: "codex://threads/<UUID>"]` metadata belongs
 only on an owned channel at authorized creation, before the final identifier.
-Invitation requests permit unshared preparation, not sharing/sending. Existing
+Invitation requests permit unshared preparation and the narrowly code-matched return share described below, not arbitrary sharing or sending. Existing
 channels are not backfilled. Only one exact own-channel session marker is accepted;
 incoming, malformed or duplicate links fall back to the ordinary chat handoff.
 Explicit navigation does not send text or transfer context. Copy the bounded
@@ -97,6 +97,47 @@ but the browser opens the current file. Shared-owner browsing is read-only and
 never falls back to the viewer's account. No automatic reads or new shares occur.
 Unsupported hosts get copyable requests; uncertain handoffs stay locked against
 duplicates. Host acknowledgement does not prove another app opened.
+
+## Pending invitations
+
+Unshared and one-way contacts stay under **Pending** until current narrow grants
+support both directions. Multiparty conversations require incoming channels from
+each own-outbox recipient; incoming sources retain their unverified association.
+**Ask my agent** is an explicit bounded chat handoff, not sharing consent. Unknown
+host support disables it; uncertain handoffs are locked against duplicate sends.
+
+`prepare_agent_invitation(data_type)` requires an authorized invitation request and
+an exact owned, compatible, unshared Event channel. It returns `status=prepared`,
+`data_type`, `own_userid`, a cryptographically random 32-hex `code` and `topic`.
+Preparation persists/reuses that code in a private **Fulcra Agent Invitations**
+Event configuration description. The accepting agent shares its channel with the
+inviter and posts its **first record** as a message with exact topic `handshake <code>`.
+
+`match_agent_invitations()` is model/app callable and also runs during visible UI
+refresh. For outstanding invitations it reads full channel history, current direct
+incoming grants and schema. Matching requires one uniquely earliest first-message
+candidate across owner/channel pairs; tied first records and duplicate first-message
+candidates fail closed. Later replies/acks may inherit the same topic. Only the
+prepared own outbox can be returned to the authenticated incoming grant's owner.
+The code is durably consumed/bound to that owner/channel before a share attempt,
+with revalidation and independent grant readback. Uncertain attempts are not
+automatically retried. After verified grant readback, the binding is durably marked
+`completed`. That call returns `matched`; later calls omit completed invitations,
+never reshare them, and leave subsequent audience changes/revocation to discovery.
+Uncertain consumed attempts remain bound, read-back-only pending work. `results`
+contains narrow channel identities and `matched` or `pending`;
+`status=unavailable` means evidence could not be established. Invitation results
+cannot veto independently discovered reciprocal connections. No
+messages, LLM turns or preference changes are triggered by automatic matching.
+
+Public `create_share` refuses exact, base/wildcard (`Event`, `Event/*`, `*`) and
+whole-account grants covering existing invitation or contact-preference storage.
+Unrelated narrow data/file shares remain available.
+
+Storage has no compare-and-swap: the lock serializes one worker, not independent
+deployments. Cross-worker races and changes between grant checks and writes are
+not atomic. Full-history backend query support and native hosts remain acceptance
+gates; failed/partial JSONL reads fail closed rather than matching recent records.
 
 ## Legacy conversion
 

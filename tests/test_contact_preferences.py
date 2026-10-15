@@ -34,7 +34,7 @@ async def test_native_defaults_guidance_and_verified_update(storage):
     api, catalog = storage
     async with Client(mcp) as client:
         initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
-        assert initial['values'] == {k: policy.DEFAULTS[k] for k in policy.SCHEMA}
+        assert initial['values'] == policy.native_values({k: policy.DEFAULTS[k] for k in policy.SCHEMA})
         assert initial['values']['acknowledge_messages'] is True
         assert initial['values']['share_contact_status'] is True
         assert initial['values']['pause_autonomous_replies'] is False
@@ -86,6 +86,22 @@ def test_global_pause_applies_to_every_contact():
     assert policy.effective(paused, {'pause_autonomous_replies': False})['pause_autonomous_replies'] is True
     assert policy.effective(policy.DEFAULTS, {'pause_autonomous_replies': True})['pause_autonomous_replies'] is True
     assert policy.effective(policy.DEFAULTS, {'share_contact_status': False})['share_contact_status'] is False
+
+
+async def test_notification_labels_roundtrip_to_canonical_storage(storage):
+    api, catalog = storage
+    async with Client(mcp) as client:
+        for stored, label in policy.NOTIFICATION_LABELS.items():
+            saved = (await client.call_tool('fulcra_settings_update', {'set': {
+                'notifications': label, 'attention_new_unmatched_contact': False}})).structured_content
+            assert saved['values']['notifications'] == label
+            assert policy.read(api)['notifications'] == stored
+            assert policy.read(api)['attention_new_unmatched_contact'] is False
+            key = policy.scope(CONNECTION, PEER)
+            policy.set_overrides(api, key, {'attention_new_matched_contact': False})
+            values, _ = policy.contact(api, key)
+            assert values['notifications'] == stored
+            assert values['attention_new_matched_contact'] is False
 
 
 @pytest.mark.parametrize('share', [dict(share_all_data=True, fulcra_data_types=[]),

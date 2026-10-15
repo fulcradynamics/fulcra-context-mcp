@@ -5,6 +5,8 @@ for (const kind of ['direct', 'multiparty']) {
   test(`${kind} selected contact uses Agent Contact labels`, async ({ page }) => {
     const ui = await open(page);
     if (kind === 'direct') {
+      await page.evaluate(() => { window.direct = true; });
+      await page.clock.runFor(11000);
       await ui.getByRole('button', { name: 'Contacts', exact: true }).click();
       await ui.locator('.thread-button').filter({ hasText: peer }).filter({ hasNotText: 'Weekend' }).click();
       await expect(ui.locator('#messages .message-row')).toHaveCount(3);
@@ -14,8 +16,8 @@ for (const kind of ['direct', 'multiparty']) {
       name: 'Discuss in synthetic', exact: true,
     })).toBeEnabled();
     const writes = await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].arguments.kind).toBe('ack');
+    expect(writes).toHaveLength(kind === 'direct' ? 2 : 1);
+    expect(writes.every(write => write.arguments.kind === 'ack')).toBe(true);
   });
 }
 

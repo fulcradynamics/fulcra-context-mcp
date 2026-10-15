@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fulcra_api import connections, data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
@@ -876,6 +877,39 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
         "They stop appearing in get_records within about a minute; an id that "
         "doesn't exist in this type is ignored."
     )
+
+
+@tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
+    "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
+async def prepare_agent_invitation(data_type: str) -> dict:
+    """Prepare a durable random invitation code for an exact owned unshared Event channel.
+
+    Requires the user's invitation request, authorizing only the code-matched return
+    share. Include own_userid and code in the invite; the accepting agent's FIRST
+    message topic must be exactly the returned topic. Never invent a code.
+
+    Args:
+        data_type: Exact owned, unshared Event/<uuid> connection channel to invite on.
+    """
+    from .agent_invitations import prepare
+    try:
+        return await asyncio.to_thread(prepare, get_fulcra_object(), data_type)
+    except Exception:
+        raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
+
+
+@tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
+    "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": False})
+async def match_agent_invitations() -> dict:
+    """Complete only unambiguous first-message handshakes for user-prepared invitations.
+
+    Uses authenticated incoming-share ownership, never sender claims. Shares only
+    that invitation's own outbox and independently verifies the grant. Unmatched
+    contacts need explicit consent; pending results authorize no fallback share.
+    Does not send messages or change response preferences.
+    """
+    from .agent_invitations import match
+    return await asyncio.to_thread(match, get_fulcra_object())
 
 
 @tools_mcp.tool(annotations={"title": "Send Agent Message", "destructiveHint": False})
@@ -2239,11 +2273,18 @@ async def create_share(
     if time_start and time_end and (err := _range_error(time_start, time_end)):
         return err
     fulcra = get_fulcra_object()
-    if data_types:
+    if data_types or share_all_data:
         from . import contact_preferences
-        private = contact_preferences.find_type(fulcra, fulcra.get_fulcra_userid())
-        if private and private["id"] in types:
-            return "Contact preferences are private and cannot be shared."
+        from .agent_invitations import NAME as INVITATIONS_NAME
+        own = fulcra.get_fulcra_userid()
+        for entry in fulcra.v1_catalog(fulcra_userid=own):
+            if entry.get('fulcra_userid') != own:
+                continue
+            if (share_all_data or set(types) & {entry.get('id'), 'Event', 'Event/*', '*'}):
+                if entry.get('name') == contact_preferences.NAME:
+                    return "Contact preferences are private and cannot be shared."
+                if entry.get('name') == INVITATIONS_NAME:
+                    return "Agent invitations are private and cannot be shared."
     result = fulcra.create_datashare(
         datashare_name=name,
         fulcra_data_types=types,

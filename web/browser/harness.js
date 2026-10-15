@@ -4,12 +4,12 @@ const bundle = await readFile(new URL('../../fulcra_mcp/ui/contacts.html', impor
 const schema = JSON.parse(await readFile(new URL('../../tests/fixtures/connection-schema.json', import.meta.url), 'utf8'));
 export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [] } = {}) {
+export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat})=>{
   window.holdReads = holdReads;
   window.ownRecords = ownRecords;
   const frame=document.querySelector('iframe');
@@ -20,12 +20,17 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
   window.releaseReads=()=>window.heldReads.splice(0).forEach(fn=>fn());
   addEventListener('message',({data:r,source})=>{
    if(source!==frame.contentWindow)return;
-   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:{message:{text:{}},updateModelContext:{text:{}}}});
+   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:chat?{message:{text:{}},updateModelContext:{text:{}}}:{}});
    if(r.method==='ui/notifications/initialized')frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{presentation:'global'}}},'*');
    if(r.method==='ui/update-model-context'){window.contexts.push(r.params);reply(r.id,{});}
    if(r.method==='ui/message'){window.hostMessages.push(r.params); const respond=()=>reply(r.id,window.rejectMessages?{isError:true}:{}); if(window.holdMessages)window.releaseMessage=respond; else respond();}
    if(r.method!=='tools/call')return;
    window.calls.push(r.params); const {name,arguments:a}=r.params;
+   if(name==='match_agent_invitations'){
+    const respond=()=>reply(r.id,{structuredContent:{results:window.invitationMatches ?? []}});
+    if(window.holdMatches)window.releaseMatch=respond;else respond();
+    return;
+   }
    const discovery=['get_data_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
    if(name==='agent_connection_send'){
@@ -37,9 +42,12 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    }
    let text;
    if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
+    ...(window.direct ? [{id:out.slice(0,-1)+'9',name:'Direct',description:'connect-agents-with-anyone channel',...schema}] : []),
     ...[out,...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n[mesh_identifier: "Weekend"]',...schema})),
     ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
-   if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'})),incoming:[peer,other].map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))});
+   if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
+    ...(window.direct ? [{share_all_data:false,data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
+    ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))});
    if(name==='get_records') {
     if(window.failReads) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
     const records = a.fulcra_userid?[
@@ -56,7 +64,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
      || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
   }); frame.srcdoc=bundle;
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords});
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
