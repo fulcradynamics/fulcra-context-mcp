@@ -2,6 +2,7 @@
 // imported below are inlined into the self-contained connection.html — no runtime fetch.
 import {
   createElement,
+  Paperclip,
   Settings,
   ArrowDownLeft,
   ArrowUpRight,
@@ -29,6 +30,7 @@ export function icon(node, className, size = 16) {
 }
 
 export {
+  Paperclip,
   Settings,
   ArrowDownLeft,
   ArrowUpRight,
