@@ -1,14 +1,14 @@
 const options = { timeout: 15000 };
 const lifecycles = new WeakMap();
 
-export function getContextLifecycle(app, status, presentation = 'global') {
-  if (!lifecycles.has(app)) lifecycles.set(app, createContextLifecycle(app, status, presentation));
+export function getContextLifecycle(app, status) {
+  if (!lifecycles.has(app)) lifecycles.set(app, createContextLifecycle(app, status));
   return lifecycles.get(app);
 }
 
 // One queue for the app, not one per peer: an old attach must settle before its
 // empty replacement, and before a new peer can attach. No poll reattaches data.
-export function createContextLifecycle(app, status, presentation = 'global') {
+export function createContextLifecycle(app, status) {
   let tail = Promise.resolve(), epoch = 0, dirty = false, clearing, disposed = false;
   const report = text => { if (!disposed) status.textContent = text; };
   const enqueue = task => {

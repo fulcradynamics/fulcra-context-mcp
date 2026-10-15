@@ -325,7 +325,7 @@ async function refresh() {
       download.innerHTML = ICONS.download;
       download.title = "Download";
       download.setAttribute("aria-label", "Download " + file.name);
-      const path = file.full_name || (folderPath.split("/").pop() === file.name ? folderPath : join(folderPath, file.name));
+      const path = file.full_name || join(file.path ?? folderPath, file.name);
       download.onclick = () => downloadFile(path, file, owner);
       const when = file.uploaded_at || file.created_at;
       const main = el("div", "main", null, el("div", "name", file.name));

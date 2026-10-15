@@ -243,7 +243,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
       const at = message?.record?.start_time;
       entry.lastAt = at ? Date.parse(at) : NaN;
-      entry.resolved = true;
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
       entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
     }));

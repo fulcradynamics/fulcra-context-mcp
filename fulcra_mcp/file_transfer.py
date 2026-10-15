@@ -4,7 +4,7 @@ client, without passing their bytes through the model.
 * **Resources.** ``fulcra://files/{path}`` (and, for files another user shares,
   ``fulcra://users/{fulcra_userid}/files/{path}``) serve a file's bytes through
   ``resources/read``.
-* **The file manager panel** (an MCP App, ``ui://fulcra/file-manager/v2.html``).
+* **The file manager panel** (an MCP App, ``ui://fulcra/file-manager/v3.html``).
   In hosts that display MCP Apps, ``open_file_manager`` shows a panel where the
   user browses folders, drops files in to upload them and downloads files. The
   panel uploads in chunks through two app-only tools, ``start_file_upload`` and
@@ -52,7 +52,7 @@ from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
 
 logger = structlog.getLogger(__name__)
 
-FILE_MANAGER_URI = "ui://fulcra/file-manager/v2.html"
+FILE_MANAGER_URI = "ui://fulcra/file-manager/v3.html"
 
 # Resumable uploads take chunks in multiples of 256 KiB, except the last.
 UPLOAD_GRANULE = 256 * 1024
@@ -401,11 +401,9 @@ async def open_file_manager(path: str = "/", fulcra_userid: str | None = None) -
     """
     fulcra = tools.get_fulcra_object()
     path = _file_path(path)
-    listing = fulcra.list_files(path, **({"fulcra_userid": fulcra_userid} if fulcra_userid else {}))
-    result = {
-        "folders": listing.get("folders") or [],
-        "files": [_slim_file(f) for f in listing.get("files") or []],
-    }
+    result = tools._list_file_entries(fulcra, path, fulcra_userid)
+    if isinstance(result, str):
+        return result
     if fulcra_userid:
         return (
             f"Showing read-only Fulcra files owned by {fulcra_userid} at {path}. "

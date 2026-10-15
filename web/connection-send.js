@@ -1,10 +1,3 @@
-
-const sameSource = (a, b) => a.id === b.id && a.fulcra_userid === b.fulcra_userid;
-export function recipientAgent(messages, source, peer) {
-  const names = new Set(messages.filter(m => m.direction === 'Outgoing' && sameSource(m.source, source))
-    .map(m => m.record.sender).filter(s => typeof s === 'string' && s.trim()));
-  return names.size === 1 ? [...names][0] : 'chatgpt';
-}
 export function matchesPost(message, post) {
   return message.record.id === post.envelope.id;
 }

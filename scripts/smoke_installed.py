@@ -24,7 +24,10 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.11.0'
+                assert initialized.serverInfo.version == '1.11.1'
+                icons = initialized.serverInfo.icons
+                assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
+                assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
@@ -40,6 +43,7 @@ async def main():
                 assert 'send_agent_message' in tools
                 assert 'fulcra_userid' in tools['open_file_manager'].inputSchema['properties']
                 files_uri = tools['open_file_manager'].meta['ui']['resourceUri']
+                assert files_uri == 'ui://fulcra/file-manager/v3.html'
                 files_html = (await client.read_resource(files_uri)).contents[0].text
                 assert 'currentOwner' in files_html and 'Shared files — read-only' in files_html
                 status = tools['set_contact_status']
@@ -49,10 +53,11 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v45.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v45.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v45.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v46.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v46.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v46.html', 'thread'),
                 ):
+                    assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
@@ -65,7 +70,7 @@ async def main():
                                   'Open file browser in chat', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v45 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v46 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
