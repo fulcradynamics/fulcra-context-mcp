@@ -9,18 +9,18 @@ export function messageKeys(messages) {
   });
 }
 
-export function createMessageList(list, order, renderRow) {
+// Chat order is always oldest first; the newest edge is the bottom row.
+export function createMessageList(list, renderRow) {
   const doc = list.ownerDocument, win = doc.defaultView;
   let rows = new Map();
-  const latest = () => order.value === 'latest' ? list.firstElementChild : list.lastElementChild;
   const bottom = () => win.innerHeight - (doc.querySelector('.footer-spacer')?.offsetHeight ?? 0);
   function atLatest() {
-    const edge = latest()?.getBoundingClientRect();
-    return !edge || (order.value === 'latest' ? Math.abs(edge.top) <= 40 : edge.bottom <= bottom() + 40);
+    const edge = list.lastElementChild?.getBoundingClientRect();
+    return !edge || edge.bottom <= bottom() + 40;
   }
   function follow() {
-    const edge = latest()?.getBoundingClientRect();
-    if (edge) win.scrollBy(0, order.value === 'latest' ? edge.top : edge.bottom - bottom());
+    const edge = list.lastElementChild?.getBoundingClientRect();
+    if (edge) win.scrollBy(0, edge.bottom - bottom());
   }
   return {
     preservePosition(change) {
@@ -81,6 +81,5 @@ export function createMessageList(list, order, renderRow) {
       }
     },
     clear() { rows.clear(); list.replaceChildren(); },
-    dispose() {},
   };
 }

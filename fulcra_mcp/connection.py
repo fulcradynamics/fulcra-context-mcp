@@ -70,6 +70,24 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
     return entry
 
 
+def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
+    """Authorize an owned Event connection before reading or editing metadata."""
+    from .tools import _user_defined_fields
+    from .mentions import _compatible_schema
+
+    if not re.fullmatch('Event/' + UUID_PATTERN, data_type) or not _uuid(peer_userid):
+        raise ValueError('Exact Event channel and peer UUID required.')
+    own = api.get_fulcra_userid()
+    if not _uuid(own) or own == peer_userid:
+        raise ValueError('Distinct authenticated owner required.')
+    entry = _authorize(api, own, peer_userid, data_type, expected_peer_userids)
+    fields, required = _user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
+    if (entry.get('record_spec', {}).get('type') != 'event'
+            or not _compatible_schema({'fields': fields, 'required_fields': required})):
+        raise ValueError('Event connection schema required.')
+    return own, entry
+
+
 def _target(api, peer, target, now):
     found = []
     channels = set()

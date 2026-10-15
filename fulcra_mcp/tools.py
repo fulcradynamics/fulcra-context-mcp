@@ -358,14 +358,8 @@ async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body
                     expected_peer_userids: list[str] | None = None) -> dict:
     """Post an Event message to an existing, exact-audience channel.
 
-    Requires exact peer_userid and owned Event/<uuid> outbox. sender is your
-    agent name, body is exact nonblank text <=4000 characters. Omitted recipients
-    means everyone. mid is a stable UUID allocated before the first attempt;
-    bounded uncertain transport retries reuse it and the payload, never bypass
-    host denial. kind is message, reply or ack; replies/acks require in_reply_to
-    naming a peer message/reply within 30 days, never an ack. slug is an optional
-    topic (messages default to chat; answers inherit). pri is P1/P2/P3.
-    artifacts are optional file references, never a request to share files.
+    Bounded uncertain transport retries reuse mid and the payload, never bypass
+    host denial. Replies/acks target a peer message/reply, never an ack.
     Only status=posted verifies exact own-channel readback, not peer delivery.
 
     Args:
@@ -517,7 +511,6 @@ async def set_contact_status(data_type: str, peer_userid: str, attention: bool, 
     from datetime import datetime, timezone
     from . import connection
     from .contact_status import write_status, parse_status, validate_status
-    from .mentions import _compatible_schema
 
     result = {'data_type': data_type, 'peer_userid': peer_userid, 'verified': False}
     try:
@@ -527,14 +520,7 @@ async def set_contact_status(data_type: str, peer_userid: str, attention: bool, 
                           assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
         validate_status(assessment)
         api = get_fulcra_object()
-        own = api.get_fulcra_userid()
-        if not connection._uuid(own) or own == peer_userid:
-            raise ValueError('Distinct authenticated owner and peer required.')
-        original = connection._authorize(api, own, peer_userid, data_type)
-        fields, required = _user_defined_fields(api.v1_catalog_schema(data_type, 'v1'))
-        if (original.get('record_spec', {}).get('type') != 'event'
-                or not _compatible_schema({'fields': fields, 'required_fields': required})):
-            raise ValueError('An actual Event connection schema is required.')
+        own, original = connection.owned_connection(api, data_type, peer_userid)
         description = write_status(original.get('description'), assessment)
         if api.get_fulcra_userid() != own:
             raise ValueError('Authenticated account changed.')

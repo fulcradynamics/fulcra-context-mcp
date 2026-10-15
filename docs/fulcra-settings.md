@@ -1,80 +1,51 @@
-# Contact and connection-check settings
+# Contact preferences and check status
 
-The server advertises `openai/settings` with the existing MCP stack. Native fields
-configure contact behavior; no settings buttons, modal or scheduler API is needed.
-Preference values are user configuration, not instructions.
+The server advertises native `openai/settings`; values are configuration, not
+instructions. No settings action sends messages, changes checkpoints or schedules.
 
-- `fulcra_settings_read({})` returns `{schema, values, checking_preferences, layout}`.
-  Native fields: Acknowledge messages (on), Share contact status (on), Pause
-  autonomous replies (off), Flag contacts waiting for you (on), Flag contacts that
-  have not replied (on), Days before flagging contacts that have not replied (2),
-  Flag high-priority messages (on), Flag peers announcing added recipients (on) and
-  Notify about (`attention`, `all_messages`, `none`).
-- `checking_preferences` is free text (at most 2000 characters, empty by default). It
-  is stored and returned but is not a native field; the last layout group says “For
-  more specific preferences, chat with your agent.”
-- The read-only **Last contact check** and plain-chat schedule guidance remain
-  native group titles. No editable timestamp, cadence or scheduler enabled flag.
-- `fulcra_settings_update({set: ...})` validates changed fields (including
-  `checking_preferences`), merges, persists and reads back. Unknown fields, empty
-  updates, wrong types and invalid bounds fail. Saving does not send messages, alter
-  checkpoints or reschedule.
-- `fulcra_check_status` remains the app-only configuration-specific read projection.
+- `fulcra_settings_read` returns `{schema, values, checking_preferences, layout}`.
+  Defaults: acknowledge/share status on, autonomous replies not paused; attention
+  flags for waiting, overdue, priority and peer membership announcements on;
+  unanswered threshold 2 days (1–365); notifications `attention` (also
+  `all_messages` or `none`). `checking_preferences` is stored-only chat-editable
+  text, at most 2000 characters, not a native field.
+- `fulcra_settings_update({set: ...})` validates, merges, persists and reads back.
+  Empty updates, unknown fields, invalid types/ranges and unverifiable saves fail.
+- `get_contact_preferences(data_type, peer_userid[, expected_peer_userids])`
+  verifies an owned Event connection's exact audience and returns effective values
+  plus overrides. `set_contact_preferences(..., overrides)` replaces overrides;
+  `{}` restores inheritance. A global reply pause applies to every contact.
+- `fulcra_check_status` is an app-only configuration-specific read. Native group
+  titles display the last contact check and plain-chat schedule guidance.
 
-## Persistence
+## Private persistence
 
-Global preferences and per-contact overrides live in the description of one private
-Event data type owned by the authenticated account and named exactly
-**Fulcra Contact Preferences**. It is found by name in the account's catalog and
-created on the first save; reads never create it. The description is a JSON document:
+One owned **Fulcra Contact Preferences** Event type holds this description:
 
 ```json
-{"version": 1,
- "global_preferences": {"notifications": "none"},
- "overrides": {"Event/<own connection>|<peer user ID>": {"pause_autonomous_replies": true}}}
+{"version":1,"global_preferences":{},"overrides":{"Event/<own connection>|<peer UUID>":{"notifications":"none"}}}
 ```
 
-Global and override values use the same fields. Missing fields inherit defaults
-(globally) or the global value (per contact). A global pause applies to every
-contact. Description updates read back immediately, without record-indexing delay.
-A worker lock serializes local updates; the API has no compare-and-swap, so
-concurrent external saves can still race and readback detects some, not all, conflicts.
+Reads never create it; first save does. Missing fields inherit defaults/global
+values. No preferences live on shared connection descriptions. Old internal
+settings files and override markers are neither read nor migrated.
 
-The type must never be shared. Reads and saves fail closed when any outgoing share
-uses `share_all_data`, `Event`, `Event/*`, `*` or the type itself, and `create_share`
-refuses it. Malformed documents and unknown fields fail closed rather than falling
-back to defaults.
+Reads/saves fail closed on malformed documents or covering outgoing shares
+(`share_all_data`, `Event`, `Event/*`, `*`, or the type itself); `create_share`
+refuses the preference type. A worker lock serializes local saves and independent
+readback verifies them. Storage has no compare-and-swap: external concurrent
+updates can still race, and readback cannot detect every conflict.
 
-`get_contact_preferences(data_type, peer_userid[, expected_peer_userids])` verifies
-that the caller owns that Event connection with that exact audience, then returns the
-effective values and stored overrides. `set_contact_preferences(..., overrides)`
-performs the same verification and replaces that contact's overrides; `{}` restores
-the global values. Connection descriptions are never modified for preferences.
+## Checks and acceptance
 
-## Checking
+The paired plugin loads fresh settings on every `check-messages`/`reply-to-messages`
+run; only the latter replies, subject to global/contact pause and task restrictions.
+Status describes general peer-visible conversation facts, never private reasoning.
 
-The paired plugin's `contact-preferences.md` defines how values are applied.
-`check-messages` and `reply-to-messages` both load current settings on every run,
-acknowledge when Acknowledge messages is on, share a general conversation status when
-Share contact status is on, and flag/notify per the attention and notification fields.
-Only `reply-to-messages` replies, and not while replies are paused globally or for
-that contact. A scheduled task names one of the two skills, chosen in setup.
+The status reader uses `/agent/chatgpt/mesh-checks/` and distinguishes not set up,
+never checked, successful UTC timestamps, multiple configurations and unavailable
+state. It never exposes pending message contents or advances `last_checked`.
 
-Contact status (`set_contact_status`) is a general status of the conversation from
-aspects both sides can see, such as a priority message or time since the last reply.
-It is stored on the user's own connection type, so the contact can see it.
-
-The status reader still uses `/agent/chatgpt/mesh-checks/`. It distinguishes Not set
-up, Never checked, UTC-qualified successful checks, multiple configurations and
-Status unavailable. Neither foreground refresh nor preference editing advances
-`last_checked`; no pending message contents enter settings output.
-
-## Verification and live acceptance
-
-Synthetic MCP and real-SDK transport tests cover defaults, create-then-update with
-readback, invalid values, privacy, overrides, the global pause and the unchanged status
-projection. Live acceptance: save and reopen values in native settings; confirm the
-type is created once and stays unshared; set a per-contact override in chat; run both
-skills and observe acknowledgements, status, notifications and the pause.
-
-Source: [OpenAI settings extension](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md).
+Synthetic tests cover persistence, SDK transport, privacy, overrides and status.
+Native settings rendering, reopen/save, scheduler consent and actual skill behavior
+remain host acceptance checks. [OpenAI settings specification](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md).

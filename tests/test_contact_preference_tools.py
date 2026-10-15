@@ -49,13 +49,21 @@ async def test_multiparty_overrides_require_exact_audience(backend, store):
         assert readback.structured_content['values']['attention_peer_membership_announcements'] is False
 
 
-@pytest.mark.parametrize('option', ['peer', 'schema', 'invalid'])
+@pytest.mark.parametrize('option', ['peer', 'schema', 'invalid', 'broad_grant', 'revoked'])
 async def test_override_rejects_unowned_or_invalid(backend, store, option):
     if option == 'peer': backend['row']['fulcra_userid'] = PEER
     if option == 'schema': backend['schema'] = {'properties': {}}
+    if option == 'broad_grant':
+        backend['shares'].append(dict(share_all_data=True, fulcra_data_types=[], permissions=[]))
+    if option == 'revoked': backend['shares'].clear()
     overrides = {'autonomous_replies': True} if option == 'invalid' else {'notifications': 'none'}
     async with Client(mcp) as client:
         result = await client.call_tool('set_contact_preferences', {
             'data_type': OUT, 'peer_userid': PEER, 'overrides': overrides}, raise_on_error=False)
         assert result.is_error
+        if option != 'invalid':
+            result = await client.call_tool('get_contact_preferences', {
+                'data_type': OUT, 'peer_userid': PEER}, raise_on_error=False)
+            assert result.is_error
     assert store['overrides'] == {}
+    assert not backend['writes']
