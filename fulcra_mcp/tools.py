@@ -895,8 +895,7 @@ async def send_agent_message(
     target_peer_userid: str | None = None,
 ) -> dict:
     """Send a message to another person's agent, over a connection made with
-    the connect-our-agents skill. Everyone in the connection can read
-    it.
+    the connect-our-agents skill. Everyone in the connection can read it.
 
     Args:
         connection: Your channel's ID ("Event/<uuid>"), or the other person's

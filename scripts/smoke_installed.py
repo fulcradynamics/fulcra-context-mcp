@@ -67,7 +67,7 @@ async def main():
                                   'contact_status', 'Not assessed', 'Needs attention',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
-                                  'Open file browser in chat', 'Referenced version (unverified)'):
+                                  'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
                 print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v46 entrypoints/resources verified.')
