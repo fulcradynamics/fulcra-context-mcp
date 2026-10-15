@@ -1759,6 +1759,15 @@ async def list_files(
         return f"Versions of {path}, newest first: " + json.dumps(
             [_slim_file(f) for f in versions]
         )
+    result = _list_file_entries(fulcra, path, fulcra_userid)
+    if isinstance(result, str):
+        return result
+    whose = f" shared by user {fulcra_userid}" if fulcra_userid else ""
+    return f"Files at {path}{whose}: " + json.dumps(result)
+
+
+def _list_file_entries(fulcra, path: str, fulcra_userid: str | None = None) -> dict | str:
+    """Browse folders or resolve an exact file using metadata only."""
     try:
         listing = fulcra.list_files(path, fulcra_userid=fulcra_userid)
     except urllib.error.HTTPError as e:
@@ -1772,6 +1781,9 @@ async def list_files(
         "folders": listing.get("folders") or [],
         "files": [_slim_file(f) for f in listing.get("files") or []],
     }
+    # The owned root is always a folder, even before the first upload.
+    if path == "/" and not fulcra_userid:
+        return result
     if not result["folders"] and not result["files"]:
         try:
             result["files"] = [
@@ -1782,8 +1794,7 @@ async def list_files(
             if fulcra_userid:
                 return _not_shared_message(path, fulcra_userid)
             return f"No folder or file found at {path!r}."
-    whose = f" shared by user {fulcra_userid}" if fulcra_userid else ""
-    return f"Files at {path}{whose}: " + json.dumps(result)
+    return result
 
 
 @tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
