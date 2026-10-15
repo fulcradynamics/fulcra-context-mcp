@@ -21,15 +21,18 @@ test('click sends only a user message requesting the invitation action', async (
   assert.equal(calls[0].role, 'user');
   assert.match(calls[0].content[0].text, /use the invite skill/);
   assert.match(calls[0].content[0].text, /invite another user/);
-  assert.match(calls[0].content[0].text, /First show me a copyable invitation prompt/);
-  assert.match(calls[0].content[0].text, /my own verified Fulcra user ID/);
+  assert.match(calls[0].content[0].text, /prepare_agent_invitation\(data_type\)/);
+  assert.match(calls[0].content[0].text, /copyable invitation prompt/);
+  assert.match(calls[0].content[0].text, /returned own_userid and code/);
+  assert.match(calls[0].content[0].text, /FIRST message topic must be exactly handshake/);
   assert.match(calls[0].content[0].text, /Do not ask for the other user's ID/);
   assert.match(calls[0].content[0].text, /optional context/);
   assert.match(calls[0].content[0].text, /draft an outgoing message/);
   assert.match(calls[0].content[0].text, /prepare a dedicated unshared outbox/);
   assert.match(calls[0].content[0].text, /identifier.*original setup session URL/);
   assert.match(calls[0].content[0].text, /without another confirmation/);
-  assert.match(calls[0].content[0].text, /do not share or post.*peer ID.*verified.*authoriz/);
+  assert.match(calls[0].content[0].text, /authorizes match_agent_invitations to share only that prepared outbox/);
+  assert.match(calls[0].content[0].text, /unmatched sharing needs my explicit consent/);
   assert.match(status.textContent, /Request sent/);
 });
 

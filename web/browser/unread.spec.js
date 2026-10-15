@@ -40,7 +40,7 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
 test('previews survive metadata-only refreshes while their reads are pending', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true, holdReads: true });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
-  await ui.locator('#refresh-threads').click();
+  await page.clock.runFor(11000);
   await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(2);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(ui.locator('.thread-row').filter({ hasText: 'Weekend' }).locator('.thread-preview')).toContainText('Broadcast message');
@@ -81,7 +81,7 @@ test('verified acknowledgement clears the list dot and is not sent again on reop
   const ui = await open(page, 390, { acceptAck: true });
   await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
   await ui.locator('#message-back').click();
-  await ui.locator('#refresh-threads').click();
+  await page.clock.runFor(11000);
   const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
   await expect(row.locator('.thread-preview')).toContainText('Broadcast message');
   await expect(row.locator('.unread-dot')).toBeHidden();
@@ -114,7 +114,7 @@ test('preview recovers newer outgoing content behind a receipt', async ({ page }
   await expect(row.locator('.unread-dot')).toBeHidden();
   expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
   await page.evaluate(() => { window.failReads = true; });
-  await ui.locator('#refresh-threads').click();
+  await page.clock.runFor(11000);
   await expect(row.locator('.thread-preview')).toContainText('Preview unavailable');
   await expect(row.locator('.thread-time')).toHaveText('');
   await expect(row.locator('.unread-dot')).toBeHidden();

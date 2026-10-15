@@ -5,10 +5,20 @@ instructions. No settings action sends messages, changes checkpoints or schedule
 
 - `fulcra_settings_read` returns `{schema, values, checking_preferences, layout}`.
   Defaults: acknowledge/share status on, autonomous replies not paused; attention
-  flags for waiting, overdue, priority and peer membership announcements on;
+  switches for waiting, overdue, priority, peer membership announcements and new
+  unmatched/matched contacts (`attention_new_unmatched_contact`,
+  `attention_new_matched_contact`) on;
   unanswered threshold 2 days (1–365); notifications `attention` (also
   `all_messages` or `none`). `checking_preferences` is stored-only chat-editable
   text, at most 2000 characters, not a native field.
+  Native attention labels use **Surface** and live with `unanswered_days` and
+  `notifications` in **Notification Preferences**. **Push notifications and email**
+  displays exactly `only surfaced activity`, `all messages from my contacts`,
+  `no notifications or emails`. The native settings spec has no separate enum
+  label mechanism: read/update return these labels and update accepts labels or
+  canonical values. Storage and effective contact preferences retain
+  `attention` / `all_messages` / `none`. These guide reporting, not host delivery
+  guarantees, notification permissions or schedule creation.
 - `fulcra_settings_update({set: ...})` validates, merges, persists and reads back.
   Empty updates, unknown fields, invalid types/ranges and unverifiable saves fail.
 - `get_contact_preferences(data_type, peer_userid[, expected_peer_userids])`

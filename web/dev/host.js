@@ -11,6 +11,7 @@ const text = t => ({ content: [{ type: 'text', text: t }] });
 // records); writes are acknowledged without side effects.
 function toolResult(name, args = {}) {
   if (scenario.fail?.includes(name)) return { isError: true };
+  if (name === 'match_agent_invitations') return { structuredContent: { results: [] } };
   if (name === 'get_data_catalog') {
     let catalog = scenario.catalog;
     if (args.data_type) catalog = catalog.filter(e => e.id === args.data_type && (e.fulcra_userid || own) === (args.fulcra_userid || own));
