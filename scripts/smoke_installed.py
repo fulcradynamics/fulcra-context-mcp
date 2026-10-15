@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.11.0'
+                assert initialized.serverInfo.version == '1.11.1'
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
@@ -40,6 +40,7 @@ async def main():
                 assert 'send_agent_message' in tools
                 assert 'fulcra_userid' in tools['open_file_manager'].inputSchema['properties']
                 files_uri = tools['open_file_manager'].meta['ui']['resourceUri']
+                assert files_uri == 'ui://fulcra/file-manager/v3.html'
                 files_html = (await client.read_resource(files_uri)).contents[0].text
                 assert 'currentOwner' in files_html and 'Shared files — read-only' in files_html
                 status = tools['set_contact_status']

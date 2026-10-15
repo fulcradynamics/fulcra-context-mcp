@@ -147,7 +147,7 @@ async def test_open_file_manager_helps_clients_without_the_panel(call, fake_fulc
 
     text = await call("open_file_manager", {"path": "reports"})
 
-    fake_fulcra.list_files.assert_called_once_with("/reports")
+    fake_fulcra.list_files.assert_called_once_with("/reports", fulcra_userid=None)
     assert "write_file" in text and "as_link=true" in text
     assert '"q3.xlsx"' in text
 
