@@ -4,12 +4,12 @@ const bundle = await readFile(new URL('../../fulcra_mcp/ui/contacts.html', impor
 const schema = JSON.parse(await readFile(new URL('../../tests/fixtures/connection-schema.json', import.meta.url), 'utf8'));
 export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true } = {}) {
+export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, sampling = false, presentation = 'global' } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,sampling,presentation})=>{
   window.holdReads = holdReads;
   window.ownRecords = ownRecords;
   const frame=document.querySelector('iframe');
@@ -20,8 +20,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
   window.releaseReads=()=>window.heldReads.splice(0).forEach(fn=>fn());
   addEventListener('message',({data:r,source})=>{
    if(source!==frame.contentWindow)return;
-   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:chat?{message:{text:{}},updateModelContext:{text:{}}}:{}});
-   if(r.method==='ui/notifications/initialized')frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{presentation:'global'}}},'*');
+   if(r.method==='ui/create-sampling-message') { window.samplingCalls = (window.samplingCalls ?? 0) + 1; reply(r.id,{}); }
+   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:{...(chat?{message:{text:{}},updateModelContext:{text:{}}}:{}),...(sampling?{sampling:{}}:{})}});
+   if(r.method==='ui/notifications/initialized')frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{presentation}}},'*');
    if(r.method==='ui/update-model-context'){window.contexts.push(r.params);reply(r.id,{});}
    if(r.method==='ui/message'){window.hostMessages.push(r.params); const respond=()=>reply(r.id,window.rejectMessages?{isError:true}:{}); if(window.holdMessages)window.releaseMessage=respond; else respond();}
    if(r.method!=='tools/call')return;
@@ -63,8 +64,8 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
      || window.holdReads === (a.fulcra_userid ? 'incoming' : 'outgoing')
      || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
-  }); frame.srcdoc=bundle;
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat});
+  }); frame.srcdoc=bundle.replace('name="connection-presentation" content="global"', `name="connection-presentation" content="${presentation}"`);
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,sampling,presentation});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();

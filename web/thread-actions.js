@@ -1,4 +1,3 @@
-import { setupReplySuggestions } from './reply-suggestions.js';
 import { clearPostedDraft, matchesPost, messageId, postRecord } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
@@ -7,7 +6,7 @@ const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
 // Drafts/posts belong to the peer; in-flight host operations belong to the app.
-export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, view, changed, presentation) {
+export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, view, changed) {
   const doc = container.ownerDocument;
   const label = doc.createElement('label');
   const input = doc.createElement('textarea'); input.rows = 1; input.maxLength = 4000; input.className = 'composer-input';
@@ -60,7 +59,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   (advanced ?? container).append(address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct connection Send remains available.';
-  let updateSuggestions = () => {}, source, sourceIdentity, selectionVersion = 0;
+  let source, sourceIdentity, selectionVersion = 0;
   draft.posts ??= []; draft.acks ??= new Set();
   // Acknowledge each target once; a failure returns it to unread for another try.
   async function ack(targets) {
@@ -124,9 +123,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !current.viewingAgent?.trim() || !input.value.trim()
       || draft.posts.some(p => p.state === 'sending' || p.state === 'uncertain');
     handoff.disabled = !supported || lifecycle.pending || !isCurrent() || !context();
-    updateSuggestions();
   };
-  if (presentation === 'thread') updateSuggestions = setupReplySuggestions(app, lifecycle, context, container, isCurrent, input, draft, update);
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
   outbox.addEventListener('change', () => { draft.outbox = outbox.value; update(); });
   lifecycle.onChange = update;
