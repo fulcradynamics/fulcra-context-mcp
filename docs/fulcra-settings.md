@@ -42,7 +42,7 @@ The paired plugin loads fresh settings on every `check-messages`/`reply-to-messa
 run; only the latter replies, subject to global/contact pause and task restrictions.
 Status describes general peer-visible conversation facts, never private reasoning.
 
-The status reader uses `/agent/chatgpt/mesh-checks/` and distinguishes not set up,
+The status reader uses `/connect-our-agents/connection-checks/` and distinguishes not set up,
 never checked, successful UTC timestamps, multiple configurations and unavailable
 state. It never exposes pending message contents or advances `last_checked`.
 

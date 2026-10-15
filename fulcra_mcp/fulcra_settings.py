@@ -9,10 +9,9 @@ from fastmcp.exceptions import ToolError
 
 from . import tools
 from .connection import owned_connection
-from .connection_compatibility import CHECK_STATE_ROOT
 
 settings_mcp = FastMCP("Agent Contact check settings")
-STATE_ROOT = CHECK_STATE_ROOT
+STATE_ROOT = "/connect-our-agents/connection-checks/"
 SCHEDULE_GUIDANCE = 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”'
 PREFERENCES_GUIDANCE = 'For more specific preferences, chat with your agent.'
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}

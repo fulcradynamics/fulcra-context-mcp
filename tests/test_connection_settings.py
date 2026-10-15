@@ -7,7 +7,7 @@ import pytest
 from fastmcp import Client
 from fulcra_mcp.main import mcp
 
-ROOT = "/agent/chatgpt/mesh-checks/"
+ROOT = "/connect-our-agents/connection-checks/"
 
 
 @pytest.fixture(autouse=True)

@@ -22,6 +22,6 @@ Existing tool-name translations still apply to historical references inside the 
 
 ## Preserved data
 
-Keep `[mesh_identifier: ...]`, `converted_from_mesh: ...`, legacy `Mesh Outbox` names and `/agent/chatgpt/mesh-checks/` unchanged. Do not rename channels, rewrite descriptions, reset notification/acknowledgement state, recreate connections or move files for this update.
+Keep `[mesh_identifier: ...]`, `converted_from_mesh: ...`, and legacy `Mesh Outbox` names unchanged. Do not rename channels, rewrite descriptions, reset notification/acknowledgement state, recreate connections or move files for this update.
 
 Automated prefix tests cover send/readback, grants, discovery, schema projection and revocation. Native host/model/file-sharing acceptance remains separate from synthetic protocol and package verification.
