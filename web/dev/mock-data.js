@@ -13,7 +13,7 @@ const iso = (daysAgo, hour = 12) => {
 };
 
 let seq = 0;
-const message = (sender, body, at, kind = 'message', topic) => ({ id: `rec-${++seq}`, start_time: at, sender, kind, body, ...(topic ? { topic } : {}) });
+const message = (sender, body, at, kind = 'message', topic, artifacts) => ({ id: `rec-${++seq}`, start_time: at, sender, kind, body, ...(topic ? { topic } : {}), ...(artifacts ? { artifacts } : {}) });
 
 // One Agent Contact: an owned outgoing channel shared to the peer, plus the
 // peer's incoming channel shared to us, each carrying some messages.
@@ -28,8 +28,8 @@ function contact({ peerId, name, outId, inId, sender = name, topic, outgoing = [
       sharing_fulcra_userid: peerId, sharing_fulcra_user_name: name, data_types: [inbox.id],
     }],
     rows: {
-      [`${own}/${outbox.id}`]: outgoing.map(m => message('You', m.body, m.at, m.kind, m.topic ?? topic)),
-      [`${peerId}/${inbox.id}`]: incoming.map(m => message(sender, m.body, m.at, m.kind, m.topic ?? topic)),
+      [`${own}/${outbox.id}`]: outgoing.map(m => message('You', m.body, m.at, m.kind, m.topic ?? topic, m.artifacts)),
+      [`${peerId}/${inbox.id}`]: incoming.map(m => message(sender, m.body, m.at, m.kind, m.topic ?? topic, m.artifacts)),
     },
   };
 }
@@ -42,7 +42,8 @@ const contacts = [
     outgoing: [{ body: 'Can your agent confirm the Q3 numbers before Friday?', at: iso(2, 10) }],
     incoming: [
       { body: 'On it — pulling the figures now.', at: iso(2, 11), kind: 'reply' },
-      { body: 'Confirmed: revenue is up 12% QoQ. Want me to draft a one-paragraph summary?', at: iso(1, 15), kind: 'reply' },
+      { body: 'Confirmed: revenue is up 12% QoQ. I dropped the summary in our shared folder.', at: iso(1, 15), kind: 'reply',
+        artifacts: [{ path: '/shared/finance/Q3-summary.pdf' }] },
     ],
   }),
   contact({
@@ -53,7 +54,8 @@ const contacts = [
     ],
     incoming: [
       { body: 'Checking now. Conditions look clear through the weekend, light wind Saturday morning.', at: iso(3, 10), kind: 'reply' },
-      { body: 'One note: the north approach is still muddy after Thursday’s rain, but the south approach is dry.\n\nI’d recommend the south approach and a 7am start to beat the crowd — want me to put it on your calendar?', at: iso(2, 16), kind: 'reply' },
+      { body: 'One note: the north approach is still muddy after Thursday’s rain, but the south approach is dry.\n\nI’d recommend the south approach and a 7am start to beat the crowd — I shared the route and the latest conditions.', at: iso(2, 16), kind: 'reply',
+        artifacts: [{ path: '/shared/hikes/south-approach.gpx' }, { path: '/shared/hikes/trail-conditions.pdf', version: 'rev-7' }] },
     ],
   }),
   contact({

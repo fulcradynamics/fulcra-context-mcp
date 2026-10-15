@@ -1,3 +1,5 @@
+import { icon, Paperclip } from './icons.js';
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function artifactReferences(record, source) {
@@ -30,24 +32,25 @@ export function renderArtifacts(container, record, source, app, lifecycle, isCur
   container.replaceChildren(); container.hidden = !files.length;
   if (!files.length) return;
   const doc = container.ownerDocument;
-  const label = doc.createElement('p'); label.textContent = 'Files referenced in this message';
+  const label = doc.createElement('p'); label.className = 'artifact-label';
+  label.append(icon(Paperclip, 'artifact-clip', 13), doc.createTextNode(files.length === 1 ? 'File attached' : 'Files attached'));
   container.append(label);
+  const host = app.getHostVersion()?.name || 'chat';
   for (const file of files) {
     const row = doc.createElement('div'); row.className = 'artifact';
     if (!file) { row.textContent = 'Invalid file reference'; container.append(row); continue; }
-    const path = doc.createElement('span'); path.textContent = file.path;
-    const details = doc.createElement('details');
-    const summary = doc.createElement('summary'); summary.textContent = 'File reference';
-    const info = doc.createElement('p');
-    info.textContent = `Owner: ${file.owner}. File access is shared separately.${file.version ? ` Referenced version: ${file.version} (unverified). Browser shows the current file.` : ''}`;
-    const prompt = doc.createElement('pre'); prompt.textContent = fileManagerRequest(file);
-    details.append(summary, info, prompt);
-    const button = doc.createElement('button'); button.type = 'button'; button.textContent = 'Open file browser in chat';
+    const path = doc.createElement('span'); path.className = 'artifact-path'; path.textContent = file.path;
+    const button = doc.createElement('button'); button.type = 'button'; button.className = 'artifact-open'; button.textContent = `Open file in ${host}`;
     const status = doc.createElement('p'); status.setAttribute('role','status');
     const request = fileManagerRequest(file), key = 'file-browser:' + request;
     const supported = !!app.getHostCapabilities()?.message?.text;
     button.disabled = !supported || lifecycle.handoffLocks.has(key);
-    if (!supported) status.textContent = 'Chat handoff is unavailable. Copy the request under File reference into chat.';
+    let prompt;
+    if (!supported) {
+      // Fallback when the host can't take a chat handoff: expose the exact request to copy.
+      prompt = doc.createElement('pre'); prompt.className = 'artifact-request'; prompt.textContent = request;
+      status.textContent = 'Chat handoff is unavailable. Copy the request below into chat.';
+    }
     button.addEventListener('click', async () => {
       if (!isCurrent() || !container.isConnected || container.dataset.references !== signature || lifecycle.pending || lifecycle.handoffLocks.has(key)) return;
       lifecycle.pending = true; lifecycle.onChange(); button.disabled = true;
@@ -69,6 +72,6 @@ export function renderArtifacts(container, record, source, app, lifecycle, isCur
         if (!sent) button.disabled = !supported;
       }
     });
-    row.append(path, button, details, status); container.append(row);
+    row.append(path, button, status); if (prompt) row.append(prompt); container.append(row);
   }
 }
