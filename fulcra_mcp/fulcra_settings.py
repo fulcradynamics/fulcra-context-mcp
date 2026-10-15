@@ -94,14 +94,18 @@ def fulcra_settings_read() -> dict:
     status = check_status()
     label = ("Multiple configurations — ask in chat to choose one"
              if status["status"] == "choose_configuration" else status["label"])
-    return {"schema": {"type": "object", "properties": policy.SCHEMA},
-            "values": {key: values[key] for key in policy.SCHEMA},
+    schema = {**policy.SCHEMA, 'notifications': {
+        **policy.SCHEMA['notifications'], 'enum': list(policy.NOTIFICATION_LABELS.values())}}
+    return {"schema": {"type": "object", "properties": schema},
+            "values": policy.native_values({key: values[key] for key in policy.SCHEMA}),
             "checking_preferences": values["checking_preferences"],
             "layout": [
                 {"kind": "group", "title": "Last contact check: " + label, "items": []},
                 {"kind": "group", "title": SCHEDULE_GUIDANCE, "items": []},
                 {"kind": "group", "title": "Contact behavior", "items": [
-                    {"kind": "property", "property": key} for key in policy.SCHEMA]},
+                    {"kind": "property", "property": key} for key in policy.SCHEMA if key not in policy.NOTIFICATION_FIELDS]},
+                {"kind": "group", "title": "Notification Preferences", "items": [
+                    {"kind": "property", "property": key} for key in policy.NOTIFICATION_FIELDS]},
                 {"kind": "group", "title": PREFERENCES_GUIDANCE, "items": []},
             ]}
 
@@ -115,10 +119,11 @@ def fulcra_settings_update(set: dict) -> dict:
     """
     from . import contact_preferences as policy
     try:
+        set = policy.stored_values(set)
         policy.validate(set)
         if not set:
             raise ValueError('Choose at least one preference.')
-        return {"values": policy.update(tools.get_fulcra_object(), set), "verified": True}
+        return {"values": policy.native_values(policy.update(tools.get_fulcra_object(), set)), "verified": True}
     except Exception:
         raise ToolError("Preferences not verified. Reload before retrying; no schedule was changed.") from None
 

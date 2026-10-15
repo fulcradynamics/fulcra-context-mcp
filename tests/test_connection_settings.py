@@ -41,9 +41,10 @@ async def test_native_settings_read_contract(fake_fulcra):
         assert tool.inputSchema.get("properties", {}) == {}
         assert set(tool.outputSchema["required"]) >= {"schema", "values"}
         result = (await client.call_tool(tool.name, {})).structured_content
-        from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA
-        assert result["schema"] == {"type": "object", "properties": SCHEMA}
-        assert result["values"] == {k: DEFAULTS[k] for k in SCHEMA}
+        from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA, NOTIFICATION_LABELS, native_values
+        assert result["schema"] == {"type": "object", "properties": {
+            **SCHEMA, 'notifications': {**SCHEMA['notifications'], 'enum': list(NOTIFICATION_LABELS.values())}}}
+        assert result["values"] == native_values({k: DEFAULTS[k] for k in SCHEMA})
         assert result["layout"][:2] == [
             {"kind": "group", "title": "Last contact check: Never checked", "items": []},
             {"kind": "group", "title": 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”', "items": []},
@@ -78,9 +79,10 @@ async def test_native_titles_cover_status_without_actions_or_writes(fake_fulcra,
     async with Client(mcp) as client:
         for _ in range(2):
             result = (await client.call_tool("fulcra_settings_read", {})).structured_content
-            from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA
-            assert result["schema"] == {"type": "object", "properties": SCHEMA}
-            assert result["values"] == {k: DEFAULTS[k] for k in SCHEMA}
+            from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA, NOTIFICATION_LABELS, native_values
+            assert result["schema"] == {"type": "object", "properties": {
+                **SCHEMA, 'notifications': {**SCHEMA['notifications'], 'enum': list(NOTIFICATION_LABELS.values())}}}
+            assert result["values"] == native_values({k: DEFAULTS[k] for k in SCHEMA})
             assert result["layout"][0]["title"] == "Last contact check: " + label
             assert result["layout"][1]["title"] == (
                 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”')

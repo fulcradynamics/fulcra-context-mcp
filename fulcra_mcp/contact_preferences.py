@@ -13,7 +13,12 @@ LOCK = RLock()  # Serializes this worker only; storage has no compare-and-swap.
 DEFAULTS = dict(acknowledge_messages=True, share_contact_status=True, pause_autonomous_replies=False,
                 attention_waiting=True, attention_overdue=True, unanswered_days=2,
                 attention_high_priority=True, attention_peer_membership_announcements=True,
+                attention_new_unmatched_contact=True, attention_new_matched_contact=True,
                 notifications='attention', checking_preferences='')
+# Native settings only support string enums, not separate option labels.
+NOTIFICATION_LABELS = dict(attention='only surfaced activity',
+                          all_messages='all messages from my contacts',
+                          none='no notifications or emails')
 # Native settings fields; checking_preferences is set by chatting with the agent.
 SCHEMA = {
     'acknowledge_messages': {'type': 'boolean', 'title': 'Acknowledge messages',
@@ -23,18 +28,34 @@ SCHEMA = {
                        'or time since the last reply, on your contact. Your contact can see it.'},
     'pause_autonomous_replies': {'type': 'boolean', 'title': 'Pause autonomous replies',
         'description': 'Scheduled reply-to-messages checks continue but do not reply.'},
-    'attention_waiting': {'type': 'boolean', 'title': 'Flag contacts waiting for you'},
-    'attention_overdue': {'type': 'boolean', 'title': 'Flag contacts that have not replied'},
-    'unanswered_days': {'type': 'integer', 'title': 'Days before flagging contacts that have not replied',
+    'attention_waiting': {'type': 'boolean', 'title': 'Surface contacts waiting for you'},
+    'attention_overdue': {'type': 'boolean', 'title': 'Surface contacts that have not replied'},
+    'unanswered_days': {'type': 'integer', 'title': 'Days before surfacing contacts that have not replied',
                         'minimum': 1, 'maximum': 365},
-    'attention_high_priority': {'type': 'boolean', 'title': 'Flag high-priority messages'},
+    'attention_high_priority': {'type': 'boolean', 'title': 'Surface high-priority messages'},
     'attention_peer_membership_announcements': {'type': 'boolean',
-        'title': 'Flag peers announcing added recipients',
+        'title': 'Surface peers announcing added recipients',
         'description': 'Notify about unverified peer membership announcements. Never grants sharing consent.'},
-    'notifications': {'type': 'string', 'title': 'Notify about', 'enum': ['attention', 'all_messages', 'none'],
+    'attention_new_unmatched_contact': {'type': 'boolean', 'title': 'Surface new unmatched contacts'},
+    'attention_new_matched_contact': {'type': 'boolean', 'title': 'Surface new matched contacts'},
+    'notifications': {'type': 'string', 'title': 'Push notifications and email', 'enum': ['attention', 'all_messages', 'none'],
         'description': 'Guides check summaries, not ChatGPT completion alerts or OS permissions.'},
 }
 FIELDS = {**SCHEMA, 'checking_preferences': {'type': 'string', 'maxLength': 2000}}
+NOTIFICATION_FIELDS = [k for k in SCHEMA if k.startswith('attention_') or k in ('unanswered_days', 'notifications')]
+
+
+def native_values(values):
+    return {**values, 'notifications': NOTIFICATION_LABELS[values['notifications']]}
+
+
+def stored_values(values):
+    result = dict(values)
+    if 'notifications' in result and isinstance(result['notifications'], str):
+        result['notifications'] = {v: k for k, v in NOTIFICATION_LABELS.items()}.get(result['notifications'], result['notifications'])
+    return result
+
+
 UUID = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 SCOPE = re.compile(rf'Event/{UUID}\|{UUID}')
 
