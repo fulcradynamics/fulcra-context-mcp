@@ -176,7 +176,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           }
           entry.source = source;
           entry.label.textContent = source.identifier || source.name;
-          entry.state.textContent = source.state || 'Not shared yet';
+          entry.state.textContent = source.state || 'Not connected yet. Invitation sent';
           entry.help.textContent = app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text
             ? '' : 'Chat assistance is unavailable here. Ask your agent to review pending Fulcra contacts in chat; sharing needs your consent.';
           entry.refresh();
