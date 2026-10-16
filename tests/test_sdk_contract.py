@@ -18,13 +18,6 @@ ANN_UUID = "6a0d0d5e-2b7a-4f5c-9c0e-3a3f1b2c4d5e"
 FILE_RECORD = {"id": "v1", "name": "a.txt", "path": "/", "size": 5}
 
 
-async def test_annotations_catalog(call, fake_fulcra):
-    fake_fulcra.annotations_catalog.return_value = [{"id": ANN_UUID, "name": "mood"}]
-    text = await call("annotations_catalog")
-    fake_fulcra.annotations_catalog.assert_called_once_with()
-    assert "mood" in text
-
-
 async def test_create_data_type(call, fake_fulcra):
     fake_fulcra.create_annotation.return_value = {"id": ANN_UUID, "name": "weight"}
     text = await call(

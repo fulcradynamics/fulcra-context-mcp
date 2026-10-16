@@ -566,11 +566,169 @@ async def test_catalog_lists_the_fields_of_one_user_defined_v1_type(call, fake_f
 )
 async def test_catalog_fetches_no_schema_otherwise(call, fake_fulcra, entries, data_type):
     fake_fulcra.v1_catalog.return_value = entries
+    fake_fulcra.fulcra_api.return_value = json.dumps({"annotation_type": "moment"})
 
     text = await call("get_data_catalog", {"data_type": data_type} if data_type else {})
 
     fake_fulcra.v1_catalog_schema.assert_not_called()
     assert '"fields"' not in text
+
+
+ENERGY_LEVEL = {
+    "id": V1_UUID,
+    "name": "Energy Level",
+    "annotation_type": "scale",
+    "measurement_spec": {
+        "value_type": "integer",
+        "metric_kind": "discrete",
+        "measurement_type": "scale",
+        "unit": None,
+        "scale": {"min_allowed": 1, "max_allowed": 5, "value": 3},
+    },
+    "spec": {
+        "default_note": None,
+        "scale": {
+            "label_mapping": {
+                "mapping_type": "string",
+                "string": {"mapping": {"1": "Very Low", "3": "Medium", "5": "Very High"}},
+            },
+            "scale_mapping": {
+                "mapping_type": "color",
+                "color": {"mapping": {"1": "#ff3b30", "5": "#33c759"}},
+            },
+        },
+    },
+    "tags": [],
+}
+
+WATER = {
+    "id": V1_UUID,
+    "name": "Water",
+    "annotation_type": "numeric",
+    "measurement_spec": {
+        "value_type": "real",
+        "metric_kind": "cumulative",
+        "measurement_type": "volume",
+        "unit": "fluid_ounce",
+        "volume": {"value": 8},
+    },
+    "spec": {"default_note": "tap"},
+    "tags": [],
+}
+
+
+ANNOTATION_DETAIL_KEYS = ("scale", "value_map", "measures", "unit", "default_value", "default_note")
+
+
+def _one_entry(text: str) -> dict:
+    [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+    return entry
+
+
+@pytest.mark.parametrize(
+    "base_type, definition, details",
+    [
+        (
+            "ScaleAnnotation",
+            ENERGY_LEVEL,
+            {
+                "scale": {"min": 1, "max": 5, "step": 1},
+                "value_map": {"1": "Very Low", "3": "Medium", "5": "Very High"},
+                "default_value": 3,
+            },
+        ),
+        (
+            "NumericAnnotation",
+            WATER,
+            {
+                "measures": "volume",
+                "unit": "fluid_ounce",
+                "default_value": 8,
+                "default_note": "tap",
+            },
+        ),
+        ("MomentAnnotation", {"annotation_type": "moment", "spec": None}, {}),
+    ],
+    ids=["scale", "numeric", "moment"],
+)
+async def test_catalog_adds_one_annotations_own_details(
+    call, fake_fulcra, base_type, definition, details
+):
+    type_id = f"{base_type}/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": type_id,
+            "name": definition.get("name", "x"),
+            "api_version": "v1alpha1",
+            "categories": ["user_defined"],
+            "fulcra_userid": FAKE_USER_ID,
+        }
+    ]
+    fake_fulcra.fulcra_api.return_value = json.dumps(definition)
+
+    entry = _one_entry(await call("get_data_catalog", {"data_type": type_id}))
+
+    fake_fulcra.fulcra_api.assert_called_once_with(
+        f"/user/v1alpha1/annotation/{V1_UUID}", query={"fulcra_userid": FAKE_USER_ID}
+    )
+    assert {k: v for k, v in entry.items() if k in ANNOTATION_DETAIL_KEYS} == details
+
+
+async def test_catalog_looks_up_a_shared_annotation_in_its_owners_account(
+    call, fake_fulcra
+):
+    owner = "11111111-2222-4333-8444-555555555555"
+    type_id = f"ScaleAnnotation/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": type_id,
+            "name": "Energy Level",
+            "api_version": "v1alpha1",
+            "categories": ["user_defined", "shared_type"],
+            "fulcra_userid": owner,
+        }
+    ]
+    fake_fulcra.fulcra_api.return_value = json.dumps(ENERGY_LEVEL)
+
+    entry = _one_entry(
+        await call("get_data_catalog", {"data_type": type_id, "fulcra_userid": owner})
+    )
+
+    fake_fulcra.fulcra_api.assert_called_once_with(
+        f"/user/v1alpha1/annotation/{V1_UUID}", query={"fulcra_userid": owner}
+    )
+    assert entry["fulcra_userid"] == owner
+    assert entry["scale"] == {"min": 1, "max": 5, "step": 1}
+
+
+async def test_catalog_still_returns_an_annotation_whose_definition_is_unavailable(
+    call, fake_fulcra
+):
+    type_id = f"ScaleAnnotation/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": type_id, "name": "Energy Level", "api_version": "v1alpha1"}
+    ]
+    fake_fulcra.fulcra_api.side_effect = http_error(403)
+
+    entry = _one_entry(await call("get_data_catalog", {"data_type": type_id}))
+
+    assert entry == {"id": type_id, "name": "Energy Level"}
+
+
+async def test_catalog_listing_looks_up_no_annotation_definitions(call, fake_fulcra):
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": f"ScaleAnnotation/{V1_UUID}", "api_version": "v1alpha1"},
+        {"id": f"MomentAnnotation/{V1_UUID}", "api_version": "v1alpha1"},
+    ]
+
+    await call("get_data_catalog", {"category": "user_defined"})
+
+    fake_fulcra.fulcra_api.assert_not_called()
+
+
+async def test_annotations_catalog_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("annotations_catalog")
 
 
 # --- create / archive / restore for v1 (Event / Metric) types -----------------

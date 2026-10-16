@@ -141,19 +141,6 @@ async def get_workouts(
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
-@tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
-@_friendly_http_errors
-async def annotations_catalog() -> str:
-    """Deprecated: use get_data_catalog(category="user_defined") instead.
-
-    That lists every user-defined type, including Event/Metric ones, with the
-    IDs get_records takes; this lists only older annotation types, by bare UUID.
-    """
-    fulcra = get_fulcra_object()
-    catalog = fulcra.annotations_catalog()
-    return "Defined annotations: " + json.dumps(catalog)
-
-
 ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
 NO_TOOL_GROUP = "data types not yet readable through this server"
@@ -800,6 +787,45 @@ def _is_user_defined_v1(entry: dict) -> bool:
     return entry.get("api_version") == "v1" and "/" in entry.get("id", "")
 
 
+def _is_user_annotation(entry: dict) -> bool:
+    base_type, _, annotation_uuid = entry.get("id", "").partition("/")
+    return (
+        entry.get("api_version") == "v1alpha1"
+        and base_type.endswith("Annotation")
+        and bool(annotation_uuid)
+    )
+
+
+def _annotation_details(definition: dict) -> dict:
+    """What one annotation adds to its base type's catalog entry: its scale and
+    the label for each value, its unit and what it measures, and its defaults.
+    The catalog entry itself only carries the base type's record spec."""
+    details: dict = {}
+    measurement = definition.get("measurement_spec") or {}
+    kind = measurement.get("measurement_type")
+    values = measurement.get(kind) if kind else None
+    values = values if isinstance(values, dict) else {}
+    if kind == "scale" and {"min_allowed", "max_allowed"} <= values.keys():
+        details["scale"] = {
+            "min": values["min_allowed"],
+            "max": values["max_allowed"],
+            "step": 1,
+        }
+    spec = definition.get("spec") or {}
+    labels = ((spec.get("scale") or {}).get("label_mapping") or {}).get("string") or {}
+    if labels.get("mapping"):
+        details["value_map"] = labels["mapping"]
+    if kind not in (None, "scale", "boolean", "duration"):
+        details["measures"] = kind
+    if measurement.get("unit"):
+        details["unit"] = measurement["unit"]
+    if values.get("value") is not None:
+        details["default_value"] = values["value"]
+    if spec.get("default_note"):
+        details["default_note"] = spec["default_note"]
+    return details
+
+
 # Schema keywords that say nothing about what a valid value is
 SCHEMA_NOISE_KEYWORDS = frozenset({"title", "default"})
 
@@ -858,6 +884,8 @@ async def get_data_catalog(
             For a user-defined type, this also lists its fields (what
             record_data takes in `fields`): a type name, or the field's JSON
             Schema if it has nested fields or rules; plus required_fields.
+            For an annotation, it adds the annotation's own scale and value
+            labels (value_map), unit and defaults.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_defined", "base_type".
@@ -908,6 +936,24 @@ async def get_data_catalog(
                     slim["fields"] = fields
                 if required:
                     slim["required_fields"] = required
+        # Likewise an annotation's own scale, labels and unit come from its
+        # definition, looked up in its owner's account.
+        elif data_type and len(catalog) == 1 and _is_user_annotation(entry):
+            annotation_uuid = entry["id"].partition("/")[2]
+            owner_id = entry.get("fulcra_userid")
+            try:
+                definition = json.loads(
+                    fulcra.fulcra_api(
+                        f"/user/v1alpha1/annotation/{annotation_uuid}",
+                        query={"fulcra_userid": owner_id} if owner_id else None,
+                    )
+                )
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "annotation_definition_unavailable", data_type=entry["id"], status=e.code
+                )
+            else:
+                slim.update(_annotation_details(definition))
         grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
