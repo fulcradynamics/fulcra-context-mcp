@@ -16,9 +16,9 @@ function applySafeArea(context) {
 }
 app.addEventListener('hostcontextchanged', applySafeArea);
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
-const inviteButton = document.querySelector('#invite');
-inviteButton.prepend(icon(UserPlus, 'btn-icon'));
-setupInvite(app, inviteButton, document.querySelector('#status')).then(connected => {
+const inviteButtons = [...document.querySelectorAll('#invite, #invite-empty')];
+for (const button of inviteButtons) button.prepend(icon(UserPlus, 'btn-icon'));
+setupInvite(app, inviteButtons, document.querySelector('#status')).then(connected => {
   applySafeArea(app.getHostContext());
   const status = document.querySelector('#connection-status');
   if (connected) return setupThreads(app, document, entrypoint);
