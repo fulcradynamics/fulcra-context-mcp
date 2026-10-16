@@ -13,7 +13,7 @@ function host(overrides = {}) {
 test('click sends only a user message requesting the invitation action', async () => {
   const { button, status } = ui();
   const calls = [];
-  await setupInvite(host({ sendMessage: async (message) => { calls.push(message); return {}; } }), button, status);
+  await setupInvite(host({ sendMessage: async (message) => { calls.push(message); return {}; } }), [button], status);
   assert.equal(calls.length, 0);
   assert.equal(button.disabled, false);
   await button.click();
@@ -39,7 +39,7 @@ test('click sends only a user message requesting the invitation action', async (
 test('disable while pending; rejection allows retry without claiming an invitation', async () => {
   const { button, status } = ui();
   let finish;
-  await setupInvite(host({ sendMessage: () => new Promise(resolve => { finish = resolve; }) }), button, status);
+  await setupInvite(host({ sendMessage: () => new Promise(resolve => { finish = resolve; }) }), [button], status);
   const pending = button.click();
   assert.equal(button.disabled, true);
   await new Promise(setImmediate);
@@ -55,7 +55,7 @@ for (const denied of [false, true]) test(`invitation requires confirmed clearing
     updateModelContext:async value=>{calls.push(['context',value]);return {isError:denied&&!value.content.length};},
     sendMessage:async()=>{calls.push(['message']);return {};},
   });
-  await setupInvite(app,button,status);
+  await setupInvite(app,[button],status);
   const lifecycle=getContextLifecycle(app,status);
   await lifecycle.attach('previous peer history',lifecycle.token());
   await button.click();
@@ -66,7 +66,7 @@ for (const denied of [false, true]) test(`invitation requires confirmed clearing
 test('unsupported host and failed connection leave button disabled', async () => {
   for (const app of [host({ getHostCapabilities: () => ({}) }), host({ connect: async () => { throw Error('offline'); } })]) {
     const { button, status } = ui();
-    await setupInvite(app, button, status);
+    await setupInvite(app, [button], status);
     assert.equal(button.disabled, true);
     assert.ok(status.textContent);
   }
@@ -74,6 +74,6 @@ test('unsupported host and failed connection leave button disabled', async () =>
 
 test('unsupported messaging offers the same invitation action', async () => {
   const { button, status } = ui();
-  await setupInvite(host({ getHostCapabilities: () => ({}) }), button, status);
+  await setupInvite(host({ getHostCapabilities: () => ({}) }), [button], status);
   assert.match(status.textContent, /use the invite skill/);
 });

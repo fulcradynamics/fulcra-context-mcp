@@ -8,12 +8,13 @@ const invitationPrompt = 'I want to invite another user to connect our agents th
   + 'Then ask whether I want to add optional context about who or what the invite is for, so you can personalize the prompt and draft an outgoing message. '
   + 'This invitation request authorizes match_agent_invitations to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Keep it unshared until that match; unmatched sharing needs my explicit consent. Do not post messages merely to complete matching; response content remains subject to my preferences.';
 
-export async function setupInvite(app, button, status) {
-  button.addEventListener('click', async () => {
+export async function setupInvite(app, buttons, status) {
+  const setDisabled = disabled => { for (const button of buttons) button.disabled = disabled; };
+  for (const button of buttons) button.addEventListener('click', async () => {
     const lifecycle = getContextLifecycle(app, status);
     if (button.disabled || lifecycle.pending) return;
     lifecycle.pending = true; lifecycle.onChange();
-    button.disabled = true;
+    setDisabled(true);
     status.textContent = 'Sending request to the conversation…';
     try {
       await lifecycle.invalidate();
@@ -28,7 +29,7 @@ export async function setupInvite(app, button, status) {
       status.textContent = 'Could not send the request. Check the conversation before retrying.';
     } finally {
       lifecycle.pending = false; lifecycle.onChange();
-      button.disabled = false;
+      setDisabled(false);
     }
   });
   try {
@@ -38,7 +39,7 @@ export async function setupInvite(app, button, status) {
       return true;
     }
     status.textContent = '';
-    button.disabled = false;
+    setDisabled(false);
     return true;
   } catch {
     status.textContent = 'Could not connect to the host. Reopen the app to try again.';
