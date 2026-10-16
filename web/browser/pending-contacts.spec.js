@@ -7,7 +7,7 @@ for (const width of [390, 1100]) test(`pending incoming and unshared channels ha
   await page.clock.runFor(11000);
   await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
   await expect(ui.locator('#pending-connections > li')).toHaveCount(3);
-  await expect(ui.locator('#pending-connections')).toContainText('Not shared yet');
+  await expect(ui.locator('#pending-connections')).toContainText('Not connected yet. Invitation sent');
   await expect(ui.locator('#pending-connections')).toContainText('Incoming — awaiting connection');
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
   expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'agent_connection_send'].includes(c.name)))).toBe(false);
