@@ -292,9 +292,15 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       }
       const summary = contactPreview(latest);
       const message = summary?.message;
-      const text = message ? `${message.direction === 'Outgoing' ? 'You: ' : ''}${messageText(message.record)}` : '';
-      if (entry.preview.textContent !== text) entry.preview.textContent = text;
-      entry.preview.hidden = !text;
+      entry.preview.replaceChildren();
+      if (message) {
+        const outgoing = message.direction === 'Outgoing';
+        const sender = doc.createElement('span');
+        sender.className = `preview-sender${outgoing ? ' outgoing' : ''}`;
+        sender.textContent = `${outgoing ? 'You' : entry.name.textContent}: `;
+        entry.preview.append(sender, doc.createTextNode(messageText(message.record)));
+      }
+      entry.preview.hidden = !message;
       entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
       const at = message?.record?.start_time;
       entry.lastAt = at ? Date.parse(at) : NaN;
