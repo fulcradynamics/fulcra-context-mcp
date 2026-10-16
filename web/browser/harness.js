@@ -35,6 +35,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    const discovery=['get_data_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
    if(name==='agent_connection_send'){
+    if(window.sendResult) { window.sendResult(r, reply); return; }
     if(acceptAck && a.kind === 'ack') {
      window.ownRecords.push({id:a.mid,kind:a.kind,body:a.body,sender:a.sender,in_reply_to:a.in_reply_to,start_time:'2026-10-13T12:00:00Z'});
      reply(r.id,{structuredContent:{status:'posted',mid:a.mid,outbox:a.outbox}});
