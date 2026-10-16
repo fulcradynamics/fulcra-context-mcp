@@ -174,13 +174,19 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .thread-id { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #6a6a71; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity-secondary { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
 .contact-status { margin: 4px 0 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.thread-text .contact-status { margin: 2px 0 0; }
 .contact-status.attention { color: #c79448; }
 .thread-preview { margin: 7px 0 0; color: #7a7a82; font-size: 13px; font-weight: 400; line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 /* Last-activity time as a compact dark pill with lighter text; holds a small
    spinner until the thread's latest-message read resolves. */
 .thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .thread-time:empty { display: none; }
+/* Agent status under the preview: a two-part pill, label then short reason;
+   amber label when the agent says the contact needs the user. */
+.status-badge { align-self: flex-start; max-width: 100%; margin: 6px 0 0; display: inline-flex; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--surface); font-size: 11px; font-weight: 500; line-height: 1.4; }
+.status-badge[hidden] { display: none; }
+.status-kind { flex: none; color: var(--muted); }
+.status-reason { min-width: 0; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge.attention .status-kind { color: #c79448; }
 .thread-time .refresh-spinner { width: 10px; height: 10px; --spinner-thickness: 1.5px; }
 
 /* Conversation: a familiar chat layout. Bubbles align by direction — incoming

@@ -38,3 +38,19 @@ export function renderStatus(element, status) {
   element.title = 'Agent’s best-effort last assessment, not live unread or acknowledgement state.'
     + (status?.assessed_at ? ` Oldest assessed channel: ${status.assessed_at}` : '');
 }
+
+// Contact-list badge: a two-part pill, "Status" then the agent's short reason.
+// Hidden until every own channel has a known assessment (or one needs attention).
+export function renderBadge(element, status) {
+  const known = status && status.attention !== null && status.reason;
+  element.hidden = !known;
+  element.replaceChildren();
+  if (!known) return;
+  element.className = 'status-badge' + (status.attention ? ' attention' : '');
+  const kind = element.ownerDocument.createElement('span'); kind.className = 'status-kind';
+  kind.textContent = 'Status';
+  const reason = element.ownerDocument.createElement('span'); reason.className = 'status-reason';
+  reason.textContent = status.reason;
+  element.append(kind, reason);
+  element.title = statusText(status) + (status.assessed_at ? ` (assessed ${status.assessed_at})` : '');
+}

@@ -1,6 +1,6 @@
 import { discoverThreads } from './connections-discovery.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { renderStatus } from './contact-status.js';
+import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
@@ -129,9 +129,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name';
             const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
+                        const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             const assessment = doc.createElement('p'); assessment.hidden = true;
-            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
-            textCol.append(name, id, assessment, preview);
+            textCol.append(name, id, preview, assessment);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -148,8 +148,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           const idText = thread.participants ? '' : (thread.peer ?? '');
           entry.id.textContent = idText;
           entry.id.hidden = !idText || idText === label;
-          renderStatus(entry.assessment, thread.assessment);
-          entry.assessment.hidden = thread.assessment?.attention !== true;
+          renderBadge(entry.assessment, thread.assessment);
         }
         const pendingKeys = new Set();
         for (const source of discovery.pending) {
