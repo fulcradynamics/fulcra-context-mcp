@@ -2349,6 +2349,9 @@ if settings.fulcra_environment == "stdio":
     )
 
 
+USER_INFO_HIDDEN_FIELDS = ("status", "tier", "service_status", "intercom_token")
+
+
 @tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_user_info() -> str:
@@ -2358,7 +2361,7 @@ async def get_user_info() -> str:
     """
     fulcra = get_fulcra_object()
     user_info = fulcra.get_user_info()
-    user_info.pop("intercom_token", None)
+    user_info = {k: v for k, v in user_info.items() if k not in USER_INFO_HIDDEN_FIELDS}
     return "User information: " + json.dumps(user_info)
 
 
