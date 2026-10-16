@@ -1,0 +1,19 @@
+{
+  "name": "fulcra-mcp-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev/serve.mjs",
+    "test": "node --test *.test.js",
+    "test:browser": "playwright test --config=browser/playwright.config.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "lucide": "^1.54.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "esbuild": "^0.25.0"
+  }
+}

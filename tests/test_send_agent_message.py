@@ -1,111 +1,54 @@
-"""send_agent_message (PLAT-696): sending a connect-our-agents message.
-
-The checks themselves live in fulcra-api's `connections` module, which has its
-own tests; these cover the tool's wiring."""
-
+"""Canonical MCP sender and agent_connection_send share authorization and readback."""
 import json
+import pytest
+from fulcra_mcp import tools
+from test_connection_send import API, OUT, OWN, PEER, MID, TARGET
 
-from conftest import FAKE_USER_ID, http_error
+@pytest.fixture
+def connected(monkeypatch):
+    api = API()
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
+    monkeypatch.setattr(tools.records, 'get_records', lambda api, entry, *a, **kw: api.rows if entry['fulcra_userid'] == OWN else [api.target])
+    return api
 
-PARTNER = "11111111-2222-4333-8444-555555555555"
-CHANNEL = "Event/df10403a-2115-4254-9e49-e48ca0af6f5d"
-THEIR_CHANNEL = "Event/7b0c5a51-3e6b-4f6e-9a7e-2f1d0f0c9a11"
-THEIR_MESSAGE = "8d3b1c2e-1111-4a5b-9c6d-7e8f9a0b1c2d"
-THEIR_ACK = "8d3b1c2e-2222-4a5b-9c6d-7e8f9a0b1c2d"
+async def test_sends_on_your_channel_and_reports_verified_id(call, connected):
+    result = json.loads(await call('send_agent_message', dict(connection=PEER, sender='a', body='hello', record_id=MID)))
+    assert result['status'] == 'posted' and result['mid'] == MID
+    assert connected.writes[0]['id'] == MID
+    assert connected.writes[0]['body'] == 'hello'
 
+async def test_reply_reuses_topic(call, connected):
+    result = json.loads(await call('send_agent_message', dict(connection=OUT, sender='a', body='yes', reply_to=TARGET)))
+    assert result['status'] == 'posted'
+    assert result['record']['topic'] == 'test'
 
-def _connected(fake_fulcra):
-    fake_fulcra.get_datashares.return_value = [
-        {
-            "datashare_name": "connect-agents-with-anyone: Me with Pat",
-            "fulcra_data_types": [CHANNEL],
-            "permissions": [{"allowed_fulcra_userid": PARTNER}],
-        }
-    ]
-    fake_fulcra.get_shared_datasets.return_value = [
-        {"grant_type": "self", "sharing_fulcra_userid": FAKE_USER_ID},
-        {
-            "grant_type": "user",
-            "datashare_name": "connect-agents-with-anyone: Pat with Me",
-            "sharing_fulcra_userid": PARTNER,
-            "fulcra_data_types": [THEIR_CHANNEL],
-        },
-    ]
-    fake_fulcra.fulcra_v1_records.return_value = "\n".join(
-        json.dumps(r)
-        for r in [
-            {"id": THEIR_MESSAGE, "kind": "message", "topic": "dinner", "body": "7?"},
-            {"id": THEIR_ACK, "kind": "ack", "in_reply_to": THEIR_MESSAGE, "body": "ok"},
-        ]
-    )
-    fake_fulcra.validate_records.return_value = []
-    fake_fulcra.record_data_type.return_value = {"upload_id": "up-1"}
+async def test_refusal_explained_without_write(call, connected):
+    connected.target['kind'] = 'ack'
+    result = json.loads(await call('send_agent_message', dict(connection=PEER, sender='a', body='x', ack=TARGET)))
+    assert result['status'] == 'rejected' and 'never an ack' in result['reason']
+    assert not connected.writes
 
+async def test_bad_priority_refused_by_schema(client, connected):
+    result = await client.call_tool('send_agent_message', dict(connection=PEER, sender='a', body='x', priority='urgent'), raise_on_error=False)
+    assert result.is_error and not connected.writes
 
-async def test_sends_on_your_channel_and_reports_the_id(call, fake_fulcra):
-    _connected(fake_fulcra)
+async def test_http_denial_is_nonretryable_tool_response(call, connected):
+    from urllib.error import HTTPError
+    connected.failure = HTTPError('synthetic', 403, 'denied', {}, None)
+    result = json.loads(await call('send_agent_message', dict(connection=OUT, sender='a', body='x', record_id=MID)))
+    assert result['status'] == 'rejected' and result['retryable'] is False
+    assert len(connected.writes) == 1
 
-    text = await call(
-        "send_agent_message",
-        {"connection": PARTNER, "sender": "alice-claude", "body": 'It\'s "7pm"\nok'},
-    )
+async def test_rejects_group_and_malformed_connection(call, connected):
+    connected.shares[0]['permissions'].append({'allowed_fulcra_userid':MID})
+    for connection in (PEER, ' '+PEER):
+        result = json.loads(await call('send_agent_message', dict(connection=connection, sender='a', body='x', record_id=MID)))
+        assert result['status'] == 'rejected' and not connected.writes
 
-    (target, [record], version), _ = fake_fulcra.record_data_type.call_args
-    assert (target, version) == (CHANNEL, "v1")
-    assert record["body"] == 'It\'s "7pm"\nok'
-    assert record["sources"] == ["com.fulcradynamics.mcp"]
-    assert text.startswith(f"Sent message {record['id']} on {CHANNEL}")
-    assert "sources" not in text
-
-
-async def test_a_reply_reuses_the_topic(call, fake_fulcra):
-    _connected(fake_fulcra)
-
-    text = await call(
-        "send_agent_message",
-        {"connection": CHANNEL, "sender": "a", "body": "Yes", "reply_to": THEIR_MESSAGE},
-    )
-
-    (_, [record], _), _ = fake_fulcra.record_data_type.call_args
-    assert (record["kind"], record["in_reply_to"], record["topic"]) == (
-        "reply",
-        THEIR_MESSAGE,
-        "dinner",
-    )
-    assert text.startswith("Sent reply")
-
-
-async def test_a_refusal_is_explained_and_sends_nothing(call, fake_fulcra):
-    _connected(fake_fulcra)
-
-    text = await call(
-        "send_agent_message",
-        {"connection": PARTNER, "sender": "a", "body": "x", "reply_to": THEIR_ACK},
-    )
-
-    assert text.startswith("Not sent:") and "Acks aren't answered" in text
-    fake_fulcra.record_data_type.assert_not_called()
-
-
-async def test_a_bad_priority_is_refused_by_the_schema(client, fake_fulcra):
-    _connected(fake_fulcra)
-
-    result = await client.call_tool(
-        "send_agent_message",
-        {"connection": PARTNER, "sender": "a", "body": "x", "priority": "urgent"},
-        raise_on_error=False,
-    )
-
-    assert result.is_error
-    fake_fulcra.record_data_type.assert_not_called()
-
-
-async def test_an_api_error_is_friendly(call, fake_fulcra):
-    _connected(fake_fulcra)
-    fake_fulcra.get_datashares.side_effect = http_error(500, b"boom")
-
-    text = await call(
-        "send_agent_message", {"connection": PARTNER, "sender": "a", "body": "x"}
-    )
-
-    assert "unexpected error (HTTP 500)" in text
+async def test_latest_has_no_required_range_and_uses_sdk(call, fake_fulcra, monkeypatch):
+    fake_fulcra.resolve_data_type.return_value = [{'id':OUT,'fulcra_userid':OWN,'api_version':'v1','record_spec':{'type':'event'}}]
+    fake_fulcra.get_fulcra_userid.return_value = OWN
+    fake_fulcra.fulcra_v1_records.return_value = json.dumps({'id':MID,'body':'hello'})
+    text = await call('get_records', {'data_type':OUT,'latest':True})
+    assert MID in text
+    assert fake_fulcra.fulcra_v1_records.call_args.args == ('{__name__="'+OUT+'"}',)

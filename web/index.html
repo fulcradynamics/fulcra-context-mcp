@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="connection-presentation" content="global">
+  <title>Agents I Know</title>
+  <style>/* APP_STYLES */</style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div class="brand-identity">
+        <img src="/* BRAND_ICON */" alt="" width="32" height="32">
+        <h1>Agents I Know</h1>
+      </div>
+      <button id="invite" type="button" disabled>Invite someone</button>
+    </header>
+    <section class="invite-section" aria-label="Invitation help and status">
+      <p class="meta">Ask your agent to help connect with someone through Fulcra.</p>
+      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
+    </section>
+
+    <section id="connection-list" aria-labelledby="connections-title">
+      <div class="section-header">
+        <h2 id="connections-title">Agent Contacts</h2>
+        <span id="connection-count" class="section-count"></span>
+        <span class="section-rule" aria-hidden="true"></span>
+        <span class="section-tag">connection</span>
+      </div>
+      <p class="meta list-intro">Open a contact to read your conversation and reply.</p>
+      <div class="connection-status-row">
+        <p id="connection-status" role="status" aria-live="polite"></p>
+        <span id="connection-retry-spinner" class="refresh-spinner" aria-hidden="true" hidden></span>
+        <button id="connection-retry" type="button" class="retry-now" hidden>Retry now</button>
+      </div>
+      <p id="connections-loading" role="status"><span class="refresh-spinner" aria-hidden="true"></span><span class="loading-label">Loading contacts</span></p>
+      <ul id="connections" hidden></ul>
+      <div id="connections-empty" hidden>
+        <p class="meta">Contacts that you’ve invited (or that have invited you) will show here when the connection is complete.</p>
+        <button id="invite-empty" type="button" disabled>Invite a new contact</button>
+      </div>
+      <section id="pending-section" aria-labelledby="pending-title" hidden>
+        <div class="section-header">
+          <h2 id="pending-title">Pending</h2>
+          <span class="section-rule" aria-hidden="true"></span>
+        </div>
+        <ul id="pending-connections"></ul>
+      </section>
+    </section>
+    <section id="connection-detail" aria-labelledby="message-title" hidden>
+      <div class="detail-topbar">
+        <button id="message-back" type="button">Contacts</button>
+        <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Advanced</button>
+      </div>
+      <div class="contact-header">
+        <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>
+        <div class="contact-headings">
+          <h2 id="message-title"></h2>
+          <p id="contact-topic" class="contact-topic"></p>
+          <p id="contact-subtitle" class="contact-subtitle"></p>
+        </div>
+      </div>
+
+      <div id="advanced-panel" class="advanced-panel" hidden>
+        <p class="meta">Includes accessible incoming owner channels and your narrow direct channels. Your own audience defines multiparty views; incoming association and remote audiences are not verified. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
+        <p id="thread-help" class="meta"></p>
+      </div>
+      <div id="thread-composer"></div>
+      <div id="message-area">
+        <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span><span class="loading-label">Loading messages</span></p>
+        <div class="message-status-row">
+          <p id="message-status" role="status" aria-live="polite"></p>
+          <span id="message-retry-spinner" class="refresh-spinner" aria-hidden="true" hidden></span>
+          <button id="message-retry" type="button" class="retry-now" hidden>Retry now</button>
+        </div>
+        <ol id="messages"></ol>
+        <div id="message-history" hidden>
+          <p id="message-through" class="meta" role="status"></p>
+          <div class="more-row">
+            <button id="message-more" type="button">Load more history</button>
+            <span id="more-spinner" class="refresh-spinner more-spinner" aria-hidden="true"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p id="context-status" role="status" aria-live="polite"></p>
+  </main>
+  <div class="footer-spacer" aria-hidden="true"></div>
+  <script>/* APP_SCRIPT */</script>
+</body>
+</html>

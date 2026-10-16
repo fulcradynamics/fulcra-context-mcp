@@ -1,9 +1,9 @@
-"""The server's identity, kept in step with server.json (PLAT-617).
+"""The server's identity, kept in step with server.json.
 
 server.json at the repo root is the source of truth: the MCP Registry publishes
 it, and the Server Card served at /mcp/server-card is built from it. The
 hosted image includes it (the Dockerfile copies the whole repo). A PyPI install
-doesn't, so there serverInfo falls back to the name and package version alone.
+doesn't, so there serverInfo falls back to the name, package version and icon.
 
 Server Cards: SEP-2127 and https://github.com/modelcontextprotocol/ext-server-card
 """
@@ -49,9 +49,11 @@ def website_url() -> str | None:
     return (server_json() or {}).get("websiteUrl")
 
 
-def icons() -> list[Icon] | None:
+def icons() -> list[Icon]:
     listed = (server_json() or {}).get("icons")
-    return [Icon(**icon) for icon in listed] if listed else None
+    if listed:
+        return [Icon(**icon) for icon in listed]
+    return [Icon(src="https://mcp.fulcradynamics.com/icon.png", mimeType="image/png", sizes=["256x256"])]
 
 
 def server_card() -> dict:
