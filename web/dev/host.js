@@ -8,7 +8,7 @@ const CATALOG_PREFIX = 'Available data types, grouped by compatible tool: ';
 const text = t => ({ content: [{ type: 'text', text: t }] });
 
 // Mirrors the production tool responses the app parses (catalog / shares /
-// records); writes are acknowledged without side effects.
+// records); writes update only this page's in-memory fixture, never an account.
 function toolResult(name, args = {}) {
   if (scenario.fail?.includes(name)) return { isError: true };
   if (name === 'match_agent_invitations') return { structuredContent: { results: [] } };
@@ -22,8 +22,20 @@ function toolResult(name, args = {}) {
     const rows = scenario.rows[`${args.fulcra_userid ?? own}/${args.data_type}`] ?? [];
     return text(`Records for ${args.data_type} from a to b: ${JSON.stringify(rows)}`);
   }
-  if (name === 'connection_send' || name === 'mesh_send') return { structuredContent: { status: 'posted', ...args } };
-  return text('');
+  if (name === 'agent_connection_send') {
+    const rows = scenario.rows[`${own}/${args.outbox}`];
+    if (!rows) return { isError: true, ...text('Unknown mock outbox') };
+    let record = rows.find(row => row.id === args.mid);
+    if (!record) {
+      record = { id: args.mid, sender: args.sender, body: args.body, kind: args.kind ?? 'message',
+        start_time: new Date().toISOString(),
+        ...(args.in_reply_to ? { in_reply_to: args.in_reply_to } : {}) };
+      rows.push(record);
+    }
+    return { structuredContent: { status: 'posted', mid: args.mid, outbox: args.outbox,
+      peer_userid: args.peer_userid, peer_acknowledged: false, record } };
+  }
+  return { isError: true, ...text(`Unsupported mock tool: ${name}`) };
 }
 
 const frame = document.querySelector('#app');

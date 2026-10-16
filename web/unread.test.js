@@ -1,12 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { unreadMessages } from './unread.js';
+import { reconcilePosts } from './connection-send.js';
 
 const now = Date.parse('2026-10-13T12:00:00Z');
 const incoming = (id, kind = 'message', start_time = '2026-10-13T10:00:00Z') =>
   ({ direction: 'Incoming', record: { id, kind, start_time, sender: 'peer', body: 'hi' } });
 const answer = (in_reply_to, kind = 'ack') =>
   ({ direction: 'Outgoing', record: { id: `a-${in_reply_to}`, kind, in_reply_to, start_time: '2026-10-13T11:00:00Z' } });
+
+test('ack attempts retain IDs, rejected targets remain replyable, readback preserves drafts', () => {
+  const draft = { value: 'New composition', version: 2, acks: new Map([
+    ['a', { state: 'uncertain', args: { mid: 'a-a' } }],
+    ['b', { state: 'rejected', args: { mid: 'a-b' } }],
+  ]) };
+  assert.deepEqual(unreadMessages([incoming('a'), incoming('b')], draft.acks, now).map(m => m.record.id), ['b']);
+  reconcilePosts(draft, [answer('different')]);
+  assert.equal(draft.acks.get('a').state, 'uncertain');
+  reconcilePosts(draft, [answer('a')]);
+  assert.deepEqual(draft.acks.get('a'), { state: 'posted', args: { mid: 'a-a' } });
+  assert.equal(draft.acks.get('b').state, 'rejected');
+  assert.equal(draft.value, 'New composition');
+  assert.equal(draft.version, 2);
+});
 
 test('unanswered incoming messages and replies are unread, oldest first', () => {
   const messages = [incoming('b', 'reply', '2026-10-13T11:00:00Z'), incoming('a'), incoming('c', 'ack')];

@@ -5,6 +5,9 @@ export function clearPostedDraft(draft, post) {
   if (draft.version === post.version) { draft.value = ''; draft.version++; }
 }
 export function reconcilePosts(draft, messages) {
+  for (const attempt of draft.acks?.values() ?? []) {
+    if (messages.some(m => m.record.id === attempt.args.mid)) attempt.state = 'posted';
+  }
   const confirmed = [];
   draft.posts = (draft.posts ?? []).filter(post => {
     if (!messages.some(m => matchesPost(m, post))) return true;
