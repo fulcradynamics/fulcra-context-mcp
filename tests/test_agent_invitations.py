@@ -47,7 +47,10 @@ def api(monkeypatch):
             permissions=[{'allowed_fulcra_userid': p} for p in kw['allowed_user_ids']]))
     api.create_datashare.side_effect = share
     api.rows = {}
-    monkeypatch.setattr(invitations.records, 'get_records', lambda api, entry, start, end: copy.deepcopy(api.rows.get((entry['fulcra_userid'], entry['id']), [])))
+    def record_response(query, fulcra_userid):
+        data_type = query.split('"')[1]
+        return '\n'.join(json.dumps(row) for row in api.rows.get((fulcra_userid, data_type), [])).encode()
+    api.fulcra_v1_records.side_effect = record_response
     api.catalog = catalog
     return api
 
@@ -76,6 +79,47 @@ def test_match_shares_only_prepared_outbox_then_reads_back_and_is_idempotent(api
     assert 'body' not in json.dumps(result)
 
 
+def test_unrelated_unnamed_direct_grant_does_not_block_matching(api):
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    api.get_shared_datasets.return_value.append(dict(incoming(),
+        datashare_name=None, fulcra_data_types=['file:/shared/']))
+    assert invitations.match(api)['results'][0]['status'] == 'matched'
+
+
+def test_sibling_reply_target_ignores_unnamed_grant(api):
+    from datetime import datetime, timezone
+    from fulcra_mcp.connection import _target
+    handshake(api, 'a' * 32)
+    api.get_shared_datasets.return_value.insert(0, dict(incoming(),
+        datashare_name=None, fulcra_data_types=['file:/shared/']))
+    assert _target(api, PEER, OTHER, datetime(2026, 10, 2, tzinfo=timezone.utc))['id'] == OTHER
+
+
+def test_sibling_mentions_ignore_unnamed_grant():
+    from fulcra_mcp.mentions import _thread_labels
+    entry = dict(channel(IN, PEER), fields=connections.CHANNEL_FIELDS['properties'],
+                 required_fields=connections.CHANNEL_FIELDS['required'])
+    named = dict(incoming(), data_types=[IN])
+    unnamed = dict(named, datashare_name=None, data_types=['file:/shared/'])
+    labels = _thread_labels({'data types usable with: get_records': [entry]},
+        dict(own_fulcra_userid=OWN, outgoing=[], incoming=[unnamed, named]))
+    assert PEER in labels
+
+
+@pytest.mark.parametrize('failure, category', [
+    (TimeoutError('private code and message body'), 'transport'),
+    (ValueError('private code and message body'), 'validation'),
+])
+def test_failure_diagnostics_do_not_expose_exception_data(api, caplog, failure, category):
+    invitations.prepare(api, OUT)
+    api.get_shared_datasets.side_effect = failure
+    result = invitations.match(api)
+    assert result['diagnostic'] == {'stage': 'incoming_grants', 'category': category}
+    assert 'private code' not in json.dumps(result) + caplog.text
+    api.create_datashare.assert_not_called()
+
+
 @pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'broad'])
 def test_unsafe_evidence_never_shares(api, mode):
     code = invitations.prepare(api, OUT)['code']
@@ -97,6 +141,48 @@ def test_unsafe_evidence_never_shares(api, mode):
     if mode == 'read_failure': api.get_shared_datasets.side_effect = TimeoutError
     if mode == 'broad': api.get_datashares.return_value = [dict(share_all_data=True, fulcra_data_types=[])]
     assert not any(r['status'] == 'matched' for r in invitations.match(api)['results'])
+    api.create_datashare.assert_not_called()
+
+
+@pytest.mark.parametrize('change', [
+    {'grant_type': 'group', 'group_id': OTHER},
+    {'sharing_fulcra_userid': OWN},
+    {'fulcra_data_types': [IN, OUT]},
+    {'time_start': '2020-01-01T00:00:00Z'},
+    {'time_end': '2099-01-01T00:00:00Z'},
+    {'share_all_data': True},
+    {'datashare_name': None},
+])
+def test_incoming_grant_must_remain_narrow_and_direct(api, change):
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    api.get_shared_datasets.return_value = [dict(incoming(), **change)]
+    assert invitations.match(api)['results'][0]['status'] == 'pending'
+    api.create_datashare.assert_not_called()
+
+
+@pytest.mark.parametrize('stamp', [None, 'private body', '2026-10-01T00:00:00'])
+def test_invalid_record_timestamp_fails_closed(api, stamp):
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    api.rows[(PEER, IN)][0]['start_time'] = stamp
+    result = invitations.match(api)
+    assert result['status'] == 'unavailable'
+    assert result['diagnostic']['stage'] == 'handshake_timestamps'
+    assert 'private body' not in json.dumps(result)
+    api.create_datashare.assert_not_called()
+
+
+def test_http_history_failure_is_sanitized_and_preserves_prepared_consent(api, caplog):
+    from urllib.error import HTTPError
+    code = invitations.prepare(api, OUT)['code']
+    api.fulcra_v1_records.side_effect = HTTPError('https://invalid/' + code, 422,
+        'private body ' + code, {}, None)
+    result = invitations.match(api)
+    assert result['diagnostic'] == dict(stage='handshake_history', category='http', http_status=422)
+    assert code not in json.dumps(result) + caplog.text
+    assert 'private body' not in json.dumps(result) + caplog.text
+    assert json.loads(api.catalog[-1]['description'])['invitations'][OUT]['state'] == 'prepared'
     api.create_datashare.assert_not_called()
 
 

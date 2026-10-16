@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.12.2 / contacts UI v51 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.12.3 / contacts UI v51 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 

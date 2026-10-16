@@ -100,7 +100,8 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                     continue
                 peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
             elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
-                         and s.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
+                         and isinstance(s.get('datashare_name'), str)
+                         and s['datashare_name'].startswith(SHARE_NAME_PREFIX)
                          and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))
                          and s.get('data_types') == [entry['id']] for s in shares['incoming']):
                 continue
