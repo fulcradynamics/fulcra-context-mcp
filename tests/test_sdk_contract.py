@@ -242,11 +242,15 @@ CALENDARS = [
 ]
 
 
-async def test_get_calendars(call, fake_fulcra):
+async def test_get_calendar_events_without_a_range_lists_calendars(call, fake_fulcra):
     fake_fulcra.calendars.return_value = CALENDARS
-    text = await call("get_calendars")
+    text = await call("get_calendar_events")
     fake_fulcra.calendars.assert_called_once_with(fulcra_userid=None)
-    assert "iCloud" in text and "Work" in text
+    fake_fulcra.calendar_events.assert_not_called()
+    assert text.startswith("Calendars by source: ")
+    assert json.loads(text.removeprefix("Calendars by source: ")) == {
+        "iCloud": [{"id": "c1", "name": "Work"}]
+    }
 
 
 async def test_get_calendar_events_by_calendar_name(call, fake_fulcra):

@@ -134,17 +134,55 @@ async def test_archive_unknown_id_is_actionable(call, fake_fulcra):
     assert "No user-defined data type" in text
 
 
-async def test_calendar_events_unknown_calendar_is_actionable(call, fake_fulcra):
+async def test_calendar_events_unknown_calendar_lists_the_calendars(call, fake_fulcra):
     fake_fulcra.calendars.return_value = [
-        {"calendar_id": "c1", "calendar_name": "Work"}
+        {"calendar_id": "c1", "calendar_name": "Work"},
+        {"calendar_id": "c2", "calendar_name": "Family"},
+        {"calendar_id": "c3", "calendar_name": "Work"},
     ]
     text = await call(
         "get_calendar_events",
         {"start_time": START, "end_time": END, "calendars": ["Home"]},
     )
-    assert "No calendar named 'Home'" in text
-    assert "get_calendars" in text
+    assert text == "No calendar named 'Home'. Calendars: Family, Work."
     fake_fulcra.calendar_events.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args, message",
+    [
+        ({"start_time": START}, "Pass both start_time and end_time"),
+        ({"end_time": END}, "Pass both start_time and end_time"),
+        ({"calendars": ["Work"]}, "apply only to events"),
+        ({"include_participants": True}, "apply only to events"),
+    ],
+    ids=["start-only", "end-only", "calendars-without-range", "participants-without-range"],
+)
+async def test_calendar_events_argument_mistakes(call, fake_fulcra, args, message):
+    text = await call("get_calendar_events", args)
+    assert message in text
+    fake_fulcra.calendars.assert_not_called()
+    fake_fulcra.calendar_events.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{}, {"start_time": START, "end_time": END}],
+    ids=["calendars", "events"],
+)
+async def test_calendar_events_reads_another_users_shared_calendar(call, fake_fulcra, args):
+    owner = "11111111-2222-4333-8444-555555555555"
+    fake_fulcra.calendars.return_value = []
+    fake_fulcra.calendar_events.return_value = []
+    await call("get_calendar_events", {**args, "fulcra_userid": owner})
+    fake_fulcra.calendars.assert_called_once_with(fulcra_userid=owner)
+    if args:
+        assert fake_fulcra.calendar_events.call_args.kwargs["fulcra_userid"] == owner
+
+
+async def test_get_calendars_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("get_calendars")
 
 
 async def test_read_file_gates_binary_content(call, fake_fulcra):
@@ -980,8 +1018,7 @@ async def test_catalog_points_types_with_their_own_tools_to_them(call, fake_fulc
     ids = {group: [e["id"] for e in entries] for group, entries in grouped.items()}
     assert ids == {
         "data types usable with: get_workouts": ["apple_workouts"],
-        "data types usable with: get_calendars": ["calendars"],
-        "data types usable with: get_calendar_events": ["calendar_events"],
+        "data types usable with: get_calendar_events": ["calendars", "calendar_events"],
         "data types usable with: get_records": [
             "MomentAnnotation",
             f"NumericAnnotation/{V1_UUID}",

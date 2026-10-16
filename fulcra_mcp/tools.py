@@ -148,7 +148,7 @@ NO_TOOL_GROUP = "data types not yet readable through this server"
 # v0 event types with a dedicated tool of their own
 V0_TYPE_TOOLS = {
     "apple_workouts": "get_workouts",
-    "calendars": "get_calendars",
+    "calendars": "get_calendar_events",
     "calendar_events": "get_calendar_events",
 }
 
@@ -1429,52 +1429,45 @@ def _slim_event(
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Get Calendars", "readOnlyHint": True})
-@_friendly_http_errors
-async def get_calendars(fulcra_userid: str | None = None) -> str:
-    """List the user's calendars, grouped by account/source.
-
-    Use the names or IDs with get_calendar_events to filter by calendar.
-
-    Args:
-        fulcra_userid: List calendars of another Fulcra user (if shared)
-    """
-    fulcra = get_fulcra_object()
-    grouped: dict[str, list[dict]] = {}
-    for cal in fulcra.calendars(fulcra_userid=fulcra_userid):
-        source = cal.get("calendar_source_name") or "unknown source"
-        grouped.setdefault(source, []).append(_slim_calendar(cal))
-    return "Calendars by source: " + json.dumps(grouped)
-
-
 @tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_calendar_events(
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
     calendars: list[str] | None = None,
     include_participants: bool = False,
     fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve the user's calendar events within a time range.
-    This will return events that occur (at least partially)
-    during the range.
+    """Get the user's calendar events in a time range, or, without a range,
+    list their calendars grouped by account/source.
 
-    Each event carries a participant_count; pass include_participants=true
-    when you need who was invited and their responses. Result timestamps
-    include time zones; translate them to the user's local time zone when
-    known.
+    Each carries a participant_count; pass include_participants=true when you need
+    who was invited and their responses. 
 
     Args:
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        calendars: Only these calendars (names or IDs); default is all.
-        include_participants: Include each event's participant list.
-        fulcra_userid: Retrieve events of another Fulcra user (if shared)
+        calendars: Events only: just these calendars (names or IDs); default is all.
+        include_participants: Events only: include each event's participant list.
+        fulcra_userid: Retrieve calendars or events of another Fulcra user (if shared)
     """
+    if (start_time is None) != (end_time is None):
+        return "Pass both start_time and end_time for events, or neither to list calendars."
+    fulcra = get_fulcra_object()
+    if start_time is None:
+        if calendars or include_participants:
+            return (
+                "calendars and include_participants apply only to events; pass "
+                "start_time and end_time too."
+            )
+        grouped: dict[str, list[dict]] = {}
+        for cal in fulcra.calendars(fulcra_userid=fulcra_userid):
+            source = cal.get("calendar_source_name") or "unknown source"
+            grouped.setdefault(source, []).append(_slim_calendar(cal))
+        return "Calendars by source: " + json.dumps(grouped)
+
     if (err := _range_error(start_time, end_time)) is not None:
         return err
-    fulcra = get_fulcra_object()
     all_calendars = fulcra.calendars(fulcra_userid=fulcra_userid)
     calendar_names = {c["calendar_id"]: c.get("calendar_name") for c in all_calendars}
 
@@ -1488,7 +1481,8 @@ async def get_calendar_events(
                 if cid == wanted or (cname or "").lower() == wanted.lower()
             ]
             if not matches:
-                return f"No calendar named {wanted!r}. Use get_calendars to list available calendars."
+                available = ", ".join(sorted({n for n in calendar_names.values() if n}))
+                return f"No calendar named {wanted!r}. Calendars: {available or 'none'}."
             calendar_ids += matches
 
     events = fulcra.calendar_events(
