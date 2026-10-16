@@ -65,6 +65,18 @@ mcp.mount(app_mcp)
 mcp.mount(mentions_mcp)
 mcp.mount(settings_mcp)
 
+# Temporary discovery experiment: keep 31 hosted model-visible tools.
+# Filter only the composed server so implementations remain intact for rollback.
+mcp.disable(
+    names={
+        "get_groups", "join_group", "leave_group", "create_group", "delete_group",
+        "get_calendars", "get_calendar_events", "get_location_at_time",
+        "get_location_time_series", "get_workouts", "get_sleep",
+        "get_time_series", "restore_file",
+    },
+    components={"tool"},
+)
+
 
 # Add CORS middleware for browser-based clients
 cors_middleware = [
