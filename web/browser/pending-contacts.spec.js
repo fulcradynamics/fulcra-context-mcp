@@ -21,6 +21,26 @@ for (const width of [390, 1100]) test(`pending incoming and unshared channels ha
   await expect(ui.locator('.pending-assist').last()).toBeDisabled();
 });
 
+for (const outgoing of [false, true]) test(`incoming assistance remains available with outgoing shares: ${outgoing}`, async ({page}) => {
+  const ui = await open(page, 900, {listOnly:true});
+  await page.evaluate(({outgoing, peer}) => {
+    window.excludeOwn = !outgoing;
+    window.excludeOut = !outgoing;
+    window.audience = [peer];
+  }, {outgoing, peer});
+  await page.clock.runFor(11000);
+  await expect(ui.locator('#pending-connections > li')).toHaveCount(outgoing ? 1 : 2);
+  const button = ui.locator('.pending-assist').last();
+  await expect(button).toBeVisible();
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
+  const context = await page.evaluate(() => JSON.stringify(window.contexts));
+  expect(context).toContain(other);
+  expect(context).toContain('Incoming');
+  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'agent_connection_send'].includes(c.name)))).toBe(false);
+});
+
 test('outgoing-only stays pending, matched result still needs independently discovered two-way grants', async ({page}) => {
   const ui = await open(page, 900, {listOnly:true});
   await page.evaluate(out => { window.excludeIncoming = true; window.invitationMatches = [{data_type:out,status:'matched'}]; }, out);

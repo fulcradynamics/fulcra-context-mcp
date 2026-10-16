@@ -44,7 +44,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    let text;
    if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
     ...(window.direct ? [{id:out.slice(0,-1)+'9',name:'Direct',description:'connect-agents-with-anyone channel',...schema}] : []),
-    ...[out,...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(status?'[contact_status: '+JSON.stringify(status)+']\n':'')+'[mesh_identifier: "Weekend"]',...schema})),
+    ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(status?'[contact_status: '+JSON.stringify(status)+']\n':'')+'[mesh_identifier: "Weekend"]',...schema})),
     ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
    if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
     ...(window.direct ? [{share_all_data:false,data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
