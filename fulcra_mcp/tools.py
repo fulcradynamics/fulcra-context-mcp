@@ -732,7 +732,7 @@ def _compatible_tools(entry: dict) -> str:
         if entry.get("class") == "metric":
             return "data types usable with: get_time_series | get_records"
         if entry.get("class") == "location":
-            return "data types usable with: get_location_at_time | get_location_time_series"
+            return "data types usable with: get_location"
         if entry.get("id") in V0_TYPE_TOOLS:
             return f"data types usable with: {V0_TYPE_TOOLS[entry['id']]}"
     # Annotations (built-in and user-defined) and v1 types, user-defined included
@@ -1287,61 +1287,55 @@ async def get_sleep(
     return f"Sleep {level} from {start_time} to {end_time}: " + json.dumps(rows, default=str)
 
 
-@tools_mcp.tool(annotations={"title": "Get Location at Time", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True})
 @_friendly_http_errors
-async def get_location_at_time(
-    time: AwareDatetime,
-    window_size: int = 14400,
-    include_after: bool = True,
-    reverse_geocode: bool = True,
-) -> str:
-    """Gets the user's location at the given time.
-
-    If no sample is available for the exact time, searches for the closest one up to
-    window_size seconds away.
-
-    Result timestamps will include time zones. Always translate timestamps to the user's local
-    time zone when this is known.
-
-    Args:
-        time: The point in time to locate the user at. Must include tz (ISO8601).
-        window_size: Seconds around `time` to search for samples (default 14400).
-        include_after: Allow the closest sample to be after `time` (default true).
-        reverse_geocode: Include the address of the location (default true).
-    Returns:
-        A JSON string representing the location data.
-    """
-    fulcra = get_fulcra_object()
-    location_data = fulcra.location_at_time(
-        time=time,
-        window_size=window_size,
-        include_after=include_after,
-        reverse_geocode=reverse_geocode,
-    )
-    return f"Location info at {time}: " + json.dumps(location_data)
-
-
-@tools_mcp.tool(annotations={"title": "Get Location Time Series", "readOnlyHint": True})
-@_friendly_http_errors
-async def get_location_time_series(
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
+async def get_location(
+    time: AwareDatetime | None = None,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
+    sample_rate: int = 900,
     change_meters: float | None = None,
-    sample_rate: int | None = 900,
-    reverse_geocode: bool | None = False,
+    window_size: int = 14400,
+    reverse_geocode: bool | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve a time series of locations that the user was at.
-    Result timestamps will include time zones. Always translate timestamps to the user's local tz when this is known.
+    """Get where the user was: at one moment (`time`), or over a range
+    (`start_time` and `end_time`) as one location per sample_rate seconds.
+
+    Result timestamps include time zones. Always translate them to the user's
+    local time zone when this is known.
 
     Args:
+        time: The moment to locate the user at. Must include tz (ISO8601).
+            Without a sample at that exact time, the closest one within
+            window_size seconds before or after is used.
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        change_meters: Drop samples fewer than this many meters from the previous one.
-        sample_rate: Seconds per sample (default 900).
-        reverse_geocode: Include the address of each location (default false).
-    Returns:
-        A JSON string representing a list of location data points.
+        sample_rate: Range only: seconds per sample (default 900).
+        change_meters: Range only: drop samples fewer than this many meters
+            from the previous one.
+        window_size: Moment only: seconds around `time` to search for a sample
+            (default 14400).
+        reverse_geocode: Include the address (default: true for a moment,
+            false for a range).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared).
     """
+    has_range = start_time is not None or end_time is not None
+    if (time is None) == (not has_range) or (
+        has_range and (start_time is None or end_time is None)
+    ):
+        return "Pass either time, for one moment, or both start_time and end_time, for a range."
+    fulcra = get_fulcra_object()
+    if time is not None:
+        location_data = fulcra.location_at_time(
+            time=time,
+            window_size=window_size,
+            include_after=True,
+            reverse_geocode=True if reverse_geocode is None else reverse_geocode,
+            fulcra_userid=fulcra_userid,
+        )
+        return f"Location info at {time}: " + json.dumps(location_data)
+
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     if sample_rate:
@@ -1352,20 +1346,14 @@ async def get_location_time_series(
                 f"samples; the limit is {MAX_SERIES_SAMPLES}. Increase "
                 "sample_rate (seconds per sample) or narrow the time range."
             )
-    fulcra = get_fulcra_object()
-    kwargs = {}
-    if change_meters is not None:
-        kwargs["change_meters"] = change_meters
-    if sample_rate is not None:
-        kwargs["sample_rate"] = sample_rate
-    kwargs["look_back"] = 14400
-    if reverse_geocode is not None:
-        kwargs["reverse_geocode"] = reverse_geocode
-
     location_series = fulcra.location_time_series(
         start_time=start_time,
         end_time=end_time,
-        **kwargs,
+        change_meters=change_meters,
+        sample_rate=sample_rate,
+        look_back=14400,
+        reverse_geocode=bool(reverse_geocode),
+        fulcra_userid=fulcra_userid,
     )
     return f"Location time series from {start_time} to {end_time}: " + json.dumps(
         location_series

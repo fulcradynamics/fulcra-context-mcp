@@ -207,15 +207,70 @@ async def test_get_user_info_leaves_out_account_and_subscription_fields(
 
 async def test_location_at_time_honors_reverse_geocode(call, fake_fulcra):
     fake_fulcra.location_at_time.return_value = {"lat": 1, "lon": 2}
-    await call("get_location_at_time", {"time": START, "reverse_geocode": False})
+    await call("get_location", {"time": START, "reverse_geocode": False})
     kwargs = fake_fulcra.location_at_time.call_args.kwargs
     assert kwargs["reverse_geocode"] is False
     assert kwargs["include_after"] is True
 
 
+async def test_location_series_honors_reverse_geocode(call, fake_fulcra):
+    fake_fulcra.location_time_series.return_value = []
+    await call(
+        "get_location", {"start_time": START, "end_time": END, "reverse_geocode": True}
+    )
+    assert fake_fulcra.location_time_series.call_args.kwargs["reverse_geocode"] is True
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},
+        {"time": START, "start_time": START, "end_time": END},
+        {"time": START, "end_time": END},
+        {"start_time": START},
+        {"end_time": END},
+    ],
+    ids=["nothing", "both", "time-and-end", "start-only", "end-only"],
+)
+async def test_location_needs_a_moment_or_a_whole_range(call, fake_fulcra, args):
+    text = await call("get_location", args)
+    assert text == (
+        "Pass either time, for one moment, or both start_time and end_time, for a range."
+    )
+    fake_fulcra.location_at_time.assert_not_called()
+    fake_fulcra.location_time_series.assert_not_called()
+
+
+async def test_location_range_must_run_forwards(call, fake_fulcra):
+    text = await call("get_location", {"start_time": END, "end_time": START})
+    assert "must be after start_time" in text
+    fake_fulcra.location_time_series.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args, method",
+    [
+        ({"time": START}, "location_at_time"),
+        ({"start_time": START, "end_time": END}, "location_time_series"),
+    ],
+    ids=["moment", "range"],
+)
+async def test_location_reads_another_users_shared_location(call, fake_fulcra, args, method):
+    owner = "11111111-2222-4333-8444-555555555555"
+    getattr(fake_fulcra, method).return_value = []
+    await call("get_location", {**args, "fulcra_userid": owner})
+    assert getattr(fake_fulcra, method).call_args.kwargs["fulcra_userid"] == owner
+
+
+async def test_old_location_tools_are_gone(call):
+    for name in ("get_location_at_time", "get_location_time_series"):
+        with pytest.raises(ToolError):
+            await call(name, {"time": START})
+
+
 async def test_location_series_sample_guard(call, fake_fulcra):
     text = await call(
-        "get_location_time_series",
+        "get_location",
         {
             "start_time": "2024-08-01T00:00:00-07:00",
             "end_time": END,
