@@ -179,6 +179,32 @@ async def test_get_user_info_strips_intercom_token(call, fake_fulcra):
     assert "Test User" in text
 
 
+async def test_get_user_info_leaves_out_account_and_subscription_fields(
+    call, fake_fulcra
+):
+    fake_fulcra.get_user_info.return_value = {
+        "userid": "00000000-1111-4222-8333-444444444444",
+        "created": "2024-08-20T19:51:09.123456Z",
+        "status": "active",
+        "tier": "",
+        "preferences": {"timezone": "America/Los_Angeles"},
+        "service_status": {
+            "is_active": True,
+            "service_type": "subscribed_stripe",
+            "active_until": "2026-11-01T00:00:00Z",
+            "grace_period_ends": "2026-11-08T00:00:00Z",
+            "manage_url": "https://portal.fulcradynamics.com",
+        },
+        "intercom_token": "sekrit",
+    }
+    text = await call("get_user_info")
+    assert json.loads(text.removeprefix("User information: ")) == {
+        "userid": "00000000-1111-4222-8333-444444444444",
+        "created": "2024-08-20T19:51:09.123456Z",
+        "preferences": {"timezone": "America/Los_Angeles"},
+    }
+
+
 async def test_location_at_time_honors_reverse_geocode(call, fake_fulcra):
     fake_fulcra.location_at_time.return_value = {"lat": 1, "lon": 2}
     await call("get_location_at_time", {"time": START, "reverse_geocode": False})
