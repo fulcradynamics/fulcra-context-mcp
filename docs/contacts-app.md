@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.12.0 / contacts UI v47 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.12.1 / contacts UI v48 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v47.html`, `ui://fulcra/contacts/threads/v47.html` and
-`ui://fulcra/contacts/thread/v47.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v48.html`, `ui://fulcra/contacts/threads/v48.html` and
+`ui://fulcra/contacts/thread/v48.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**.
 
@@ -67,7 +67,7 @@ empty). **Load more history** extends by two weeks. Failed reads preserve the la
 applied window and usable context with stale/incomplete warnings; known revoked
 sources are excluded. Polling preserves drafts, focus, selection and reader anchors,
 pauses while hidden and backs off failures. Optimistic reconciliation matches `mid`.
-Uncertain sends do not invent a new ID. Explicit sampling only suggests drafts.
+Uncertain sends do not invent a new ID. Sampling-based reply suggestions are disabled on all hosts.
 
 ## Metadata and handoffs
 

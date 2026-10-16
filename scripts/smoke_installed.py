@@ -58,15 +58,17 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v47.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v47.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v47.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v48.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v48.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v48.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="connection-presentation" content="{marker}"' in text
+                    assert 'Suggest replies' not in text
+                    assert 'suggestion-status' not in text
                     for value in ('use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
@@ -75,7 +77,7 @@ async def main():
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v47 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v48 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
