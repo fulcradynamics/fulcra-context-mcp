@@ -4,12 +4,14 @@ Peer content is only a lookup token. Identity comes from current direct grants.
 Uncertain writes consume the invitation and are never automatically retried.
 """
 import json
+import logging
 import re
 import secrets
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from threading import RLock
+from urllib.error import HTTPError
 
-from fulcra_api import records
 from .connection import UUID_PATTERN, _uuid, channel_entry, _authorize
 from .connection_compatibility import SHARE_NAME_PREFIX
 from .contact_preferences import _check_private
@@ -17,6 +19,49 @@ from .contact_preferences import _check_private
 NAME = 'Fulcra Agent Invitations'
 LOCK = RLock()  # Storage has no compare-and-swap; serialize this worker.
 CODE = re.compile('[0-9a-f]{32}')
+logger = logging.getLogger(__name__)
+
+
+class _EvidenceUnavailable(Exception):
+    def __init__(self, diagnostic):
+        self.diagnostic = diagnostic
+        super().__init__('Invitation evidence unavailable.')
+
+
+def _diagnostic(exc, stage):
+    # Never include exception text, URLs, response bodies, or peer content.
+    if isinstance(exc, _EvidenceUnavailable):
+        return exc.diagnostic
+    if isinstance(exc, HTTPError):
+        return dict(stage=stage, category='http', http_status=exc.code)
+    if isinstance(exc, OSError):
+        category = 'transport'
+    elif isinstance(exc, (ValueError, TypeError, KeyError)):
+        category = 'validation'
+    else:
+        category = 'unexpected'
+    return dict(stage=stage, category=category)
+
+
+@contextmanager
+def _checking(stage):
+    try:
+        yield
+    except Exception as exc:
+        raise _EvidenceUnavailable(_diagnostic(exc, stage)) from None
+
+
+def _history(api, owner, channel):
+    # The SDK's get_records encodes the whole range as seconds. The backend
+    # PromQL parser rejects a seconds component larger than uint32. Use days
+    # plus seconds, retaining the SAME year-1 lower bound, never a lookback.
+    end = datetime.now(timezone.utc).replace(microsecond=0)
+    duration = end - datetime(1, 1, 1, tzinfo=timezone.utc)
+    span = f'{duration.days}d' + (f'{duration.seconds}s' if duration.seconds else '')
+    query = f'{{__name__="{channel}"}}[{span}] @ {int(end.timestamp())}'
+    response = api.fulcra_v1_records(query, fulcra_userid=owner)
+    # Consume every JSONL line; a partial/malformed response must fail closed.
+    return [json.loads(line) for line in response.splitlines() if line.strip()]
 
 
 def _channel(api, owner, data_type, own=False):
@@ -114,9 +159,10 @@ def prepare(api, data_type):
 
 
 def _evidence(api, own):
-    grants = api.get_shared_datasets()
-    if not isinstance(grants, list):
-        raise ValueError('Incoming grants unavailable.')
+    with _checking('incoming_grants'):
+        grants = api.get_shared_datasets()
+        if not isinstance(grants, list):
+            raise ValueError('Incoming grants unavailable.')
     channels = set()
     for grant in grants:
         if grant.get('grant_type') in ('self', 'group'):
@@ -126,24 +172,26 @@ def _evidence(api, own):
             raise ValueError('Incomplete incoming grants.')
         if (grant.get('grant_type') == 'user' and _uuid(grant.get('sharing_fulcra_userid'))
                 and grant['sharing_fulcra_userid'] != own
-                and grant.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
+                and isinstance(grant.get('datashare_name'), str)
+                and grant['datashare_name'].startswith(SHARE_NAME_PREFIX)
                 and len(types) == 1 and re.fullmatch('Event/' + UUID_PATTERN, types[0])
                 and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
             channels.add((grant['sharing_fulcra_userid'], types[0]))
     evidence = {}
     for owner, channel in sorted(channels):
-        entry = _channel(api, owner, channel)
-        # Full history, not a recent/latest-record window. The SDK consumes the
-        # complete JSONL response and raises on malformed/truncated lines.
-        rows = records.get_records(api, entry, datetime(1, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc))
-        if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows):
-            raise ValueError('Incomplete handshake history.')
-        timed = []
-        for row in rows:
-            stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
-            if stamp.tzinfo is None:
-                raise ValueError('Invalid handshake timestamp.')
-            timed.append((stamp, row))
+        with _checking('incoming_channel'):
+            _channel(api, owner, channel)
+        with _checking('handshake_history'):
+            rows = _history(api, owner, channel)
+            if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows):
+                raise ValueError('Incomplete handshake history.')
+        with _checking('handshake_timestamps'):
+            timed = []
+            for row in rows:
+                stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
+                if stamp.tzinfo is None:
+                    raise ValueError('Invalid handshake timestamp.')
+                timed.append((stamp, row))
         if not timed:
             continue
         first_time = min(t for t, _ in timed)
@@ -167,7 +215,7 @@ def match(api):
             for data_type, invite in document['invitations'].items():
                 if invite['state'] == 'completed':
                     continue  # Discovery owns the connection's subsequent grant lifecycle.
-                result = dict(data_type=data_type, status='pending')
+                result: dict = dict(data_type=data_type, status='pending')
                 results.append(result)
                 pair = evidence.get(invite['code'])
                 if not pair:
@@ -215,8 +263,14 @@ def match(api):
                     invite['state'] = 'completed'
                     _save(api, own, entry, document)
                     result['status'] = 'matched'
-                except Exception:
+                except Exception as exc:
                     result['reason'] = 'Match not verified. No automatic write retry.'
-        except Exception:
-            return {'results': [], 'status': 'unavailable', 'reason': 'Invitation evidence unavailable; nothing shared.'}
+                    result['diagnostic'] = _diagnostic(exc, 'match_verification')
+                    logger.warning('Invitation match failed: %s', result['diagnostic'])
+        except Exception as exc:
+            diagnostic = _diagnostic(exc, 'invitation_evidence')
+            logger.warning('Invitation evidence failed: %s', diagnostic)
+            return {'results': [], 'status': 'unavailable',
+                    'reason': 'Invitation evidence unavailable; nothing shared.',
+                    'diagnostic': diagnostic}
     return {'results': results}

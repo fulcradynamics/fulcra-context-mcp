@@ -1,6 +1,6 @@
 [project]
 name = "fulcra-context-mcp"
-version = "1.12.2"
+version = "1.12.3"
 description = "Fulcra Context MCP Server"
 license = "Apache-2.0"
 authors = [
@@ -25,6 +25,7 @@ exclude-newer-package = { fulcra = false, fulcra-api = false, fulcra-data-types 
 
 [dependency-groups]
 dev = [
+    "promql-parser>=0.10.0",
     "pytest>=8.4",
     "pytest-asyncio>=1.0",
 ]

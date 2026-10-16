@@ -1,11 +1,12 @@
 """Exercise real SDK serialization and full JSONL parsing with transport mocked."""
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from io import BytesIO
 from urllib.error import HTTPError
 from urllib.parse import urlparse, parse_qs
 
+import promql_parser
 import pytest
 from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
@@ -20,7 +21,17 @@ STATE = 'Event/00000000-0000-4000-8000-000000000099'
 
 
 @pytest.mark.parametrize('partial', [False, True])
-def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, partial):
+@pytest.mark.parametrize('earlier', [False, True])
+@pytest.mark.parametrize('hour', [0, 12])
+def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, partial, earlier, hour):
+    query_end = datetime(2026, 10, 16, hour, tzinfo=timezone.utc)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return query_end
+
+    monkeypatch.setattr(invitations, 'datetime', Clock)
     api = FulcraAPI(oidc_audience='https://synthetic.invalid')
     api.fulcra_credentials = FulcraCredentials(access_token='synthetic',
         access_token_expiration=datetime.now() + timedelta(hours=1))
@@ -55,6 +66,14 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
         elif path == '/data/v1/records':
             assert query['fulcra_userid'] == [PEER]
             assert query['q'][0].startswith('{__name__="' + IN + '"}[')
+            # Exercise the data service's real parser, not just URL encoding.
+            try:
+                parsed = promql_parser.parse(query['q'][0])
+            except ValueError:
+                raise HTTPError(req.full_url, 422, 'Invalid query', Message(), None)
+            end = parsed.vector_selector.at.at
+            assert end - parsed.range == datetime(1, 1, 1, tzinfo=timezone.utc)
+            assert end == query_end
             payload = '\n'.join(json.dumps(r) for r in rows).encode()
             return BytesIO(payload + (b'\n{"id":' if partial else b'\n'))
         elif path.startswith('/input/v1/data_type/Event'):
@@ -75,10 +94,18 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
     monkeypatch.setattr('urllib.request.urlopen', transport)
     prepared = invitations.prepare(api, OUT)
     rows.append(dict(id=PEER, kind='message', sender='Agent', body='hello',
-                     topic=prepared['topic'], start_time='2026-10-01T00:00:00Z'))
+                     topic=prepared['topic'], start_time='2026-10-01T02:00:00.123456+02:00',
+                     end_time='2026-10-01T02:00:00.123456+02:00'))
+    if earlier:
+        # Appended out of order, before Unix epoch/pandas' nanosecond range.
+        rows.append(dict(rows[0], id=OWN, start_time='0001-01-02T00:00:00Z', topic='hello'))
     result = invitations.match(api)
     if partial:
         assert result['status'] == 'unavailable' and outgoing == []
+        assert result['diagnostic'] == {'stage': 'handshake_history', 'category': 'validation'}
+    elif earlier:
+        assert result['results'][0]['reason'] == 'No unique first-message handshake.'
+        assert outgoing == []
     else:
         assert result['results'][0]['status'] == 'matched'
         assert invitations.match(api)['results'] == []

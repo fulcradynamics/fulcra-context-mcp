@@ -94,7 +94,8 @@ def _target(api, peer, target, now):
     for grant in api.get_shared_datasets():
         types = grant.get('fulcra_data_types')
         if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
-                and grant.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
+                and isinstance(grant.get('datashare_name'), str)
+                and grant['datashare_name'].startswith(SHARE_NAME_PREFIX)
                 and isinstance(types, list) and len(types) == 1
                 and re.fullmatch('Event/' + UUID_PATTERN, types[0])
                 and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
