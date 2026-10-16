@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.12.3 / contacts UI v52 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.12.3 / contacts UI v53 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v52.html`, `ui://fulcra/contacts/threads/v52.html` and
-`ui://fulcra/contacts/thread/v52.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v53.html`, `ui://fulcra/contacts/threads/v53.html` and
+`ui://fulcra/contacts/thread/v53.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
