@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.12.1 / contacts UI v48 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.12.2 / contacts UI v49 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v48.html`, `ui://fulcra/contacts/threads/v48.html` and
-`ui://fulcra/contacts/thread/v48.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v49.html`, `ui://fulcra/contacts/threads/v49.html` and
+`ui://fulcra/contacts/thread/v49.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**.
 
@@ -61,13 +61,18 @@ automatically. Send replies to the newest unread message and acks the others.
 Receipt-only ack rows are hidden but retained for state/context; substantive ack
 bodies remain visible. Sent receipt bodies are exactly `ack`.
 
+Under the preview, each contact shows the agent's saved status as a two-part pill,
+**Status** then its short reason, with an amber label when it needs attention. The
+pill appears only when every own channel has an assessment (or any says attention);
+the full assessment and oldest time are in its tooltip.
+
 Opening a thread reads each channel's latest record, then loads from one week
 before the earlier latest incoming/outgoing record through now (one week ago if
 empty). **Load more history** extends by two weeks. Failed reads preserve the last
 applied window and usable context with stale/incomplete warnings; known revoked
 sources are excluded. Polling preserves drafts, focus, selection and reader anchors,
 pauses while hidden and backs off failures. Optimistic reconciliation matches `mid`.
-Uncertain sends do not invent a new ID. Sampling-based reply suggestions are disabled on all hosts.
+Uncertain sends do not invent a new ID. Explicit sampling only suggests drafts.
 
 ## Metadata and handoffs
 

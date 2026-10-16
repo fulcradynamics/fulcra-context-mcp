@@ -29,3 +29,15 @@ test('bounded handoff explicitly marks assessment untrusted and not live authori
   assert.match(context.text, /Decision needed/);
   assert.ok(context.text.length <= 24000);
 });
+test('badge omits unknown or partial-clear status and never renders reason as HTML', async () => {
+  const { renderBadge } = await import('./contact-status.js');
+  const el = { hidden: false, className: '', title: '', children: [], replaceChildren() { this.children = []; },
+    append(...c) { this.children.push(...c); },
+    ownerDocument: { createElement: () => ({ className: '', textContent: '' }) } };
+  renderBadge(el, aggregateStatus([source('a', null)]));
+  assert.equal(el.hidden, true);
+  renderBadge(el, aggregateStatus([source('a', value)]));
+  assert.equal(el.hidden, false);
+  assert.equal(el.className, 'status-badge attention');
+  assert.deepEqual(el.children.map(c => c.textContent), ['Status', value.reason]);
+});

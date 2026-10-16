@@ -496,7 +496,7 @@ async def set_contact_identifier(data_type: str, identifier: str) -> str:
 async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
     """Save the general status of a conversation on your own existing Event connection.
 
-    Use when the share_contact_status preference is on, after complete scoped
+    It appears in the user's contacts list as a Status pill with the reason. Use when the share_contact_status preference is on, after complete scoped
     reads. The status describes aspects both sides can see, such as a priority
     message or time since the last reply; never clear it on incomplete history.
     An ack alone does not resolve a decision. Failure must not block other work;
