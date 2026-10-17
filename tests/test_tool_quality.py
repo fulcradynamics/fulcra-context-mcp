@@ -1291,3 +1291,67 @@ async def test_catalog_lists_no_required_fields_when_there_are_none(call, fake_f
     [entry] = _entries(await call("get_data_catalog", {"data_type": user_type}))
 
     assert "required_fields" not in entry
+
+
+# --- get_sleep -----------------------------------------------------------------
+
+
+async def test_sleep_lists_only_the_common_options(client):
+    [tool] = [t for t in await client.list_tools() if t.name == "get_sleep"]
+    assert set(tool.inputSchema["properties"]) == {
+        "start_time",
+        "end_time",
+        "level",
+        "stages",
+        "period",
+        "time_zone",
+        "fulcra_userid",
+    }
+
+
+@pytest.mark.parametrize(
+    "user_info, time_zone, expected",
+    [
+        ({"preferences": {"timezone": "America/Los_Angeles"}}, None, "America/Los_Angeles"),
+        ({"preferences": {"timezone": "America/Los_Angeles"}}, "Europe/Paris", "Europe/Paris"),
+        ({"preferences": {}}, None, "UTC"),
+        (http_error(500), None, "UTC"),
+    ],
+    ids=["users-own", "explicit", "none-set", "unreadable"],
+)
+async def test_sleep_totals_follow_the_users_days(
+    call, fake_fulcra, user_info, time_zone, expected
+):
+    if isinstance(user_info, Exception):
+        fake_fulcra.get_user_info.side_effect = user_info
+    else:
+        fake_fulcra.get_user_info.return_value = user_info
+    fake_fulcra.sleep_agg_rows.return_value = []
+    args = {"start_time": START, "end_time": END, "level": "aggregate"}
+    if time_zone:
+        args["time_zone"] = time_zone
+
+    await call("get_sleep", args)
+
+    assert fake_fulcra.sleep_agg_rows.call_args.kwargs["tz"] == expected
+    if time_zone:
+        fake_fulcra.get_user_info.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "level, method",
+    [
+        ("cycles", "sleep_cycles_rows"),
+        ("stages", "sleep_stages_rows"),
+        ("aggregate", "sleep_agg_rows"),
+    ],
+)
+async def test_sleep_reads_another_users_shared_sleep(call, fake_fulcra, level, method):
+    owner = "11111111-2222-4333-8444-555555555555"
+    fake_fulcra.get_user_info.return_value = {"preferences": {}}
+    getattr(fake_fulcra, method).return_value = []
+
+    args = {"start_time": START, "end_time": END, "level": level, "fulcra_userid": owner}
+    await call("get_sleep", args)
+
+    assert getattr(fake_fulcra, method).call_args.kwargs["fulcra_userid"] == owner

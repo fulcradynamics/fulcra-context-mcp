@@ -1210,83 +1210,59 @@ async def get_sleep(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
     level: Literal["aggregate", "cycles", "stages"] = "cycles",
-    cycle_gap: str | None = None,
     stages: list[int] | None = None,
-    gap_stages: list[int] | None = None,
-    clip_to_range: bool | None = True,
-    merge_overlapping: bool | None = None,
-    merge_contiguous: bool | None = None,
-    mode: Literal["start", "end", "split"] | None = None,
     period: str | None = None,
-    agg_functions: list[str] | None = None,
     time_zone: str | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
-    """Return the user's sleep data at a chosen level of detail.
-
-    Pick the coarsest level that answers the question — results grow with detail:
-    - "aggregate": stage totals per period (default 1 day), one row per period
-      per stage. Best for multi-day questions ("how did I sleep this month").
+    """Return the user's sleep at a chosen level of detail; pick the coarsest
+    that answers the question:
+    - "aggregate": stage totals per period, for multi-day questions.
     - "cycles": one row per sleep session.
-    - "stages": every stage interval (the full hypnogram); single-night detail.
+    - "stages": every stage interval; single-night detail.
 
-    Sleep spans midnight (starts day N, ends day N+1) — extend the time range
-    accordingly. Stage integers: 0=In Bed, 1=Asleep/Unknown, 2=Awake, 3=Light,
-    4=Deep, 5=REM. Result timestamps include time zones; translate them to the
-    user's local time zone when known.
+    Sleep crosses midnight, so extend the range to cover it. Stages: 0=In Bed,
+    1=Asleep/Unknown, 2=Awake, 3=Light, 4=Deep, 5=REM.
 
     Args:
-        start_time: Range start (inclusive). Must include tz (ISO8601).
-        end_time: Range end (exclusive). Must include tz (ISO8601).
+        start_time: Range start (inclusive).
+        end_time: Range end (exclusive).
         level: Level of detail (see above).
-        cycle_gap: Minimum interval separating distinct cycles (e.g. "PT2H").
-        stages: Stage integers to include (default: all).
-        gap_stages: Stage integers treated as gaps between cycles.
-        clip_to_range: Clip results to the requested range (default True).
-        merge_overlapping: "stages" level only. Merge overlapping stages (default True).
-        merge_contiguous: "stages" level only. Merge adjacent same-stage samples (default True).
-        mode: "aggregate" only. Assign by "start", "end" or "split" (default "end").
-        period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
-        agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
-        time_zone: "aggregate" only. IANA tz for period bounds; use the user's local one.
+        stages: Only these stages (default: all).
+        period: "aggregate" only: period length, e.g. "1d" (default) or "1w".
+        time_zone: "aggregate" only: IANA zone for period bounds (default: the
+            user's own).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared).
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
-    kwargs = {}
-    if cycle_gap is not None:
-        kwargs["cycle_gap"] = cycle_gap
+    kwargs: dict[str, Any] = {"fulcra_userid": fulcra_userid}
     if stages is not None:
         kwargs["stages"] = stages
-    if gap_stages is not None:
-        kwargs["gap_stages"] = gap_stages
-    if clip_to_range is not None:
-        kwargs["clip_to_range"] = clip_to_range
-
     if level == "stages":
-        if merge_overlapping is not None:
-            kwargs["merge_overlapping"] = merge_overlapping
-        if merge_contiguous is not None:
-            kwargs["merge_contiguous"] = merge_contiguous
         query_func = fulcra.sleep_stages_rows
     elif level == "aggregate":
-        if mode is not None:
-            kwargs["mode"] = mode
         if period is not None:
             kwargs["period"] = period
-        if agg_functions is not None:
-            kwargs["agg_functions"] = agg_functions
-        if time_zone is not None:
-            kwargs["tz"] = time_zone
+        kwargs["tz"] = time_zone or _own_time_zone(fulcra)
         query_func = fulcra.sleep_agg_rows
     else:
         query_func = fulcra.sleep_cycles_rows
 
-    rows = query_func(
-        start_time=start_time,
-        end_time=end_time,
-        **kwargs,
-    )
+    rows = query_func(start_time=start_time, end_time=end_time, **kwargs)
     return f"Sleep {level} from {start_time} to {end_time}: " + json.dumps(rows, default=str)
+
+
+def _own_time_zone(fulcra) -> str:
+    """The time zone in the user's Fulcra preferences, so daily totals follow
+    their days rather than UTC's; UTC if none is set or it can't be read."""
+    try:
+        preferences = fulcra.get_user_info().get("preferences") or {}
+    except Exception:
+        logger.warning("user_time_zone_unavailable", exc_info=True)
+        return "UTC"
+    return preferences.get("timezone") or "UTC"
 
 
 @tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True})
