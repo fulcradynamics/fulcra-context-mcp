@@ -704,12 +704,15 @@ ENERGY_LEVEL = {
                 "string": {"mapping": {"1": "Very Low", "3": "Medium", "5": "Very High"}},
             },
             "scale_mapping": {
-                "mapping_type": "color",
+                "mapping_type": "emoji",
                 "color": {"mapping": {"1": "#ff3b30", "5": "#33c759"}},
+                "string": {"mapping": {"1": "annotation-emoji-1", "5": "annotation-emoji-5"}},
             },
         },
     },
-    "tags": [],
+    "tags": ["cb8e9254-1446-4055-9e3c-4d76335d1be5"],
+    "created_at": "2025-05-22T20:40:51.191044Z",
+    "updated_at": "2025-05-23T08:00:00Z",
 }
 
 WATER = {
@@ -728,7 +731,19 @@ WATER = {
 }
 
 
-ANNOTATION_DETAIL_KEYS = ("scale", "value_map", "measures", "unit", "default_value", "default_note")
+ANNOTATION_DETAIL_KEYS = (
+    "scale",
+    "value_map",
+    "measures",
+    "unit",
+    "default_value",
+    "default_note",
+    "kind",
+    "tags",
+    "display",
+    "created_at",
+    "updated_at",
+)
 
 
 def _one_entry(text: str) -> dict:
@@ -746,6 +761,14 @@ def _one_entry(text: str) -> dict:
                 "scale": {"min": 1, "max": 5, "step": 1},
                 "value_map": {"1": "Very Low", "3": "Medium", "5": "Very High"},
                 "default_value": 3,
+                "kind": "discrete",
+                "tags": ["cb8e9254-1446-4055-9e3c-4d76335d1be5"],
+                "display": {
+                    "colors": {"1": "#ff3b30", "5": "#33c759"},
+                    "emoji": {"1": "annotation-emoji-1", "5": "annotation-emoji-5"},
+                },
+                "created_at": "2025-05-22T20:40:51.191044Z",
+                "updated_at": "2025-05-23T08:00:00Z",
             },
         ),
         (
@@ -756,6 +779,7 @@ def _one_entry(text: str) -> dict:
                 "unit": "fluid_ounce",
                 "default_value": 8,
                 "default_note": "tap",
+                "kind": "cumulative",
             },
         ),
         ("MomentAnnotation", {"annotation_type": "moment", "spec": None}, {}),

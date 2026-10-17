@@ -800,8 +800,10 @@ def _is_user_annotation(entry: dict) -> bool:
 
 def _annotation_details(definition: dict) -> dict:
     """What one annotation adds to its base type's catalog entry: its scale and
-    the label for each value, its unit and what it measures, and its defaults.
-    The catalog entry itself only carries the base type's record spec."""
+    the label for each value, how its values aggregate (kind), its unit and what
+    it measures, its defaults and default tags, how the app displays each scale
+    value, and when it was created and last changed. The catalog entry itself
+    only carries the base type's record spec."""
     details: dict = {}
     measurement = definition.get("measurement_spec") or {}
     kind = measurement.get("measurement_type")
@@ -825,7 +827,31 @@ def _annotation_details(definition: dict) -> dict:
         details["default_value"] = values["value"]
     if spec.get("default_note"):
         details["default_note"] = spec["default_note"]
+    if measurement.get("metric_kind"):
+        details["kind"] = measurement["metric_kind"]
+    if definition.get("tags"):
+        details["tags"] = definition["tags"]
+    if display := _scale_display(spec):
+        details["display"] = display
+    for key in ("created_at", "updated_at"):
+        if definition.get(key):
+            details[key] = definition[key]
     return details
+
+
+def _scale_display(spec: dict) -> dict:
+    """How the app shows each scale value: a color, and an emoji for emoji
+    scales, keyed by value. Empty for annotations without a scale display."""
+    mapping = (spec.get("scale") or {}).get("scale_mapping") or {}
+    display = {}
+    colors = (mapping.get("color") or {}).get("mapping")
+    if colors:
+        display["colors"] = colors
+    if mapping.get("mapping_type") == "emoji":
+        emoji = (mapping.get("string") or {}).get("mapping")
+        if emoji:
+            display["emoji"] = emoji
+    return display
 
 
 # Schema keywords that say nothing about what a valid value is
@@ -886,8 +912,8 @@ async def get_data_catalog(
             For a user-defined type, this also lists its fields (what
             record_data takes in `fields`): a type name, or the field's JSON
             Schema if it has nested fields or rules; plus required_fields.
-            For an annotation, it adds the annotation's own scale and value
-            labels (value_map), unit and defaults.
+            For an annotation, it adds the annotation's own settings: scale and
+            value labels (value_map), kind, unit, defaults, tags and display.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_defined", "base_type".
