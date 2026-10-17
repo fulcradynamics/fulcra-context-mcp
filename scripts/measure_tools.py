@@ -2,9 +2,11 @@
 
 Reports the size of each tool's ``tools/list`` entry (name + description +
 input schema + annotations) — the fixed context cost every MCP client pays in
-every conversation — plus the total. Sizes are characters with a chars/4 token
-estimate (roughly ±15%; for exact Claude numbers, run the same payload through
-Anthropic's ``count_tokens`` API).
+every conversation — plus the total. App-only tools (MCP Apps
+``visibility: ["app"]``) are totalled separately: hosts that show MCP Apps hide
+them from the model, though clients without MCP Apps still list them. Sizes are
+characters with a chars/4 token estimate (roughly ±15%; for exact Claude
+numbers, run the same payload through Anthropic's ``count_tokens`` API).
 
 Usage:
     uv run python scripts/measure_tools.py
@@ -36,14 +38,28 @@ def tool_payload(t) -> str:
     return json.dumps(d)
 
 
-async def main():
-    async with Client(tools_mcp) as client:
-        tools = await client.list_tools()
+def app_only(t) -> bool:
+    """An MCP Apps tool that only its panel calls. Hosts that show MCP Apps keep
+    it out of the model's tool list; other clients list it like any tool."""
+    visibility = ((t.meta or {}).get("ui") or {}).get("visibility")
+    return visibility is not None and "model" not in visibility
+
+
+def report(label: str, tools) -> None:
     rows = sorted(((len(tool_payload(t)), t.name) for t in tools), reverse=True)
     total = sum(n for n, _ in rows)
     for n, name in rows:
         print(f"  {n:>6,} chars  (~{n // 4:>5,} tok)  {name}")
-    print(f"TOTAL {len(rows)} tools: {total:,} chars (~{total // 4:,} tokens)")
+    print(f"{label} {len(rows)} tools: {total:,} chars (~{total // 4:,} tokens)")
+
+
+async def main():
+    async with Client(tools_mcp) as client:
+        tools = await client.list_tools()
+    report("TOTAL", [t for t in tools if not app_only(t)])
+    if panel := [t for t in tools if app_only(t)]:
+        print("\nApp-only (hidden from the model in hosts that show MCP Apps):")
+        report("APP-ONLY", panel)
 
 
 if __name__ == "__main__":

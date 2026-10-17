@@ -1784,11 +1784,20 @@ async def write_file(
                 "the file's bytes base64-encoded."
             )
         if len(data) > MAX_WRITE_BASE64_BYTES:
+            if settings.fulcra_environment == "stdio":
+                larger = (
+                    "Use the Fulcra CLI (`uvx fulcra-api file upload <file> "
+                    f"{path}`)"
+                )
+            else:
+                larger = (
+                    'Send a file on disk with encoding="upload_link" (up to '
+                    f"{MAX_LINK_UPLOAD_BYTES // 1024**2} MB)"
+                )
             return (
                 f"That's {len(data)} bytes; write_file takes at most "
-                f"{MAX_WRITE_BASE64_BYTES} in base64. Use start_file_upload and "
-                "upload_file_chunk, or open_file_manager so the user can upload "
-                "it directly."
+                f"{MAX_WRITE_BASE64_BYTES} in base64. {larger}, or use "
+                "open_file_manager so the user can upload it directly."
             )
         content_type = content_type or guess_content_type(path)
     else:
