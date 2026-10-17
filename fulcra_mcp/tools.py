@@ -18,10 +18,12 @@ from fulcra_api import connections, data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
+from .compact_tools import CompactTools
 from .credentials import get_fulcra_object
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
+tools_mcp.add_transform(CompactTools())
 logger = structlog.getLogger(__name__)
 
 
@@ -2243,18 +2245,34 @@ async def join_group(group_id: str) -> str:
     return f"Joined group {group_id}: " + json.dumps(membership)
 
 
-@tools_mcp.tool(annotations={"title": "Leave Group", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "destructiveHint": True})
 @_friendly_http_errors
-async def leave_group(group_id: str) -> str:
+async def leave_group(group_id: str, delete: bool = False) -> str:
     """Leave a Fulcra group on the user's behalf, at their explicit request.
 
     The user stops sharing the group's data types with its owner and stops
-    receiving shares made to the group.
+    receiving shares made to the group. With delete=true, instead permanently
+    delete a group the user owns, removing every member; only when the user
+    asks to delete it.
 
     Args:
-        group_id: The group to leave, from `get_groups(subscribed_only=true)`.
+        group_id: The group, from `get_groups`.
+        delete: Delete the group for everyone (owner only) instead of leaving it.
     """
     fulcra = get_fulcra_object()
+    if delete:
+        try:
+            fulcra.delete_group(group_id)
+        except urllib.error.HTTPError as e:
+            if msg := _group_http_error(e, group_id):
+                return msg
+            if e.code == 403:
+                return (
+                    f"Only the group's owner can delete it; this user does not own "
+                    f"{group_id}. Without delete, leave_group leaves it instead."
+                )
+            raise
+        return f"Deleted group {group_id}; its members no longer belong to it."
     try:
         # The server also returns success when the user was not a member.
         fulcra.leave_group(group_id)
@@ -2325,26 +2343,6 @@ async def create_group(
         friendly_id=friendly_id,
     )
     return "Created group: " + json.dumps(_slim_group(group))
-
-
-@tools_mcp.tool(annotations={"title": "Delete Group", "destructiveHint": True})
-@_friendly_http_errors
-async def delete_group(group_id: str) -> str:
-    """Permanently delete a group the user owns, removing all its members.
-
-    Args:
-        group_id: The group to delete, from `get_groups`.
-    """
-    fulcra = get_fulcra_object()
-    try:
-        fulcra.delete_group(group_id)
-    except urllib.error.HTTPError as e:
-        if msg := _group_http_error(e, group_id):
-            return msg
-        if e.code == 403:
-            return f"Only the group's owner can delete it; this user does not own {group_id}."
-        raise
-    return f"Deleted group {group_id}; its members no longer belong to it."
 
 
 async def debug_token_info() -> str:

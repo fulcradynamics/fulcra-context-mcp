@@ -1,8 +1,8 @@
 """Measure the context cost of this server's MCP tool definitions.
 
 Reports the size of each tool's ``tools/list`` entry (name + description +
-input schema + annotations) — the fixed context cost every MCP client pays in
-every conversation — plus the total. App-only tools (MCP Apps
+input schema + output schema, if any + annotations) — the fixed context cost
+every MCP client pays in every conversation — plus the total. App-only tools (MCP Apps
 ``visibility: ["app"]``) are totalled separately: hosts that show MCP Apps hide
 them from the model, though clients without MCP Apps still list them. Sizes are
 characters with a chars/4 token estimate (roughly ±15%; for exact Claude
@@ -47,6 +47,9 @@ from fulcra_mcp.tools import tools_mcp  # noqa: E402
 
 def tool_payload(t) -> str:
     d = {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
+    # Not every client shows the model output schemas, but some do.
+    if t.outputSchema:
+        d["output_schema"] = t.outputSchema
     if t.annotations:
         d["annotations"] = t.annotations.model_dump(exclude_none=True)
     return json.dumps(d)
