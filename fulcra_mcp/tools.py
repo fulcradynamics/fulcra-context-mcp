@@ -1274,6 +1274,7 @@ async def get_location(
     sample_rate: int = 900,
     change_meters: float | None = None,
     window_size: int = 14400,
+    include_after: bool = True,
     reverse_geocode: bool | None = None,
     fulcra_userid: str | None = None,
 ) -> str:
@@ -1294,6 +1295,8 @@ async def get_location(
             from the previous one.
         window_size: Moment only: seconds around `time` to search for a sample
             (default 14400).
+        include_after: Moment only: allow the closest sample to be after `time`
+            (default true); false finds where the user last was at or before it.
         reverse_geocode: Include the address (default: true for a moment,
             false for a range).
         fulcra_userid: Retrieve data for another Fulcra user (if shared).
@@ -1303,12 +1306,14 @@ async def get_location(
         has_range and (start_time is None or end_time is None)
     ):
         return "Pass either time, for one moment, or both start_time and end_time, for a range."
+    if time is None and not include_after:
+        return "include_after applies only to one moment; pass time instead of a range."
     fulcra = get_fulcra_object()
     if time is not None:
         location_data = fulcra.location_at_time(
             time=time,
             window_size=window_size,
-            include_after=True,
+            include_after=include_after,
             reverse_geocode=True if reverse_geocode is None else reverse_geocode,
             fulcra_userid=fulcra_userid,
         )

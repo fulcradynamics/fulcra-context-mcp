@@ -251,6 +251,24 @@ async def test_location_at_time_honors_reverse_geocode(call, fake_fulcra):
     assert kwargs["include_after"] is True
 
 
+async def test_location_at_time_can_exclude_later_samples(call, fake_fulcra):
+    fake_fulcra.location_at_time.return_value = []
+    await call(
+        "get_location", {"time": START, "window_size": 3600, "include_after": False}
+    )
+    kwargs = fake_fulcra.location_at_time.call_args.kwargs
+    assert kwargs["include_after"] is False
+    assert kwargs["window_size"] == 3600
+
+
+async def test_location_range_refuses_include_after(call, fake_fulcra):
+    text = await call(
+        "get_location", {"start_time": START, "end_time": END, "include_after": False}
+    )
+    assert text == "include_after applies only to one moment; pass time instead of a range."
+    fake_fulcra.location_time_series.assert_not_called()
+
+
 async def test_location_series_honors_reverse_geocode(call, fake_fulcra):
     fake_fulcra.location_time_series.return_value = []
     await call(
