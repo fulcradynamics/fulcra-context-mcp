@@ -2071,7 +2071,8 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
         direction: Which shares to list: "outgoing", "incoming", or "both".
     Returns:
         A JSON string with "own_fulcra_userid", "outgoing" (entries carry a
-        "datashare_id" for `delete_share`) and/or "incoming".
+        "datashare_id") and/or "incoming" (entries carry a "grant_id"); either
+        ID ends that share with `delete_share`.
     """
     fulcra = get_fulcra_object()
     result: dict = {}
@@ -2092,57 +2093,60 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
 @tools_mcp.tool(annotations={"title": "Delete Share", "destructiveHint": True})
 @_friendly_http_errors
 async def delete_share(share_id: str) -> str:
-    """Stop sharing: delete a share this user created, revoking all recipients' access.
+    """End a share: delete one this user made, revoking every recipient's access,
+    or give up one another user shares with this user (they can share again).
+
+    A share that reaches this user through a group can't be given up on its
+    own; leave the group instead (leave_group).
 
     Args:
-        share_id: The "datashare_id" from `list_shares(direction="outgoing")`.
+        share_id: From list_shares: an outgoing share's "datashare_id", or an
+            incoming share's "grant_id".
     """
+    wanted = share_id.strip().lower()
     fulcra = get_fulcra_object()
-    try:
-        fulcra.delete_datashare(share_id)
-    except urllib.error.HTTPError as e:
-        if e.code in (403, 404):
-            return f"No share of this user found with ID {share_id!r}. Use list_shares to find share IDs."
-        raise
-    return f"Deleted share {share_id}; its recipients no longer have access."
-
-
-@tools_mcp.tool(annotations={"title": "Leave Share", "destructiveHint": True})
-@_friendly_http_errors
-async def leave_share(grant_id: str) -> str:
-    """Give up access to something another user shares with this user, to
-    decline it or to stop receiving it.
-
-    Takes the "grant_id" of an incoming entry from
-    list_shares(direction="incoming"). Works for shares addressed to this user
-    directly; one that arrives through a group can't be left on its own, so
-    leave the group instead (leave_group). The other user can share again later.
-
-    Args:
-        grant_id: The "grant_id" of an incoming share, from list_shares.
-    """
-    try:
-        grant_id = str(UUID(grant_id)).lower()
-    except ValueError:
-        return f"grant_id must be a UUID, got {grant_id!r}. list_shares(direction=\"incoming\") lists them."
-    fulcra = get_fulcra_object()
-    grant = next(
-        (g for g in fulcra.get_shared_datasets() if str(g.get("grant_id") or "").lower() == grant_id),
+    mine = next(
+        (
+            s
+            for s in fulcra.get_datashares()
+            if str(s.get("datashare_id") or "").lower() == wanted
+        ),
         None,
     )
+    if mine is not None:
+        try:
+            fulcra.delete_datashare(mine["datashare_id"])
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 404):
+                return f"Share {share_id!r} is already gone. list_shares lists the current ones."
+            raise
+        return f"Deleted share {mine['datashare_id']}; its recipients no longer have access."
+
+    incoming = [g for g in fulcra.get_shared_datasets() if g.get("grant_type") != "self"]
+    grant = next(
+        (g for g in incoming if str(g.get("grant_id") or "").lower() == wanted), None
+    )
     if grant is None:
-        return f"No incoming share with grant_id {grant_id!r}. list_shares(direction=\"incoming\") lists them."
+        # The other user's datashare_id rather than this user's grant on it
+        theirs = [g for g in incoming if str(g.get("datashare_id") or "").lower() == wanted]
+        if len(theirs) == 1 and theirs[0].get("grant_id"):
+            grant = theirs[0]
+    if grant is None:
+        return (
+            f"No share found with ID {share_id!r}. list_shares gives a \"datashare_id\" "
+            "for each share this user made and a \"grant_id\" for each one shared with them."
+        )
     if grant.get("grant_type") == "group":
         return (
             f"That share reaches this user through group {grant.get('group_id')}, so it "
-            "can't be left on its own. Leaving the group (leave_group) gives up access."
+            "can't be given up on its own. Leaving the group (leave_group) gives up access."
         )
     if grant.get("grant_type") != "user":
-        return f"Grant {grant_id!r} isn't a share from another user, so there's nothing to leave."
-    fulcra.delete_dataset_permission(grant_id)
+        return f"{share_id!r} isn't a share from another user, so there's nothing to give up."
+    fulcra.delete_dataset_permission(grant["grant_id"])
     who = grant.get("sharing_fulcra_user_name") or grant.get("sharing_fulcra_userid")
     return (
-        f"Left the share {grant.get('datashare_name')!r} from {who}; this user no longer "
+        f"Gave up the share {grant.get('datashare_name')!r} from {who}; this user no longer "
         "has access to it. They can share with this user again later."
     )
 
