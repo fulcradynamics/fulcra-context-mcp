@@ -162,7 +162,7 @@ async def run(a: Account, b: Account, keep: bool):
                 if created[key]:
                     await acct.call("delete_share", {"share_id": created[key]})
             if created["gid"]:
-                await a.call("delete_group", {"group_id": created["gid"]})
+                await a.call("leave_group", {"group_id": created["gid"], "delete": True})
             await b.call("delete_file", {"path": reply})
             inc = payload(await b.call("list_shares", {"direction": "incoming"}))["incoming"]
             check("B has no grants from A left", not any(e.get("sharing_fulcra_userid") == a.userid for e in inc), json.dumps(inc)[:300])
