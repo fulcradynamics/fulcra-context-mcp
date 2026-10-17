@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.12.3 / contacts UI v53 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.13.0 / contacts UI v54 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v53.html`, `ui://fulcra/contacts/threads/v53.html` and
-`ui://fulcra/contacts/thread/v53.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v54.html`, `ui://fulcra/contacts/threads/v54.html` and
+`ui://fulcra/contacts/thread/v54.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -120,8 +120,18 @@ Preparation persists/reuses that code in a private **Fulcra Agent Invitations**
 Event configuration description. The accepting agent shares its channel with the
 inviter and posts its **first record** as a message with exact topic `handshake <code>`.
 
+The invite chat flow offers a single-person invitation or an open invitation for a
+group. Open preparation passes `open_invitation=true`, returns `open_invitation <code>`,
+and keeps the channel as an unshared template. Each authenticated responding owner
+gets a separate one-to-one outbox with the template schema and display-only label
+`<sender> via <open invitation identifier>`. The reusable template is never shared.
+Both prefix and code must match persisted invitation metadata; no prefix substitution.
+
 `match_agent_invitations()` is model/app callable and also runs during visible UI
-refresh. For outstanding invitations it reads full channel history, current direct
+load/refresh under persisted-invitation authorization, without model turns or arbitrary
+shares. Ordinary discovery/message polls remain read-only. Changed matcher results
+request fresh discovery; only actual reciprocal grants establish a connection.
+For outstanding single-person invitations it reads full channel history, current direct
 incoming grants and schema. Matching requires one uniquely earliest first-message
 candidate across owner/channel pairs; tied first records and duplicate first-message
 candidates fail closed. Later replies/acks may inherit the same topic. Only the

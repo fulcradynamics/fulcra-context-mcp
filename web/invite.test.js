@@ -20,6 +20,9 @@ test('click sends only a user message requesting the invitation action', async (
   assert.equal(calls.length, 1);
   assert.equal(calls[0].role, 'user');
   assert.match(calls[0].content[0].text, /use the invite skill/);
+  assert.match(calls[0].content[0].text, /open invitation.*group/);
+  assert.match(calls[0].content[0].text, /open_invitation=true/);
+  assert.match(calls[0].content[0].text, /template.*never shared/);
   assert.match(calls[0].content[0].text, /invite another user/);
   assert.match(calls[0].content[0].text, /prepare_agent_invitation\(data_type\)/);
   assert.match(calls[0].content[0].text, /copyable invitation prompt/);
