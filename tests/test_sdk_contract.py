@@ -18,13 +18,6 @@ ANN_UUID = "6a0d0d5e-2b7a-4f5c-9c0e-3a3f1b2c4d5e"
 FILE_RECORD = {"id": "v1", "name": "a.txt", "path": "/", "size": 5}
 
 
-async def test_annotations_catalog(call, fake_fulcra):
-    fake_fulcra.annotations_catalog.return_value = [{"id": ANN_UUID, "name": "mood"}]
-    text = await call("annotations_catalog")
-    fake_fulcra.annotations_catalog.assert_called_once_with()
-    assert "mood" in text
-
-
 async def test_create_data_type(call, fake_fulcra):
     fake_fulcra.create_annotation.return_value = {"id": ANN_UUID, "name": "weight"}
     text = await call(
@@ -218,15 +211,30 @@ async def test_get_sleep_levels(call, fake_fulcra, level, method):
     assert json.loads(text[text.index("[") :]) == [{"minutes": 420}]
 
 
-async def test_get_location_time_series(call, fake_fulcra):
+async def test_get_location_over_a_range(call, fake_fulcra):
     fake_fulcra.location_time_series.return_value = [{"lat": 1.0, "lon": 2.0}]
-    text = await call(
-        "get_location_time_series", {"start_time": START, "end_time": END}
-    )
+    text = await call("get_location", {"start_time": START, "end_time": END})
     kwargs = fake_fulcra.location_time_series.call_args.kwargs
     assert kwargs["look_back"] == 14400
     assert kwargs["sample_rate"] == 900
+    assert kwargs["reverse_geocode"] is False
+    assert kwargs["fulcra_userid"] is None
+    assert text.startswith("Location time series from ")
     assert '"lat": 1.0' in text
+    fake_fulcra.location_at_time.assert_not_called()
+
+
+async def test_get_location_at_a_moment(call, fake_fulcra):
+    fake_fulcra.location_at_time.return_value = [{"latitude_degrees": 1.0}]
+    text = await call("get_location", {"time": START})
+    kwargs = fake_fulcra.location_at_time.call_args.kwargs
+    assert kwargs["window_size"] == 14400
+    assert kwargs["include_after"] is True
+    assert kwargs["reverse_geocode"] is True
+    assert kwargs["fulcra_userid"] is None
+    assert text.startswith("Location info at ")
+    assert '"latitude_degrees": 1.0' in text
+    fake_fulcra.location_time_series.assert_not_called()
 
 
 CALENDARS = [
@@ -234,11 +242,15 @@ CALENDARS = [
 ]
 
 
-async def test_get_calendars(call, fake_fulcra):
+async def test_get_calendar_events_without_a_range_lists_calendars(call, fake_fulcra):
     fake_fulcra.calendars.return_value = CALENDARS
-    text = await call("get_calendars")
+    text = await call("get_calendar_events")
     fake_fulcra.calendars.assert_called_once_with(fulcra_userid=None)
-    assert "iCloud" in text and "Work" in text
+    fake_fulcra.calendar_events.assert_not_called()
+    assert text.startswith("Calendars by source: ")
+    assert json.loads(text.removeprefix("Calendars by source: ")) == {
+        "iCloud": [{"id": "c1", "name": "Work"}]
+    }
 
 
 async def test_get_calendar_events_by_calendar_name(call, fake_fulcra):
