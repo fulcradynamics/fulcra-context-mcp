@@ -223,15 +223,26 @@ async def test_list_shares_survives_missing_own_id(call, fake_fulcra):
 
 
 async def test_delete_share_unknown_id(call, fake_fulcra):
-    fake_fulcra.delete_datashare.side_effect = http_error(403)
+    fake_fulcra.get_datashares.return_value = [{"datashare_id": "s1"}]
+    fake_fulcra.get_shared_datasets.return_value = []
     text = await call("delete_share", {"share_id": "nope"})
-    assert "No share" in text
+    assert text.startswith("No share found with ID 'nope'")
+    fake_fulcra.delete_datashare.assert_not_called()
 
 
-async def test_delete_share_calls_through(call, fake_fulcra):
+async def test_delete_share_already_gone(call, fake_fulcra):
+    fake_fulcra.get_datashares.return_value = [{"datashare_id": "s1"}]
+    fake_fulcra.delete_datashare.side_effect = http_error(404)
     text = await call("delete_share", {"share_id": "s1"})
-    fake_fulcra.delete_datashare.assert_called_once_with("s1")
-    assert "Deleted share s1" in text
+    assert "already gone" in text
+
+
+async def test_delete_share_deletes_this_users_own_share(call, fake_fulcra):
+    fake_fulcra.get_datashares.return_value = [{"datashare_id": "S1"}]
+    text = await call("delete_share", {"share_id": "s1"})
+    fake_fulcra.delete_datashare.assert_called_once_with("S1")
+    fake_fulcra.delete_dataset_permission.assert_not_called()
+    assert "Deleted share S1" in text
 
 
 # --- reading another user's shared data -----------------------------------

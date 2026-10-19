@@ -1,10 +1,11 @@
-"""Tools an agent needs to run a private channel with another user's agent:
-record ids from record_data, delete_records, leave_share, and
-telling an ended share apart from a wrong data type ID."""
+"""Tools an agent needs to run a private channel with another user's agent
+record ids from record_data, delete_records, delete_share on an
+incoming share, and telling an ended share apart from a wrong data type ID."""
 
 from uuid import UUID
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from conftest import FAKE_USER_ID, http_error
 
@@ -181,7 +182,7 @@ async def test_delete_records_unknown_type(call, fake_fulcra):
     assert text.startswith(f"No data type found with ID {CHANNEL!r}")
 
 
-# --- leave_share --------------------------------------------------------------
+# --- delete_share on an incoming share ----------------------------------------
 
 GRANT = "c0ffee00-0000-4000-8000-000000000001"
 
@@ -201,35 +202,51 @@ def _incoming(fake_fulcra, grant_type="user", **extra):
     ]
 
 
-async def test_leave_share_removes_a_direct_share(call, fake_fulcra):
+async def test_delete_share_gives_up_a_direct_incoming_share(call, fake_fulcra):
     _incoming(fake_fulcra)
+    fake_fulcra.get_datashares.return_value = []
 
-    text = await call("leave_share", {"grant_id": GRANT.upper()})
+    text = await call("delete_share", {"share_id": GRANT.upper()})
 
     fake_fulcra.delete_dataset_permission.assert_called_once_with(GRANT)
+    fake_fulcra.delete_datashare.assert_not_called()
     assert "from Bob" in text and "no longer has access" in text
 
 
-async def test_leave_share_refuses_a_group_share(call, fake_fulcra):
-    _incoming(fake_fulcra, grant_type="group", group_id="g-1")
+async def test_delete_share_accepts_the_other_users_datashare_id(call, fake_fulcra):
+    _incoming(fake_fulcra, datashare_id="d-bob-1")
+    fake_fulcra.get_datashares.return_value = []
 
-    text = await call("leave_share", {"grant_id": GRANT})
+    await call("delete_share", {"share_id": "d-bob-1"})
+
+    fake_fulcra.delete_dataset_permission.assert_called_once_with(GRANT)
+
+
+async def test_delete_share_refuses_an_incoming_group_share(call, fake_fulcra):
+    _incoming(fake_fulcra, grant_type="group", group_id="g-1")
+    fake_fulcra.get_datashares.return_value = []
+
+    text = await call("delete_share", {"share_id": GRANT})
 
     assert "group g-1" in text and "leave_group" in text
     fake_fulcra.delete_dataset_permission.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    "grant_id,expected",
-    [("not-a-grant", "grant_id must be a UUID"), (ID_A, "No incoming share with grant_id")],
-)
-async def test_leave_share_refuses_unknown_grants(call, fake_fulcra, grant_id, expected):
+@pytest.mark.parametrize("share_id", ["not-a-share", ID_A])
+async def test_delete_share_refuses_unknown_ids(call, fake_fulcra, share_id):
     _incoming(fake_fulcra)
+    fake_fulcra.get_datashares.return_value = []
 
-    text = await call("leave_share", {"grant_id": grant_id})
+    text = await call("delete_share", {"share_id": share_id})
 
-    assert text.startswith(expected)
+    assert text.startswith("No share found with ID")
     fake_fulcra.delete_dataset_permission.assert_not_called()
+    fake_fulcra.delete_datashare.assert_not_called()
+
+
+async def test_leave_share_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("leave_share", {"grant_id": GRANT})
 
 
 # --- an ended share reads differently from a wrong ID ------------------------

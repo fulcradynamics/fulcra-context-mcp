@@ -19,12 +19,14 @@ from fulcra_api import connections, data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
+from .compact_tools import CompactTools
 from .credentials import get_fulcra_object
 from .contact_identifier import normalize_catalog_description, parse_contact_identifier, validate_identifier, write_contact_identifier
 from .connection_compatibility import LEGACY_OUTBOX_PATTERN, CHANNEL_PREFIXES
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
+tools_mcp.add_transform(CompactTools())
 logger = structlog.getLogger(__name__)
 
 
@@ -144,19 +146,6 @@ async def get_workouts(
     return f"Workouts during {start_time} and {end_time}: " + json.dumps(workouts)
 
 
-@tools_mcp.tool(annotations={"title": "List Annotation Data Types", "readOnlyHint": True})
-@_friendly_http_errors
-async def annotations_catalog() -> str:
-    """Deprecated: use get_data_catalog(category="user_defined") instead.
-
-    That lists every user-defined type, including Event/Metric ones, with the
-    IDs get_records takes; this lists only older annotation types, by bare UUID.
-    """
-    fulcra = get_fulcra_object()
-    catalog = fulcra.annotations_catalog()
-    return "Defined annotations: " + json.dumps(catalog)
-
-
 ANNOTATION_ID_BY_TYPE = {t.value: f"{t.name}Annotation" for t in AnnotationType}
 
 NO_TOOL_GROUP = "data types not yet readable through this server"
@@ -164,7 +153,7 @@ NO_TOOL_GROUP = "data types not yet readable through this server"
 # v0 event types with a dedicated tool of their own
 V0_TYPE_TOOLS = {
     "apple_workouts": "get_workouts",
-    "calendars": "get_calendars",
+    "calendars": "get_calendar_events",
     "calendar_events": "get_calendar_events",
 }
 
@@ -996,7 +985,7 @@ def _compatible_tools(entry: dict) -> str:
         if entry.get("class") == "metric":
             return "data types usable with: get_time_series | get_records"
         if entry.get("class") == "location":
-            return "data types usable with: get_location_at_time | get_location_time_series"
+            return "data types usable with: get_location"
         if entry.get("id") in V0_TYPE_TOOLS:
             return f"data types usable with: {V0_TYPE_TOOLS[entry['id']]}"
     # Annotations (built-in and user-defined) and v1 types, user-defined included
@@ -1049,6 +1038,71 @@ def _schema_type(prop: dict) -> str:
 
 def _is_user_defined_v1(entry: dict) -> bool:
     return entry.get("api_version") == "v1" and "/" in entry.get("id", "")
+
+
+def _is_user_annotation(entry: dict) -> bool:
+    base_type, _, annotation_uuid = entry.get("id", "").partition("/")
+    return (
+        entry.get("api_version") == "v1alpha1"
+        and base_type.endswith("Annotation")
+        and bool(annotation_uuid)
+    )
+
+
+def _annotation_details(definition: dict) -> dict:
+    """What one annotation adds to its base type's catalog entry: its scale and
+    the label for each value, how its values aggregate (kind), its unit and what
+    it measures, its defaults and default tags, how the app displays each scale
+    value, and when it was created and last changed. The catalog entry itself
+    only carries the base type's record spec."""
+    details: dict = {}
+    measurement = definition.get("measurement_spec") or {}
+    kind = measurement.get("measurement_type")
+    values = measurement.get(kind) if kind else None
+    values = values if isinstance(values, dict) else {}
+    if kind == "scale" and {"min_allowed", "max_allowed"} <= values.keys():
+        details["scale"] = {
+            "min": values["min_allowed"],
+            "max": values["max_allowed"],
+            "step": 1,
+        }
+    spec = definition.get("spec") or {}
+    labels = ((spec.get("scale") or {}).get("label_mapping") or {}).get("string") or {}
+    if labels.get("mapping"):
+        details["value_map"] = labels["mapping"]
+    if kind not in (None, "scale", "boolean", "duration"):
+        details["measures"] = kind
+    if measurement.get("unit"):
+        details["unit"] = measurement["unit"]
+    if values.get("value") is not None:
+        details["default_value"] = values["value"]
+    if spec.get("default_note"):
+        details["default_note"] = spec["default_note"]
+    if measurement.get("metric_kind"):
+        details["kind"] = measurement["metric_kind"]
+    if definition.get("tags"):
+        details["tags"] = definition["tags"]
+    if display := _scale_display(spec):
+        details["display"] = display
+    for key in ("created_at", "updated_at"):
+        if definition.get(key):
+            details[key] = definition[key]
+    return details
+
+
+def _scale_display(spec: dict) -> dict:
+    """How the app shows each scale value: a color, and an emoji for emoji
+    scales, keyed by value. Empty for annotations without a scale display."""
+    mapping = (spec.get("scale") or {}).get("scale_mapping") or {}
+    display = {}
+    colors = (mapping.get("color") or {}).get("mapping")
+    if colors:
+        display["colors"] = colors
+    if mapping.get("mapping_type") == "emoji":
+        emoji = (mapping.get("string") or {}).get("mapping")
+        if emoji:
+            display["emoji"] = emoji
+    return display
 
 
 # Schema keywords that say nothing about what a valid value is
@@ -1109,6 +1163,8 @@ async def get_data_catalog(
             For a user-defined type, this also lists its fields (what
             record_data takes in `fields`): a type name, or the field's JSON
             Schema if it has nested fields or rules; plus required_fields.
+            For an annotation, it adds the annotation's own settings: scale and
+            value labels (value_map), kind, unit, defaults, tags and display.
         category: Optional. Filter by category.
             E.g. "healthkit", "annotations", "sleep", "mindfulness",
             "user_defined", "base_type".
@@ -1160,6 +1216,24 @@ async def get_data_catalog(
                     slim["fields"] = fields
                 if required:
                     slim["required_fields"] = required
+        # Likewise an annotation's own scale, labels and unit come from its
+        # definition, looked up in its owner's account.
+        elif data_type and len(catalog) == 1 and _is_user_annotation(entry):
+            annotation_uuid = entry["id"].partition("/")[2]
+            owner_id = entry.get("fulcra_userid")
+            try:
+                definition = json.loads(
+                    fulcra.fulcra_api(
+                        f"/user/v1alpha1/annotation/{annotation_uuid}",
+                        query={"fulcra_userid": owner_id} if owner_id else None,
+                    )
+                )
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "annotation_definition_unavailable", data_type=entry["id"], status=e.code
+                )
+            else:
+                slim.update(_annotation_details(definition))
         grouped.setdefault(_compatible_tools(entry), []).append(slim)
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
@@ -1422,140 +1496,115 @@ async def get_sleep(
     start_time: AwareDatetime,
     end_time: AwareDatetime,
     level: Literal["aggregate", "cycles", "stages"] = "cycles",
-    cycle_gap: str | None = None,
     stages: list[int] | None = None,
-    gap_stages: list[int] | None = None,
-    clip_to_range: bool | None = True,
-    merge_overlapping: bool | None = None,
-    merge_contiguous: bool | None = None,
-    mode: Literal["start", "end", "split"] | None = None,
     period: str | None = None,
-    agg_functions: list[str] | None = None,
     time_zone: str | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
-    """Return the user's sleep data at a chosen level of detail.
-
-    Pick the coarsest level that answers the question — results grow with detail:
-    - "aggregate": stage totals per period (default 1 day), one row per period
-      per stage. Best for multi-day questions ("how did I sleep this month").
+    """Return the user's sleep at a chosen level of detail; pick the coarsest
+    that answers the question:
+    - "aggregate": stage totals per period, for multi-day questions.
     - "cycles": one row per sleep session.
-    - "stages": every stage interval (the full hypnogram); single-night detail.
+    - "stages": every stage interval; single-night detail.
 
-    Sleep spans midnight (starts day N, ends day N+1) — extend the time range
-    accordingly. Stage integers: 0=In Bed, 1=Asleep/Unknown, 2=Awake, 3=Light,
-    4=Deep, 5=REM. Result timestamps include time zones; translate them to the
-    user's local time zone when known.
+    Sleep crosses midnight, so extend the range to cover it. Stages: 0=In Bed,
+    1=Asleep/Unknown, 2=Awake, 3=Light, 4=Deep, 5=REM.
 
     Args:
-        start_time: Range start (inclusive). Must include tz (ISO8601).
-        end_time: Range end (exclusive). Must include tz (ISO8601).
+        start_time: Range start (inclusive).
+        end_time: Range end (exclusive).
         level: Level of detail (see above).
-        cycle_gap: Minimum interval separating distinct cycles (e.g. "PT2H").
-        stages: Stage integers to include (default: all).
-        gap_stages: Stage integers treated as gaps between cycles.
-        clip_to_range: Clip results to the requested range (default True).
-        merge_overlapping: "stages" level only. Merge overlapping stages (default True).
-        merge_contiguous: "stages" level only. Merge adjacent same-stage samples (default True).
-        mode: "aggregate" only. Assign by "start", "end" or "split" (default "end").
-        period: "aggregate" level only. Period length, e.g. "1d", "1w" (default "1d").
-        agg_functions: "aggregate" level only. E.g. "sum", "mean" (default ["sum"]).
-        time_zone: "aggregate" only. IANA tz for period bounds; use the user's local one.
+        stages: Only these stages (default: all).
+        period: "aggregate" only: period length, e.g. "1d" (default) or "1w".
+        time_zone: "aggregate" only: IANA zone for period bounds (default: the
+            user's own).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared).
     """
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
-    kwargs = {}
-    if cycle_gap is not None:
-        kwargs["cycle_gap"] = cycle_gap
+    kwargs: dict[str, Any] = {"fulcra_userid": fulcra_userid}
     if stages is not None:
         kwargs["stages"] = stages
-    if gap_stages is not None:
-        kwargs["gap_stages"] = gap_stages
-    if clip_to_range is not None:
-        kwargs["clip_to_range"] = clip_to_range
-
     if level == "stages":
-        if merge_overlapping is not None:
-            kwargs["merge_overlapping"] = merge_overlapping
-        if merge_contiguous is not None:
-            kwargs["merge_contiguous"] = merge_contiguous
         query_func = fulcra.sleep_stages_rows
     elif level == "aggregate":
-        if mode is not None:
-            kwargs["mode"] = mode
         if period is not None:
             kwargs["period"] = period
-        if agg_functions is not None:
-            kwargs["agg_functions"] = agg_functions
-        if time_zone is not None:
-            kwargs["tz"] = time_zone
+        kwargs["tz"] = time_zone or _own_time_zone(fulcra)
         query_func = fulcra.sleep_agg_rows
     else:
         query_func = fulcra.sleep_cycles_rows
 
-    rows = query_func(
-        start_time=start_time,
-        end_time=end_time,
-        **kwargs,
-    )
+    rows = query_func(start_time=start_time, end_time=end_time, **kwargs)
     return f"Sleep {level} from {start_time} to {end_time}: " + json.dumps(rows, default=str)
 
 
-@tools_mcp.tool(annotations={"title": "Get Location at Time", "readOnlyHint": True})
+def _own_time_zone(fulcra) -> str:
+    """The time zone in the user's Fulcra preferences, so daily totals follow
+    their days rather than UTC's; UTC if none is set or it can't be read."""
+    try:
+        preferences = fulcra.get_user_info().get("preferences") or {}
+    except Exception:
+        logger.warning("user_time_zone_unavailable", exc_info=True)
+        return "UTC"
+    return preferences.get("timezone") or "UTC"
+
+
+@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True})
 @_friendly_http_errors
-async def get_location_at_time(
-    time: AwareDatetime,
+async def get_location(
+    time: AwareDatetime | None = None,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
+    sample_rate: int = 900,
+    change_meters: float | None = None,
     window_size: int = 14400,
     include_after: bool = True,
-    reverse_geocode: bool = True,
+    reverse_geocode: bool | None = None,
+    fulcra_userid: str | None = None,
 ) -> str:
-    """Gets the user's location at the given time.
+    """Get where the user was: at one moment (`time`), or over a range
+    (`start_time` and `end_time`) as one location per sample_rate seconds.
 
-    If no sample is available for the exact time, searches for the closest one up to
-    window_size seconds away.
-
-    Result timestamps will include time zones. Always translate timestamps to the user's local
-    time zone when this is known.
+    Result timestamps include time zones. Always translate them to the user's
+    local time zone when this is known.
 
     Args:
-        time: The point in time to locate the user at. Must include tz (ISO8601).
-        window_size: Seconds around `time` to search for samples (default 14400).
-        include_after: Allow the closest sample to be after `time` (default true).
-        reverse_geocode: Include the address of the location (default true).
-    Returns:
-        A JSON string representing the location data.
-    """
-    fulcra = get_fulcra_object()
-    location_data = fulcra.location_at_time(
-        time=time,
-        window_size=window_size,
-        include_after=include_after,
-        reverse_geocode=reverse_geocode,
-    )
-    return f"Location info at {time}: " + json.dumps(location_data)
-
-
-@tools_mcp.tool(annotations={"title": "Get Location Time Series", "readOnlyHint": True})
-@_friendly_http_errors
-async def get_location_time_series(
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
-    change_meters: float | None = None,
-    sample_rate: int | None = 900,
-    reverse_geocode: bool | None = False,
-) -> str:
-    """Retrieve a time series of locations that the user was at.
-    Result timestamps will include time zones. Always translate timestamps to the user's local tz when this is known.
-
-    Args:
+        time: The moment to locate the user at. Must include tz (ISO8601).
+            Without a sample at that exact time, the closest one within
+            window_size seconds before or after is used.
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        change_meters: Drop samples fewer than this many meters from the previous one.
-        sample_rate: Seconds per sample (default 900).
-        reverse_geocode: Include the address of each location (default false).
-    Returns:
-        A JSON string representing a list of location data points.
+        sample_rate: Range only: seconds per sample (default 900).
+        change_meters: Range only: drop samples fewer than this many meters
+            from the previous one.
+        window_size: Moment only: seconds around `time` to search for a sample
+            (default 14400).
+        include_after: Moment only: allow the closest sample to be after `time`
+            (default true); false finds where the user last was at or before it.
+        reverse_geocode: Include the address (default: true for a moment,
+            false for a range).
+        fulcra_userid: Retrieve data for another Fulcra user (if shared).
     """
+    has_range = start_time is not None or end_time is not None
+    if (time is None) == (not has_range) or (
+        has_range and (start_time is None or end_time is None)
+    ):
+        return "Pass either time, for one moment, or both start_time and end_time, for a range."
+    if time is None and not include_after:
+        return "include_after applies only to one moment; pass time instead of a range."
+    fulcra = get_fulcra_object()
+    if time is not None:
+        location_data = fulcra.location_at_time(
+            time=time,
+            window_size=window_size,
+            include_after=include_after,
+            reverse_geocode=True if reverse_geocode is None else reverse_geocode,
+            fulcra_userid=fulcra_userid,
+        )
+        return f"Location info at {time}: " + json.dumps(location_data)
+
     if (err := _range_error(start_time, end_time)) is not None:
         return err
     if sample_rate:
@@ -1566,20 +1615,14 @@ async def get_location_time_series(
                 f"samples; the limit is {MAX_SERIES_SAMPLES}. Increase "
                 "sample_rate (seconds per sample) or narrow the time range."
             )
-    fulcra = get_fulcra_object()
-    kwargs = {}
-    if change_meters is not None:
-        kwargs["change_meters"] = change_meters
-    if sample_rate is not None:
-        kwargs["sample_rate"] = sample_rate
-    kwargs["look_back"] = 14400
-    if reverse_geocode is not None:
-        kwargs["reverse_geocode"] = reverse_geocode
-
     location_series = fulcra.location_time_series(
         start_time=start_time,
         end_time=end_time,
-        **kwargs,
+        change_meters=change_meters,
+        sample_rate=sample_rate,
+        look_back=14400,
+        reverse_geocode=bool(reverse_geocode),
+        fulcra_userid=fulcra_userid,
     )
     return f"Location time series from {start_time} to {end_time}: " + json.dumps(
         location_series
@@ -1655,52 +1698,45 @@ def _slim_event(
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Get Calendars", "readOnlyHint": True})
-@_friendly_http_errors
-async def get_calendars(fulcra_userid: str | None = None) -> str:
-    """List the user's calendars, grouped by account/source.
-
-    Use the names or IDs with get_calendar_events to filter by calendar.
-
-    Args:
-        fulcra_userid: List calendars of another Fulcra user (if shared)
-    """
-    fulcra = get_fulcra_object()
-    grouped: dict[str, list[dict]] = {}
-    for cal in fulcra.calendars(fulcra_userid=fulcra_userid):
-        source = cal.get("calendar_source_name") or "unknown source"
-        grouped.setdefault(source, []).append(_slim_calendar(cal))
-    return "Calendars by source: " + json.dumps(grouped)
-
-
 @tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_calendar_events(
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
     calendars: list[str] | None = None,
     include_participants: bool = False,
     fulcra_userid: str | None = None,
 ) -> str:
-    """Retrieve the user's calendar events within a time range.
-    This will return events that occur (at least partially)
-    during the range.
+    """Get the user's calendar events in a time range, or, without a range,
+    list their calendars grouped by account/source.
 
-    Each event carries a participant_count; pass include_participants=true
-    when you need who was invited and their responses. Result timestamps
-    include time zones; translate them to the user's local time zone when
-    known.
+    Each carries a participant_count; pass include_participants=true when you need
+    who was invited and their responses. 
 
     Args:
         start_time: Range start (inclusive). Must include tz (ISO8601).
         end_time: Range end (exclusive). Must include tz (ISO8601).
-        calendars: Only these calendars (names or IDs); default is all.
-        include_participants: Include each event's participant list.
-        fulcra_userid: Retrieve events of another Fulcra user (if shared)
+        calendars: Events only: just these calendars (names or IDs); default is all.
+        include_participants: Events only: include each event's participant list.
+        fulcra_userid: Retrieve calendars or events of another Fulcra user (if shared)
     """
+    if (start_time is None) != (end_time is None):
+        return "Pass both start_time and end_time for events, or neither to list calendars."
+    fulcra = get_fulcra_object()
+    if start_time is None:
+        if calendars or include_participants:
+            return (
+                "calendars and include_participants apply only to events; pass "
+                "start_time and end_time too."
+            )
+        grouped: dict[str, list[dict]] = {}
+        for cal in fulcra.calendars(fulcra_userid=fulcra_userid):
+            source = cal.get("calendar_source_name") or "unknown source"
+            grouped.setdefault(source, []).append(_slim_calendar(cal))
+        return "Calendars by source: " + json.dumps(grouped)
+
     if (err := _range_error(start_time, end_time)) is not None:
         return err
-    fulcra = get_fulcra_object()
     all_calendars = fulcra.calendars(fulcra_userid=fulcra_userid)
     calendar_names = {c["calendar_id"]: c.get("calendar_name") for c in all_calendars}
 
@@ -1714,7 +1750,8 @@ async def get_calendar_events(
                 if cid == wanted or (cname or "").lower() == wanted.lower()
             ]
             if not matches:
-                return f"No calendar named {wanted!r}. Use get_calendars to list available calendars."
+                available = ", ".join(sorted({n for n in calendar_names.values() if n}))
+                return f"No calendar named {wanted!r}. Calendars: {available or 'none'}."
             calendar_ids += matches
 
     events = fulcra.calendar_events(
@@ -2027,11 +2064,20 @@ async def write_file(
                 "the file's bytes base64-encoded."
             )
         if len(data) > MAX_WRITE_BASE64_BYTES:
+            if settings.fulcra_environment == "stdio":
+                larger = (
+                    "Use the Fulcra CLI (`uvx fulcra-api file upload <file> "
+                    f"{path}`)"
+                )
+            else:
+                larger = (
+                    'Send a file on disk with encoding="upload_link" (up to '
+                    f"{MAX_LINK_UPLOAD_BYTES // 1024**2} MB)"
+                )
             return (
                 f"That's {len(data)} bytes; write_file takes at most "
-                f"{MAX_WRITE_BASE64_BYTES} in base64. Use start_file_upload and "
-                "upload_file_chunk, or open_file_manager so the user can upload "
-                "it directly."
+                f"{MAX_WRITE_BASE64_BYTES} in base64. {larger}, or use "
+                "open_file_manager so the user can upload it directly."
             )
         content_type = content_type or guess_content_type(path)
     else:
@@ -2317,7 +2363,8 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
         direction: Which shares to list: "outgoing", "incoming", or "both".
     Returns:
         A JSON string with "own_fulcra_userid", "outgoing" (entries carry a
-        "datashare_id" for `delete_share`) and/or "incoming".
+        "datashare_id") and/or "incoming" (entries carry a "grant_id"); either
+        ID ends that share with `delete_share`.
     """
     fulcra = get_fulcra_object()
     result: dict = {}
@@ -2338,57 +2385,60 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
 @tools_mcp.tool(annotations={"title": "Delete Share", "destructiveHint": True})
 @_friendly_http_errors
 async def delete_share(share_id: str) -> str:
-    """Stop sharing: delete a share this user created, revoking all recipients' access.
+    """End a share: delete one this user made, revoking every recipient's access,
+    or give up one another user shares with this user (they can share again).
+
+    A share that reaches this user through a group can't be given up on its
+    own; leave the group instead (leave_group).
 
     Args:
-        share_id: The "datashare_id" from `list_shares(direction="outgoing")`.
+        share_id: From list_shares: an outgoing share's "datashare_id", or an
+            incoming share's "grant_id".
     """
+    wanted = share_id.strip().lower()
     fulcra = get_fulcra_object()
-    try:
-        fulcra.delete_datashare(share_id)
-    except urllib.error.HTTPError as e:
-        if e.code in (403, 404):
-            return f"No share of this user found with ID {share_id!r}. Use list_shares to find share IDs."
-        raise
-    return f"Deleted share {share_id}; its recipients no longer have access."
-
-
-@tools_mcp.tool(annotations={"title": "Leave Share", "destructiveHint": True})
-@_friendly_http_errors
-async def leave_share(grant_id: str) -> str:
-    """Give up access to something another user shares with this user, to
-    decline it or to stop receiving it.
-
-    Takes the "grant_id" of an incoming entry from
-    list_shares(direction="incoming"). Works for shares addressed to this user
-    directly; one that arrives through a group can't be left on its own, so
-    leave the group instead (leave_group). The other user can share again later.
-
-    Args:
-        grant_id: The "grant_id" of an incoming share, from list_shares.
-    """
-    try:
-        grant_id = str(UUID(grant_id)).lower()
-    except ValueError:
-        return f"grant_id must be a UUID, got {grant_id!r}. list_shares(direction=\"incoming\") lists them."
-    fulcra = get_fulcra_object()
-    grant = next(
-        (g for g in fulcra.get_shared_datasets() if str(g.get("grant_id") or "").lower() == grant_id),
+    mine = next(
+        (
+            s
+            for s in fulcra.get_datashares()
+            if str(s.get("datashare_id") or "").lower() == wanted
+        ),
         None,
     )
+    if mine is not None:
+        try:
+            fulcra.delete_datashare(mine["datashare_id"])
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 404):
+                return f"Share {share_id!r} is already gone. list_shares lists the current ones."
+            raise
+        return f"Deleted share {mine['datashare_id']}; its recipients no longer have access."
+
+    incoming = [g for g in fulcra.get_shared_datasets() if g.get("grant_type") != "self"]
+    grant = next(
+        (g for g in incoming if str(g.get("grant_id") or "").lower() == wanted), None
+    )
     if grant is None:
-        return f"No incoming share with grant_id {grant_id!r}. list_shares(direction=\"incoming\") lists them."
+        # The other user's datashare_id rather than this user's grant on it
+        theirs = [g for g in incoming if str(g.get("datashare_id") or "").lower() == wanted]
+        if len(theirs) == 1 and theirs[0].get("grant_id"):
+            grant = theirs[0]
+    if grant is None:
+        return (
+            f"No share found with ID {share_id!r}. list_shares gives a \"datashare_id\" "
+            "for each share this user made and a \"grant_id\" for each one shared with them."
+        )
     if grant.get("grant_type") == "group":
         return (
             f"That share reaches this user through group {grant.get('group_id')}, so it "
-            "can't be left on its own. Leaving the group (leave_group) gives up access."
+            "can't be given up on its own. Leaving the group (leave_group) gives up access."
         )
     if grant.get("grant_type") != "user":
-        return f"Grant {grant_id!r} isn't a share from another user, so there's nothing to leave."
-    fulcra.delete_dataset_permission(grant_id)
+        return f"{share_id!r} isn't a share from another user, so there's nothing to give up."
+    fulcra.delete_dataset_permission(grant["grant_id"])
     who = grant.get("sharing_fulcra_user_name") or grant.get("sharing_fulcra_userid")
     return (
-        f"Left the share {grant.get('datashare_name')!r} from {who}; this user no longer "
+        f"Gave up the share {grant.get('datashare_name')!r} from {who}; this user no longer "
         "has access to it. They can share with this user again later."
     )
 
@@ -2485,18 +2535,34 @@ async def join_group(group_id: str) -> str:
     return f"Joined group {group_id}: " + json.dumps(membership)
 
 
-@tools_mcp.tool(annotations={"title": "Leave Group", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "destructiveHint": True})
 @_friendly_http_errors
-async def leave_group(group_id: str) -> str:
+async def leave_group(group_id: str, delete: bool = False) -> str:
     """Leave a Fulcra group on the user's behalf, at their explicit request.
 
     The user stops sharing the group's data types with its owner and stops
-    receiving shares made to the group.
+    receiving shares made to the group. With delete=true, instead permanently
+    delete a group the user owns, removing every member; only when the user
+    asks to delete it.
 
     Args:
-        group_id: The group to leave, from `get_groups(subscribed_only=true)`.
+        group_id: The group, from `get_groups`.
+        delete: Delete the group for everyone (owner only) instead of leaving it.
     """
     fulcra = get_fulcra_object()
+    if delete:
+        try:
+            fulcra.delete_group(group_id)
+        except urllib.error.HTTPError as e:
+            if msg := _group_http_error(e, group_id):
+                return msg
+            if e.code == 403:
+                return (
+                    f"Only the group's owner can delete it; this user does not own "
+                    f"{group_id}. Without delete, leave_group leaves it instead."
+                )
+            raise
+        return f"Deleted group {group_id}; its members no longer belong to it."
     try:
         # The server also returns success when the user was not a member.
         fulcra.leave_group(group_id)
@@ -2569,26 +2635,6 @@ async def create_group(
     return "Created group: " + json.dumps(_slim_group(group))
 
 
-@tools_mcp.tool(annotations={"title": "Delete Group", "destructiveHint": True})
-@_friendly_http_errors
-async def delete_group(group_id: str) -> str:
-    """Permanently delete a group the user owns, removing all its members.
-
-    Args:
-        group_id: The group to delete, from `get_groups`.
-    """
-    fulcra = get_fulcra_object()
-    try:
-        fulcra.delete_group(group_id)
-    except urllib.error.HTTPError as e:
-        if msg := _group_http_error(e, group_id):
-            return msg
-        if e.code == 403:
-            return f"Only the group's owner can delete it; this user does not own {group_id}."
-        raise
-    return f"Deleted group {group_id}; its members no longer belong to it."
-
-
 async def debug_token_info() -> str:
     """Return info about the local session's Fulcra credentials.
 
@@ -2632,6 +2678,9 @@ if settings.fulcra_environment == "stdio":
     )
 
 
+USER_INFO_HIDDEN_FIELDS = ("status", "tier", "service_status", "intercom_token")
+
+
 @tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
 @_friendly_http_errors
 async def get_user_info() -> str:
@@ -2641,7 +2690,7 @@ async def get_user_info() -> str:
     """
     fulcra = get_fulcra_object()
     user_info = fulcra.get_user_info()
-    user_info.pop("intercom_token", None)
+    user_info = {k: v for k, v in user_info.items() if k not in USER_INFO_HIDDEN_FIELDS}
     return "User information: " + json.dumps(user_info)
 
 

@@ -447,23 +447,26 @@ def _require_grant() -> str:
 @tools_mcp.tool(
     annotations={"title": "Start File Upload", "destructiveHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
+    # The panel calls this; the model never should (it would have to write out
+    # each 256 KiB chunk as base64), so the description stays a single line.
+    description="Starts an upload from the file manager panel.",
 )
 @_raising_http_errors
 async def start_file_upload(
     path: str, size: int, content_type: str | None = None
 ) -> dict:
-    """Start uploading a file of any type or size, in chunks. Used by the file
-    manager panel; agents can use it too. Then send the file's bytes, in order,
-    with upload_file_chunk. For small text files, write_file is simpler.
+    """Start uploading a file of any type or size, in chunks, for the file
+    manager panel, which then sends the bytes in order with upload_file_chunk.
+
+    An existing file at `path` gets a new version. Returns the upload_id, and
+    the chunk size to use: every chunk but the last must be a multiple of
+    256 KiB. The Args below are kept to a few words, since they end up in the
+    tool's input schema.
 
     Args:
-        path: The full path to write to, e.g. "/reports/q3.xlsx". An existing
-            file at that path gets a new version.
-        size: The file's size in bytes.
-        content_type: Its MIME type; guessed from the name when left out.
-    Returns:
-        The upload_id, and the chunk size to use: every chunk but the last must
-        be a multiple of 256 KiB.
+        path: Full path to write to.
+        size: File size in bytes.
+        content_type: MIME type; guessed if omitted.
     """
     grant_id = _require_grant()
     path = _file_path(path)
@@ -550,20 +553,24 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
 @tools_mcp.tool(
     annotations={"title": "Upload File Chunk", "destructiveHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
+    # The panel calls this; the model never should (it would have to write out
+    # each 256 KiB chunk as base64), so the description stays a single line.
+    description="Sends one chunk of an upload from the file manager panel.",
 )
 @_raising_http_errors
 async def upload_file_chunk(upload_id: str, offset: int, data: str) -> dict:
-    """Send the next chunk of an upload begun with start_file_upload. Used by
-    the file manager panel; agents can use it too.
+    """Send the next chunk of an upload begun with start_file_upload, for the
+    file manager panel.
+
+    Chunks go in order, and resending one that already arrived is harmless.
+    Every chunk but the last must be a multiple of 256 KiB, and at most 8 MiB.
+    Returns how many bytes have arrived, and the file once the last chunk is
+    in. The Args are kept short, as in start_file_upload.
 
     Args:
         upload_id: From start_file_upload.
-        offset: Where this chunk starts in the file, in bytes; chunks go in
-            order. Resending a chunk that already arrived is harmless.
-        data: The chunk, base64-encoded. Every chunk but the last must be a
-            multiple of 256 KiB, and at most 8 MiB.
-    Returns:
-        How many bytes have arrived, and the file once the last chunk is in.
+        offset: Chunk start, in bytes.
+        data: The chunk, base64.
     """
     grant_id = _require_grant()
     record = _load_record("uploads", upload_id)
