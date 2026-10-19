@@ -1,4 +1,4 @@
-"""Group tools: listing, joining, creating, and deleting groups of users."""
+"""Group tools: listing, joining, creating, leaving and deleting groups of users."""
 
 import pytest
 from conftest import http_error
@@ -135,17 +135,29 @@ async def test_create_group_rejects_naive_and_inverted_times(client, call, fake_
     fake_fulcra.create_group.assert_not_called()
 
 
-async def test_delete_group_calls_through_and_maps_errors(call, fake_fulcra):
-    text = await call("delete_group", {"group_id": GROUP})
+async def test_leave_group_with_delete_deletes_and_maps_errors(call, fake_fulcra):
+    args = {"group_id": GROUP, "delete": True}
+    text = await call("leave_group", args)
     fake_fulcra.delete_group.assert_called_once_with(GROUP)
+    fake_fulcra.leave_group.assert_not_called()
     assert "Deleted group" in text
     fake_fulcra.delete_group.side_effect = http_error(403)
-    assert "owner can delete" in await call("delete_group", {"group_id": GROUP})
+    assert "owner can delete" in await call("leave_group", args)
     fake_fulcra.delete_group.side_effect = http_error(401)
-    text = await call("delete_group", {"group_id": GROUP})
+    text = await call("leave_group", args)
     assert "re-authenticate" in text and "owner" not in text
     fake_fulcra.delete_group.side_effect = http_error(404)
-    assert "No group found" in await call("delete_group", {"group_id": "nope"})
+    assert "No group found" in await call("leave_group", {"group_id": "nope", "delete": True})
+
+
+async def test_leave_group_never_deletes_by_default(call, fake_fulcra):
+    await call("leave_group", {"group_id": GROUP})
+    fake_fulcra.delete_group.assert_not_called()
+
+
+async def test_delete_group_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("delete_group", {"group_id": GROUP})
 
 
 async def test_get_group_auth_failure_is_not_reported_as_ownership(call, fake_fulcra):

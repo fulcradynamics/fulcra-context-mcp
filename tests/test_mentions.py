@@ -126,9 +126,15 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
     async with Client(mcp) as client:
         instructions = client.initialize_result.instructions
         assert "Agents I Know" in instructions and "Open Agent Contact:" in instructions
-        assert "without asking what to do next" in instructions
-        assert "explicit request takes precedence" in instructions
-        assert "mentions Fulcra without a task, call agent_contacts_open({})" in instructions
+        assert "Bare Fulcra/Agents I Know: agent_contacts_open({})" in instructions
+        assert "explicit task wins" in instructions
+        assert "mentions authorize opening only, not sends/shares/edits" in instructions
+        assert "mesh_identifier/converted_from_mesh" in instructions
+        assert "Do not migrate user data without explicit consent" in instructions
+        assert not any(name in instructions for name in ("mesh_send", "set_mesh_identifier", "aicq_"))
+        contact = next(t for t in await client.list_tools() if t.name == "agent_contact_open")
+        assert "resolve contacts://threads/id-" in contact.description
+        assert "exact peer_fulcra_userid" in contact.description
         items = await search(client)
         for item, name, arguments in zip(items, ["agent_contacts_open", "agent_contact_open"],
                                          [{}, {"peer_fulcra_userid": "peer"}]):

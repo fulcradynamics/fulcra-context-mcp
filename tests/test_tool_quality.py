@@ -134,17 +134,55 @@ async def test_archive_unknown_id_is_actionable(call, fake_fulcra):
     assert "No user-defined data type" in text
 
 
-async def test_calendar_events_unknown_calendar_is_actionable(call, fake_fulcra):
+async def test_calendar_events_unknown_calendar_lists_the_calendars(call, fake_fulcra):
     fake_fulcra.calendars.return_value = [
-        {"calendar_id": "c1", "calendar_name": "Work"}
+        {"calendar_id": "c1", "calendar_name": "Work"},
+        {"calendar_id": "c2", "calendar_name": "Family"},
+        {"calendar_id": "c3", "calendar_name": "Work"},
     ]
     text = await call(
         "get_calendar_events",
         {"start_time": START, "end_time": END, "calendars": ["Home"]},
     )
-    assert "No calendar named 'Home'" in text
-    assert "get_calendars" in text
+    assert text == "No calendar named 'Home'. Calendars: Family, Work."
     fake_fulcra.calendar_events.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args, message",
+    [
+        ({"start_time": START}, "Pass both start_time and end_time"),
+        ({"end_time": END}, "Pass both start_time and end_time"),
+        ({"calendars": ["Work"]}, "apply only to events"),
+        ({"include_participants": True}, "apply only to events"),
+    ],
+    ids=["start-only", "end-only", "calendars-without-range", "participants-without-range"],
+)
+async def test_calendar_events_argument_mistakes(call, fake_fulcra, args, message):
+    text = await call("get_calendar_events", args)
+    assert message in text
+    fake_fulcra.calendars.assert_not_called()
+    fake_fulcra.calendar_events.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{}, {"start_time": START, "end_time": END}],
+    ids=["calendars", "events"],
+)
+async def test_calendar_events_reads_another_users_shared_calendar(call, fake_fulcra, args):
+    owner = "11111111-2222-4333-8444-555555555555"
+    fake_fulcra.calendars.return_value = []
+    fake_fulcra.calendar_events.return_value = []
+    await call("get_calendar_events", {**args, "fulcra_userid": owner})
+    fake_fulcra.calendars.assert_called_once_with(fulcra_userid=owner)
+    if args:
+        assert fake_fulcra.calendar_events.call_args.kwargs["fulcra_userid"] == owner
+
+
+async def test_get_calendars_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("get_calendars")
 
 
 async def test_read_file_gates_binary_content(call, fake_fulcra):
@@ -179,17 +217,116 @@ async def test_get_user_info_strips_intercom_token(call, fake_fulcra):
     assert "Test User" in text
 
 
+async def test_get_user_info_leaves_out_account_and_subscription_fields(
+    call, fake_fulcra
+):
+    fake_fulcra.get_user_info.return_value = {
+        "userid": "00000000-1111-4222-8333-444444444444",
+        "created": "2024-08-20T19:51:09.123456Z",
+        "status": "active",
+        "tier": "",
+        "preferences": {"timezone": "America/Los_Angeles"},
+        "service_status": {
+            "is_active": True,
+            "service_type": "subscribed_stripe",
+            "active_until": "2026-11-01T00:00:00Z",
+            "grace_period_ends": "2026-11-08T00:00:00Z",
+            "manage_url": "https://portal.fulcradynamics.com",
+        },
+        "intercom_token": "sekrit",
+    }
+    text = await call("get_user_info")
+    assert json.loads(text.removeprefix("User information: ")) == {
+        "userid": "00000000-1111-4222-8333-444444444444",
+        "created": "2024-08-20T19:51:09.123456Z",
+        "preferences": {"timezone": "America/Los_Angeles"},
+    }
+
+
 async def test_location_at_time_honors_reverse_geocode(call, fake_fulcra):
     fake_fulcra.location_at_time.return_value = {"lat": 1, "lon": 2}
-    await call("get_location_at_time", {"time": START, "reverse_geocode": False})
+    await call("get_location", {"time": START, "reverse_geocode": False})
     kwargs = fake_fulcra.location_at_time.call_args.kwargs
     assert kwargs["reverse_geocode"] is False
     assert kwargs["include_after"] is True
 
 
+async def test_location_at_time_can_exclude_later_samples(call, fake_fulcra):
+    fake_fulcra.location_at_time.return_value = []
+    await call(
+        "get_location", {"time": START, "window_size": 3600, "include_after": False}
+    )
+    kwargs = fake_fulcra.location_at_time.call_args.kwargs
+    assert kwargs["include_after"] is False
+    assert kwargs["window_size"] == 3600
+
+
+async def test_location_range_refuses_include_after(call, fake_fulcra):
+    text = await call(
+        "get_location", {"start_time": START, "end_time": END, "include_after": False}
+    )
+    assert text == "include_after applies only to one moment; pass time instead of a range."
+    fake_fulcra.location_time_series.assert_not_called()
+
+
+async def test_location_series_honors_reverse_geocode(call, fake_fulcra):
+    fake_fulcra.location_time_series.return_value = []
+    await call(
+        "get_location", {"start_time": START, "end_time": END, "reverse_geocode": True}
+    )
+    assert fake_fulcra.location_time_series.call_args.kwargs["reverse_geocode"] is True
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},
+        {"time": START, "start_time": START, "end_time": END},
+        {"time": START, "end_time": END},
+        {"start_time": START},
+        {"end_time": END},
+    ],
+    ids=["nothing", "both", "time-and-end", "start-only", "end-only"],
+)
+async def test_location_needs_a_moment_or_a_whole_range(call, fake_fulcra, args):
+    text = await call("get_location", args)
+    assert text == (
+        "Pass either time, for one moment, or both start_time and end_time, for a range."
+    )
+    fake_fulcra.location_at_time.assert_not_called()
+    fake_fulcra.location_time_series.assert_not_called()
+
+
+async def test_location_range_must_run_forwards(call, fake_fulcra):
+    text = await call("get_location", {"start_time": END, "end_time": START})
+    assert "must be after start_time" in text
+    fake_fulcra.location_time_series.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "args, method",
+    [
+        ({"time": START}, "location_at_time"),
+        ({"start_time": START, "end_time": END}, "location_time_series"),
+    ],
+    ids=["moment", "range"],
+)
+async def test_location_reads_another_users_shared_location(call, fake_fulcra, args, method):
+    owner = "11111111-2222-4333-8444-555555555555"
+    getattr(fake_fulcra, method).return_value = []
+    await call("get_location", {**args, "fulcra_userid": owner})
+    assert getattr(fake_fulcra, method).call_args.kwargs["fulcra_userid"] == owner
+
+
+async def test_old_location_tools_are_gone(call):
+    for name in ("get_location_at_time", "get_location_time_series"):
+        with pytest.raises(ToolError):
+            await call(name, {"time": START})
+
+
 async def test_location_series_sample_guard(call, fake_fulcra):
     text = await call(
-        "get_location_time_series",
+        "get_location",
         {
             "start_time": "2024-08-01T00:00:00-07:00",
             "end_time": END,
@@ -540,11 +677,193 @@ async def test_catalog_lists_the_fields_of_one_user_defined_v1_type(call, fake_f
 )
 async def test_catalog_fetches_no_schema_otherwise(call, fake_fulcra, entries, data_type):
     fake_fulcra.v1_catalog.return_value = entries
+    fake_fulcra.fulcra_api.return_value = json.dumps({"annotation_type": "moment"})
 
     text = await call("get_data_catalog", {"data_type": data_type} if data_type else {})
 
     fake_fulcra.v1_catalog_schema.assert_not_called()
     assert '"fields"' not in text
+
+
+ENERGY_LEVEL = {
+    "id": V1_UUID,
+    "name": "Energy Level",
+    "annotation_type": "scale",
+    "measurement_spec": {
+        "value_type": "integer",
+        "metric_kind": "discrete",
+        "measurement_type": "scale",
+        "unit": None,
+        "scale": {"min_allowed": 1, "max_allowed": 5, "value": 3},
+    },
+    "spec": {
+        "default_note": None,
+        "scale": {
+            "label_mapping": {
+                "mapping_type": "string",
+                "string": {"mapping": {"1": "Very Low", "3": "Medium", "5": "Very High"}},
+            },
+            "scale_mapping": {
+                "mapping_type": "emoji",
+                "color": {"mapping": {"1": "#ff3b30", "5": "#33c759"}},
+                "string": {"mapping": {"1": "annotation-emoji-1", "5": "annotation-emoji-5"}},
+            },
+        },
+    },
+    "tags": ["cb8e9254-1446-4055-9e3c-4d76335d1be5"],
+    "created_at": "2025-05-22T20:40:51.191044Z",
+    "updated_at": "2025-05-23T08:00:00Z",
+}
+
+WATER = {
+    "id": V1_UUID,
+    "name": "Water",
+    "annotation_type": "numeric",
+    "measurement_spec": {
+        "value_type": "real",
+        "metric_kind": "cumulative",
+        "measurement_type": "volume",
+        "unit": "fluid_ounce",
+        "volume": {"value": 8},
+    },
+    "spec": {"default_note": "tap"},
+    "tags": [],
+}
+
+
+ANNOTATION_DETAIL_KEYS = (
+    "scale",
+    "value_map",
+    "measures",
+    "unit",
+    "default_value",
+    "default_note",
+    "kind",
+    "tags",
+    "display",
+    "created_at",
+    "updated_at",
+)
+
+
+def _one_entry(text: str) -> dict:
+    [entry] = [e for group in json.loads(text[text.index("{"):]).values() for e in group]
+    return entry
+
+
+@pytest.mark.parametrize(
+    "base_type, definition, details",
+    [
+        (
+            "ScaleAnnotation",
+            ENERGY_LEVEL,
+            {
+                "scale": {"min": 1, "max": 5, "step": 1},
+                "value_map": {"1": "Very Low", "3": "Medium", "5": "Very High"},
+                "default_value": 3,
+                "kind": "discrete",
+                "tags": ["cb8e9254-1446-4055-9e3c-4d76335d1be5"],
+                "display": {
+                    "colors": {"1": "#ff3b30", "5": "#33c759"},
+                    "emoji": {"1": "annotation-emoji-1", "5": "annotation-emoji-5"},
+                },
+                "created_at": "2025-05-22T20:40:51.191044Z",
+                "updated_at": "2025-05-23T08:00:00Z",
+            },
+        ),
+        (
+            "NumericAnnotation",
+            WATER,
+            {
+                "measures": "volume",
+                "unit": "fluid_ounce",
+                "default_value": 8,
+                "default_note": "tap",
+                "kind": "cumulative",
+            },
+        ),
+        ("MomentAnnotation", {"annotation_type": "moment", "spec": None}, {}),
+    ],
+    ids=["scale", "numeric", "moment"],
+)
+async def test_catalog_adds_one_annotations_own_details(
+    call, fake_fulcra, base_type, definition, details
+):
+    type_id = f"{base_type}/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": type_id,
+            "name": definition.get("name", "x"),
+            "api_version": "v1alpha1",
+            "categories": ["user_defined"],
+            "fulcra_userid": FAKE_USER_ID,
+        }
+    ]
+    fake_fulcra.fulcra_api.return_value = json.dumps(definition)
+
+    entry = _one_entry(await call("get_data_catalog", {"data_type": type_id}))
+
+    fake_fulcra.fulcra_api.assert_called_once_with(
+        f"/user/v1alpha1/annotation/{V1_UUID}", query={"fulcra_userid": FAKE_USER_ID}
+    )
+    assert {k: v for k, v in entry.items() if k in ANNOTATION_DETAIL_KEYS} == details
+
+
+async def test_catalog_looks_up_a_shared_annotation_in_its_owners_account(
+    call, fake_fulcra
+):
+    owner = "11111111-2222-4333-8444-555555555555"
+    type_id = f"ScaleAnnotation/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {
+            "id": type_id,
+            "name": "Energy Level",
+            "api_version": "v1alpha1",
+            "categories": ["user_defined", "shared_type"],
+            "fulcra_userid": owner,
+        }
+    ]
+    fake_fulcra.fulcra_api.return_value = json.dumps(ENERGY_LEVEL)
+
+    entry = _one_entry(
+        await call("get_data_catalog", {"data_type": type_id, "fulcra_userid": owner})
+    )
+
+    fake_fulcra.fulcra_api.assert_called_once_with(
+        f"/user/v1alpha1/annotation/{V1_UUID}", query={"fulcra_userid": owner}
+    )
+    assert entry["fulcra_userid"] == owner
+    assert entry["scale"] == {"min": 1, "max": 5, "step": 1}
+
+
+async def test_catalog_still_returns_an_annotation_whose_definition_is_unavailable(
+    call, fake_fulcra
+):
+    type_id = f"ScaleAnnotation/{V1_UUID}"
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": type_id, "name": "Energy Level", "api_version": "v1alpha1"}
+    ]
+    fake_fulcra.fulcra_api.side_effect = http_error(403)
+
+    entry = _one_entry(await call("get_data_catalog", {"data_type": type_id}))
+
+    assert entry == {"id": type_id, "name": "Energy Level"}
+
+
+async def test_catalog_listing_looks_up_no_annotation_definitions(call, fake_fulcra):
+    fake_fulcra.v1_catalog.return_value = [
+        {"id": f"ScaleAnnotation/{V1_UUID}", "api_version": "v1alpha1"},
+        {"id": f"MomentAnnotation/{V1_UUID}", "api_version": "v1alpha1"},
+    ]
+
+    await call("get_data_catalog", {"category": "user_defined"})
+
+    fake_fulcra.fulcra_api.assert_not_called()
+
+
+async def test_annotations_catalog_is_gone(call):
+    with pytest.raises(ToolError):
+        await call("annotations_catalog")
 
 
 # --- create / archive / restore for v1 (Event / Metric) types -----------------
@@ -741,8 +1060,7 @@ async def test_catalog_points_types_with_their_own_tools_to_them(call, fake_fulc
     ids = {group: [e["id"] for e in entries] for group, entries in grouped.items()}
     assert ids == {
         "data types usable with: get_workouts": ["apple_workouts"],
-        "data types usable with: get_calendars": ["calendars"],
-        "data types usable with: get_calendar_events": ["calendar_events"],
+        "data types usable with: get_calendar_events": ["calendars", "calendar_events"],
         "data types usable with: get_records": [
             "MomentAnnotation",
             f"NumericAnnotation/{V1_UUID}",
@@ -1015,3 +1333,67 @@ async def test_catalog_lists_no_required_fields_when_there_are_none(call, fake_f
     [entry] = _entries(await call("get_data_catalog", {"data_type": user_type}))
 
     assert "required_fields" not in entry
+
+
+# --- get_sleep -----------------------------------------------------------------
+
+
+async def test_sleep_lists_only_the_common_options(client):
+    [tool] = [t for t in await client.list_tools() if t.name == "get_sleep"]
+    assert set(tool.inputSchema["properties"]) == {
+        "start_time",
+        "end_time",
+        "level",
+        "stages",
+        "period",
+        "time_zone",
+        "fulcra_userid",
+    }
+
+
+@pytest.mark.parametrize(
+    "user_info, time_zone, expected",
+    [
+        ({"preferences": {"timezone": "America/Los_Angeles"}}, None, "America/Los_Angeles"),
+        ({"preferences": {"timezone": "America/Los_Angeles"}}, "Europe/Paris", "Europe/Paris"),
+        ({"preferences": {}}, None, "UTC"),
+        (http_error(500), None, "UTC"),
+    ],
+    ids=["users-own", "explicit", "none-set", "unreadable"],
+)
+async def test_sleep_totals_follow_the_users_days(
+    call, fake_fulcra, user_info, time_zone, expected
+):
+    if isinstance(user_info, Exception):
+        fake_fulcra.get_user_info.side_effect = user_info
+    else:
+        fake_fulcra.get_user_info.return_value = user_info
+    fake_fulcra.sleep_agg_rows.return_value = []
+    args = {"start_time": START, "end_time": END, "level": "aggregate"}
+    if time_zone:
+        args["time_zone"] = time_zone
+
+    await call("get_sleep", args)
+
+    assert fake_fulcra.sleep_agg_rows.call_args.kwargs["tz"] == expected
+    if time_zone:
+        fake_fulcra.get_user_info.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "level, method",
+    [
+        ("cycles", "sleep_cycles_rows"),
+        ("stages", "sleep_stages_rows"),
+        ("aggregate", "sleep_agg_rows"),
+    ],
+)
+async def test_sleep_reads_another_users_shared_sleep(call, fake_fulcra, level, method):
+    owner = "11111111-2222-4333-8444-555555555555"
+    fake_fulcra.get_user_info.return_value = {"preferences": {}}
+    getattr(fake_fulcra, method).return_value = []
+
+    args = {"start_time": START, "end_time": END, "level": level, "fulcra_userid": owner}
+    await call("get_sleep", args)
+
+    assert getattr(fake_fulcra, method).call_args.kwargs["fulcra_userid"] == owner

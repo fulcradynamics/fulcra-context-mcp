@@ -314,7 +314,7 @@ async def wait_until(check, what, seconds=60):
 async def test_connection_channel_lifecycle(call, local_fulcra):
     """The tools a private agent-to-agent channel needs: a record id
     from record_data, resending it, delete_records, an ended share reported as
-    such, and declining someone's share with leave_share."""
+    such, and declining someone's share with delete_share."""
     peer_id = os.environ.get("FULCRA_LOCAL_AUDIT_PEER")
     if not peer_id:
         pytest.skip("requires FULCRA_LOCAL_AUDIT_PEER")
@@ -396,7 +396,7 @@ async def test_connection_channel_lifecycle(call, local_fulcra):
         tools_module.get_fulcra_object = lambda: local_fulcra
         incoming = payload(await call("list_shares", {"direction": "incoming"}))["incoming"]
         [grant] = [g for g in incoming if g.get("datashare_id") == peer_share_id]
-        left = await call("leave_share", {"grant_id": grant["grant_id"]})
+        left = await call("delete_share", {"share_id": grant["grant_id"]})
         assert "no longer has access" in left, left
         incoming = payload(await call("list_shares", {"direction": "incoming"}))["incoming"]
         assert not [g for g in incoming if g.get("datashare_id") == peer_share_id]

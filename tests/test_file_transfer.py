@@ -560,13 +560,22 @@ async def test_write_file_guesses_text_types(call, fake_fulcra):
     fake_fulcra.upload_file.assert_called_once_with(b"{}", "application/json", 2, "/state.json")
 
 
-async def test_write_file_refuses_bad_or_large_base64(call, fake_fulcra, monkeypatch):
+@pytest.mark.parametrize(
+    "environment, larger",
+    [("hosted", 'encoding="upload_link"'), ("stdio", "uvx fulcra-api file upload")],
+)
+async def test_write_file_refuses_bad_or_large_base64(
+    call, fake_fulcra, monkeypatch, environment, larger
+):
+    monkeypatch.setattr(settings, "fulcra_environment", environment)
     bad = await call("write_file", {"path": "/a.bin", "content": "not base64!", "encoding": "base64"})
     monkeypatch.setattr(ft, "MAX_WRITE_BASE64_BYTES", 2)
     large = await call("write_file", {"path": "/a.bin", "content": "AAAA", "encoding": "base64"})
 
     assert "isn't valid base64" in bad
-    assert "start_file_upload" in large and "open_file_manager" in large
+    assert larger in large and "open_file_manager" in large
+    # The chunked-upload tools are for the file manager panel, not the model.
+    assert "start_file_upload" not in large
     fake_fulcra.upload_file.assert_not_called()
 
 
