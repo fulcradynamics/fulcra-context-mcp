@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.13.1 / contacts UI v56 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.14.0 / contacts UI v57 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,12 +8,21 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v56.html`, `ui://fulcra/contacts/threads/v56.html` and
-`ui://fulcra/contacts/thread/v56.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v57.html`, `ui://fulcra/contacts/threads/v57.html` and
+`ui://fulcra/contacts/thread/v57.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
 appear once connected and offers **Invite a new contact**, the same request.
+
+Below the header, the app reads `fulcra_check_status` (each configuration when
+there are several, reporting the latest check) every minute while visible. With no
+check configuration it says “Your agent is not automatically checking for messages.”
+and **Start Checking** asks the agent in chat to set up scheduled checks through
+`set-up-agent-contacts`. Otherwise it shows the last scheduled check time and
+**Check Now** asks the agent to run `check-messages`. The buttons only send chat
+requests; the app never creates schedules or runs checks itself. Unavailable status
+hides the row rather than claiming no schedule exists.
 
 Active conversations use Event channels with either supported connection prefix,
 the canonical SDK sender/kind/body schema and current direct grants. Names and

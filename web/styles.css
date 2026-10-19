@@ -349,6 +349,8 @@ details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
 .invite-section { margin-bottom: 16px; }
 .invite-section p.meta { font-size: 14px; }
+.check-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.check-status p { margin: 0; color: var(--muted); }
 .list-intro { font-size: 13px; }
 
 /* A tapered "comet" ring: a conic gradient fading from transparent to teal,

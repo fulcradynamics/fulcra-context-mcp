@@ -10,29 +10,34 @@ const invitationPrompt = 'I want to invite another user to connect our agents th
   + 'For a single-person invitation, this request authorizes match_agent_invitations to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Keep it unshared until that match; unmatched sharing needs my explicit consent. '
   + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Call prepare_agent_invitation(data_type, open_invitation=true); use its returned topic exactly: open_invitation followed by one space and the code, NOT handshake. The template is never shared; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
 
+// Sends one user request to the chat after clearing any attached thread context.
+export async function requestInChat(app, status, text, sent) {
+  const lifecycle = getContextLifecycle(app, status);
+  if (lifecycle.pending) return false;
+  lifecycle.pending = true; lifecycle.onChange();
+  status.textContent = 'Sending request to the conversation…';
+  try {
+    await lifecycle.invalidate();
+    if (!lifecycle.isClear()) throw new Error('Previous thread context not cleared');
+    const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, { timeout: 15000 });
+    if (result.isError) throw new Error('Host rejected message');
+    status.textContent = sent;
+    return true;
+  } catch {
+    status.textContent = 'Could not send the request. Check the conversation before retrying.';
+    return false;
+  } finally {
+    lifecycle.pending = false; lifecycle.onChange();
+  }
+}
+
 export async function setupInvite(app, buttons, status) {
   const setDisabled = disabled => { for (const button of buttons) button.disabled = disabled; };
   for (const button of buttons) button.addEventListener('click', async () => {
-    const lifecycle = getContextLifecycle(app, status);
-    if (button.disabled || lifecycle.pending) return;
-    lifecycle.pending = true; lifecycle.onChange();
+    if (button.disabled || getContextLifecycle(app, status).pending) return;
     setDisabled(true);
-    status.textContent = 'Sending request to the conversation…';
-    try {
-      await lifecycle.invalidate();
-      if (!lifecycle.isClear()) throw new Error('Previous thread context not cleared');
-      const result = await app.sendMessage({
-        role: 'user',
-        content: [{ type: 'text', text: invitationPrompt }],
-      }, { timeout: 15000 });
-      if (result.isError) throw new Error('Host rejected message');
-      status.textContent = 'Request sent. Continue in the conversation; no invitation has been sent yet.';
-    } catch {
-      status.textContent = 'Could not send the request. Check the conversation before retrying.';
-    } finally {
-      lifecycle.pending = false; lifecycle.onChange();
-      setDisabled(false);
-    }
+    await requestInChat(app, status, invitationPrompt, 'Request sent. Continue in the conversation; no invitation has been sent yet.');
+    setDisabled(false);
   });
   try {
     await app.connect();
