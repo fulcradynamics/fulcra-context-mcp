@@ -7,6 +7,7 @@ import { readLatest } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { pendingContacts, matchInvitations } from './pending-contacts.js';
+import { createDebugPreview, previewAssessment } from './debug-preview.js';
 
 // Compact "time since last message" for contact rows: now / 5m / 3h / 2d, then a
 // short local date once it's a week old.
@@ -55,7 +56,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const connRetrySpinner = doc.querySelector('#connection-retry-spinner');
   status.textContent = '';
   const inlineList = entrypoint.presentation === 'threads';
-  const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
+  const debug = createDebugPreview();
+  const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation, debug);
+  const stopDebug = debug.subscribe(peer => { const entry = rows.get(peer); if (entry) renderPreview(entry); });
   let displayPending = false, displayEpoch = 0, hostContext = app.getHostContext();
   async function choose(entry) {
     if (disposed || displayPending || rows.get(entry.thread.peer) !== entry) return;
@@ -137,6 +140,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             textCol.append(name, id, preview, assessment);
             const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
             name.after(relationship);
+            const previewLabel = doc.createElement('span'); previewLabel.className = 'debug-preview-label';
+            previewLabel.textContent = 'Preview'; previewLabel.hidden = true; relationship.after(previewLabel);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -153,7 +158,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           const idText = thread.participants ? '' : (thread.peer ?? '');
           entry.id.textContent = idText;
           entry.id.hidden = true;
-          renderBadge(entry.assessment, thread.assessment);
+          renderPreview(entry);
         }
         const pendingKeys = new Set();
         for (const source of discovery.pending) {
@@ -291,15 +296,25 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       if (disposed || rows.get(thread.peer) !== entry
         || JSON.stringify(entry.thread.sources) !== JSON.stringify(thread.sources)) return;
       if (failed) {
-        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
-        entry.preview.hidden = false;
-        entry.dot.classList.remove('on');
-        entry.time.textContent = '';
+        entry.summary = null; entry.previewFailed = true;
         entry.lastAt = NaN;
+        renderPreview(entry);
         return;
       }
       const summary = contactPreview(latest);
       const message = summary?.message;
+      entry.summary = summary ?? null; entry.previewFailed = false;
+      const at = message?.record?.start_time;
+      entry.lastAt = at ? Date.parse(at) : NaN;
+      renderPreview(entry);
+    }));
+  }
+  function renderPreview(entry) {
+      const overrides = debug.get(entry.thread.peer);
+      const summary = entry.summary, message = summary?.message;
+      renderBadge(entry.assessment, previewAssessment(entry.thread.assessment, overrides));
+      entry.button.querySelector('.relationship-state').textContent = overrides.relationship === 'pending' ? 'Pending' : 'Connected';
+      entry.button.querySelector('.debug-preview-label').hidden = !Object.keys(overrides).length;
       entry.preview.replaceChildren();
       if (message) {
         const outgoing = message.direction === 'Outgoing';
@@ -308,13 +323,28 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         sender.textContent = `${outgoing ? 'You' : entry.name.textContent}: `;
         entry.preview.append(sender, doc.createTextNode(messageText(message.record)));
       }
-      entry.preview.hidden = !message;
-      entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
-      const at = message?.record?.start_time;
-      entry.lastAt = at ? Date.parse(at) : NaN;
+      if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+      entry.preview.hidden = !message && !entry.previewFailed;
+      entry.dot.classList.toggle('on', overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged);
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
-      entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
-    }));
+      if (entry.summary !== undefined) entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
+      else {
+        const spinner = doc.createElement('span'); spinner.className = 'refresh-spinner';
+        spinner.setAttribute('aria-label', 'Loading preview'); entry.time.replaceChildren(spinner);
+      }
+      if (overrides.previewText) { entry.preview.textContent = overrides.previewText; entry.preview.hidden = false; }
+      if (overrides.time) entry.time.textContent = overrides.time;
+      if (overrides.preview === 'error') {
+        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+        entry.preview.hidden = false; entry.time.textContent = '';
+      }
+      if (['empty', 'loading'].includes(overrides.preview)) {
+        entry.preview.hidden = true; entry.time.replaceChildren();
+        if (overrides.preview === 'loading') {
+          const spinner = doc.createElement('span'); spinner.className = 'refresh-spinner';
+          spinner.setAttribute('aria-label', 'Loading preview'); entry.time.append(spinner);
+        }
+      }
   }
   // Order rows like a chat list: most recent activity first, threads without a
   // readable message last. Animates the reorder with a FLIP transform.
@@ -363,6 +393,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     if (disposed) return disposal;
     disposed = true;
     stopHost?.();
+    stopDebug();
     scheduler.dispose();
     disposal = detail.dispose();
     clearTimeout(connStatusTimer);

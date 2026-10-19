@@ -59,9 +59,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v56.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v56.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v56.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v57.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v57.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v57.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
@@ -72,11 +72,12 @@ async def main():
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
+                                  'debug-preview', 'Reset to live', 'Debug preview active',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v56 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v57 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

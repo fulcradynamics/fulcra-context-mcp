@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.14.0 / contacts UI v56 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.14.0 / contacts UI v57 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v56.html`, `ui://fulcra/contacts/threads/v56.html` and
-`ui://fulcra/contacts/thread/v56.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v57.html`, `ui://fulcra/contacts/threads/v57.html` and
+`ui://fulcra/contacts/thread/v57.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -86,6 +86,18 @@ pauses while hidden and backs off failures. Optimistic reconciliation matches `m
 Uncertain sends do not invent a new ID. Sampling suggestions remain disabled on every host.
 
 ### Sidebar and host chat
+
+Advanced → Debug opens display-only, per-contact previews: unread/read, assessment
+and reason, connected/pending label, list loading/empty/error and preview text/time,
+topic, message loading/empty/error or sample incoming/outgoing, body, delivery badge,
+and acknowledgement feedback. Each select has a Live option; blank text uses live
+content. Reset to live restores the latest polled state. Overrides survive polling
+and contact navigation for this app instance only; active rows and detail show Preview.
+These controls never change records, agent context, sends, acknowledgements, matching,
+preferences or permissions. Actions still use live data. Pending is a label preview,
+not an invitation or a grant change; sample messages are never actionable records.
+Real access/read failures retain their warnings. Global host/discovery state, actual
+pending/legacy entries and permission controls are not simulated.
 
 The single-level sidebar stays beside the selected thread, including at narrow
 widths. Current, pending and legacy contacts retain their separate categories.
