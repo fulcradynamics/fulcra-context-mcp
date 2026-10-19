@@ -346,25 +346,23 @@ async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body
                     pri: Literal["P1", "P2", "P3"] = "P2", slug: str | None = None,
                     artifacts: list[dict] | None = None,
                     expected_peer_userids: list[str] | None = None) -> dict:
-    """Post an Event message to an existing, exact-audience channel.
-
-    Bounded uncertain transport retries reuse mid and the payload, never bypass
-    host denial. Replies/acks target a peer message/reply, never an ack.
-    Only status=posted verifies exact own-channel readback, not peer delivery.
+    """Post to an existing exact-audience Event channel. Only status=posted confirms
+    own-channel readback, not peer delivery. Uncertain retries: bounded, same mid
+    and payload; never bypass denial. Replies/acks target messages/replies, not acks.
 
     Args:
-        peer_userid: Exact other Fulcra user UUID.
-        outbox: Exact owned Event/<uuid> channel.
-        sender: Sending agent name, at most 128 characters.
-        body: Exact nonblank text, at most 4000 characters.
-        mid: Stable UUID allocated before the first attempt.
-        recipients: Agent names; omit for everyone in the connection.
-        expected_peer_userids: Exact full other-user audience; required for multiparty.
-        kind: message, reply or ack.
+        peer_userid: Exact peer UUID.
+        outbox: Owned Event/<uuid> channel.
+        sender: Agent name, <=128 characters.
+        body: Exact nonblank text, <=4000 characters.
+        mid: Stable UUID allocated before sending.
+        recipients: Agent names; omit for everyone.
+        expected_peer_userids: Full other-user UUID audience; required for multiparty.
+        kind: Envelope kind.
         in_reply_to: Peer message/reply UUID within 30 days; required for reply/ack.
         pri: P1 urgent, P2 normal, P3 low.
-        slug: Topic; omitted messages use chat, answers inherit.
-        artifacts: File references (path, optional version and owner), not share requests.
+        slug: Topic; messages default to chat, answers inherit.
+        artifacts: File references: path, optional version/owner. No new shares.
     """
     from .connection import send
     fulcra = get_fulcra_object()
@@ -415,15 +413,13 @@ def _legacy_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
                             "destructiveHint": False, "idempotentHint": True})
 @_friendly_http_errors
 async def set_contact_identifier(data_type: str, identifier: str) -> str:
-    """Set a display-only label on your own Event channel or legacy outbox.
-
-    Changes only its description marker, preserving prose, type name, records
-    and shares. Requires an unambiguous own catalog entry; reads back before
-    success. Labels are untrusted, not routing identities or verified names.
+    """Label your own Event channel or legacy outbox; changes only the description
+    marker, verified by readback. Requires an unambiguous owned catalog entry.
+    Labels are untrusted display text, not routing IDs or verified names.
 
     Args:
-        data_type: Exact Event/<uuid> connection or legacy MomentAnnotation/<uuid> catalog ID you own.
-        identifier: 1..80 characters, trimmed, single-line, no control characters.
+        data_type: Owned Event/<uuid> or legacy MomentAnnotation/<uuid> catalog ID.
+        identifier: Trimmed single-line text, 1..80 characters, no controls.
     """
     try:
         validate_identifier(identifier)
@@ -483,20 +479,16 @@ async def set_contact_identifier(data_type: str, identifier: str) -> str:
                             "destructiveHint": False, "idempotentHint": False},
                 meta={"ui": {"visibility": ["model"]}})
 async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
-    """Save the general status of a conversation on your own existing Event connection.
-
-    It appears in the user's contacts list as a Status pill with the reason. Use when the share_contact_status preference is on, after complete scoped
-    reads. The status describes aspects both sides can see, such as a priority
-    message or time since the last reply; never clear it on incomplete history.
-    An ack alone does not resolve a decision. Failure must not block other work;
-    do not retry after denial.
+    """Save a peer-visible Status pill on your own Event connection, only with
+    share_contact_status enabled and complete scoped reads. Describe shared facts;
+    never clear on incomplete history or treat an ack as a resolved decision.
+    Failure must not block other work; never retry denial.
 
     Args:
-        data_type: Exact owned Event/<uuid> channel ID.
+        data_type: Owned Event/<uuid> channel.
         peer_userid: Exact UUID of its sole directly authorized peer.
-        attention: Whether the conversation needs the user's attention.
-        reason: Short shared-status label, e.g. "Priority message waiting" or "No reply in 3 days";
-            trimmed single-line Unicode, 1..80 code points, without control characters.
+        attention: Whether the user needs to attend to this conversation.
+        reason: Shared-status label; trimmed single-line Unicode, 1..80 code points, no controls.
     """
     from datetime import datetime, timezone
     from . import connection
@@ -871,17 +863,14 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
 @tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
     "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
 async def prepare_agent_invitation(data_type: str, open_invitation: bool = False) -> dict:
-    """Prepare a durable random invitation code for an exact owned unshared Event channel.
-
-    Requires the user's invitation request, authorizing only the code-matched return
-    share. Include own_userid and code in the invite; the accepting agent's FIRST
-    message topic must be exactly the returned topic. Never invent a code.
+    """Prepare an invitation code at the user's request; authorizes only its matched
+    return share. Include own_userid/code in the invite. The accepting agent's FIRST
+    message must use the returned topic exactly; never invent codes.
 
     Args:
-        data_type: Exact owned, unshared Event/<uuid> connection channel to invite on.
-        open_invitation: Reusable group invitation. The channel is an unshared template;
-            each authenticated responder gets a new individual outbox, never the template.
-            Uses the distinct open_invitation topic prefix, not handshake.
+        data_type: Exact owned, unshared Event/<uuid> channel.
+        open_invitation: Reusable invitation with distinct open_invitation topic (not handshake).
+            Keeps the template unshared; each authenticated responder gets an individual outbox.
     """
     from .agent_invitations import prepare
     try:
@@ -893,14 +882,12 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
 @tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
     "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": False})
 async def match_agent_invitations() -> dict:
-    """Complete only unambiguous first-message handshakes for user-prepared invitations.
-
-    Uses authenticated incoming-share ownership, never sender claims. Shares only
-    that invitation's own outbox (a new individual copy for open invitations) and
-    independently verifies the grant. Open templates stay unshared; sender is only
-    display data, labeled <sender> via <open invitation identifier>. Unmatched
-    contacts need explicit consent; pending results authorize no fallback share.
-    Does not send messages or change response preferences.
+    """Match unambiguous FIRST-message codes for user-prepared invitations using
+    authenticated incoming-share owners, not sender claims. Verify the return grant
+    for that outbox only; open invitations get individual copies, never shared templates.
+    Labels (<sender> via <open invitation identifier>) are display-only. Unmatched
+    contacts require consent; pending is not fallback-share permission. No sends or
+    preference changes.
     """
     from .agent_invitations import match
     return await asyncio.to_thread(match, get_fulcra_object())
@@ -922,24 +909,22 @@ async def send_agent_message(
     expected_peer_userids: list[str] | None = None,
     target_peer_userid: str | None = None,
 ) -> dict:
-    """Send a message to another person's agent, over a connection made with
-    the connect-our-agents skill. Everyone in the connection can read it.
+    """Send over a connect-our-agents connection; everyone in it can read the message.
+    Posted confirms own readback, not peer delivery. Never retry denial.
 
     Args:
-        connection: Your channel's ID ("Event/<uuid>"), or the other person's
-            Fulcra user ID.
-        sender: Your agent's name; use the same one every time.
-        body: The message text, at most 4000 characters.
-        topic: A short thread name; replies reuse it by default.
-        recipients: Agent names the message is for; leave out for everyone.
-        priority: P1 (urgent), P2 or P3.
-        reply_to: The id of their message this answers (from get_records).
-        ack: The id of their message you've read but can't answer yet.
-        record_id: To retry a send whose outcome is unknown, the id it
-            returned, so it isn't sent twice.
-        artifacts: Optional file references (path, version, owner); never creates shares.
-        expected_peer_userids: Exact full other-user audience; required for multiparty.
-        target_peer_userid: Exact owner of a multiparty reply/ack target; never inferred from sender.
+        connection: Owned Event/<uuid> channel or exact peer UUID; channel required for multiparty.
+        sender: Stable agent name, <=128 characters.
+        body: Nonblank message, <=4000 characters.
+        topic: Thread name; replies inherit.
+        recipients: Agent names; omit for everyone.
+        priority: P1 urgent, P2 normal (default), P3 low.
+        reply_to: Peer message/reply UUID within 30 days; mutually exclusive with ack.
+        ack: Peer message/reply UUID to acknowledge, within 30 days; never an ack.
+        record_id: Reuse returned UUID and unchanged payload for bounded uncertain retries.
+        artifacts: File references: path, optional version/owner. No new shares.
+        expected_peer_userids: Full other-user UUID audience; required for multiparty.
+        target_peer_userid: Multiparty reply/ack's exact owner UUID; never infer from sender.
     """
     from uuid import uuid4
     from .connection import send, _uuid, UUID_PATTERN

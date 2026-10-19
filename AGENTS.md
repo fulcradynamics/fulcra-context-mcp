@@ -124,6 +124,12 @@ python scripts/measure_tools.py ../main-checkout`). Treat it as a regression
 check when adding or editing tools: a change that adds hundreds of tokens of
 definitions should be earning them.
 
+For the pinned public Codex agent-plugin byte budget, use
+`uv run python scripts/measure_tools.py --codex --json`. This measures converted
+specs including repeated server instructions, not the default character estimate.
+See [method, before/after report and limitations](docs/tool-budget.md); fitting
+alone does not reserve space against other plugins or prove native-host exposure.
+
 ## Available Data
 
 ### Location & Calendar
