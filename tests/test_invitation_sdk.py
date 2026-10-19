@@ -20,10 +20,11 @@ IN = 'Event/00000000-0000-4000-8000-000000000020'
 STATE = 'Event/00000000-0000-4000-8000-000000000099'
 
 
+@pytest.mark.parametrize('open_invitation', [False, True])
 @pytest.mark.parametrize('partial', [False, True])
 @pytest.mark.parametrize('earlier', [False, True])
 @pytest.mark.parametrize('hour', [0, 12])
-def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, partial, earlier, hour):
+def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, partial, earlier, hour, open_invitation):
     query_end = datetime(2026, 10, 16, hour, tzinfo=timezone.utc)
 
     class Clock(datetime):
@@ -39,6 +40,7 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
     catalog = [dict(id=id, fulcra_userid=owner, api_version='v1', recordable=owner == OWN,
         record_spec={'type': 'event'}, description='connect-our-agents channel') for id, owner in [(OUT, OWN), (IN, PEER)]]
     outgoing, rows, calls = [], [], []
+    individual = 'Event/00000000-0000-4000-8000-000000000030'
     def transport(req):
         url = urlparse(req.full_url); query = parse_qs(url.query)
         path, method = url.path, req.get_method()
@@ -58,7 +60,7 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
             if method == 'POST':
                 body = json.loads(req.data)
                 assert body == dict(datashare_name='connect-our-agents invitation', fulcra_user_name=OWN,
-                    time_start=None, time_end=None, fulcra_data_types=[OUT], share_all_data=False,
+                    time_start=None, time_end=None, fulcra_data_types=[individual if open_invitation else OUT], share_all_data=False,
                     permissions=[{'allowed_fulcra_userid': PEER}])
                 outgoing.append(dict(id=PEER, **body)); value = outgoing[-1]
             else:
@@ -78,21 +80,29 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
             return BytesIO(payload + (b'\n{"id":' if partial else b'\n'))
         elif path.startswith('/input/v1/data_type/Event'):
             if method == 'GET':
-                value = catalog[-1]
+                value = next(e for e in catalog if path.endswith(e['id']))
             else:
                 body = json.loads(req.data)
                 if method == 'POST':
-                    catalog.append(dict(id=STATE, fulcra_userid=OWN, api_version='v1', **body))
+                    id = STATE if body['name'] == invitations.NAME else individual
+                    if id == individual:
+                        assert open_invitation
+                        schema = json.loads(body['record_spec']['schema'])
+                        assert schema['properties'] == connections.CHANNEL_FIELDS['properties']
+                        assert set(schema['required']) == set(connections.CHANNEL_FIELDS['required'])
+                        body['record_spec']['type'] = 'event'
+                    catalog.append(dict(id=id, fulcra_userid=OWN, api_version='v1', recordable=True, **body))
                 else:
                     assert method == 'PUT' and path.endswith(STATE)
-                    catalog[-1].update(body)
-                headers = Message(); headers['Location'] = '/input/v1/data_type/' + STATE
+                    id = STATE
+                    next(e for e in catalog if e['id'] == STATE).update(body)
+                headers = Message(); headers['Location'] = '/input/v1/data_type/' + id
                 raise HTTPError(req.full_url, 303, 'See Other', headers, None)
         else:
             raise AssertionError((method, path, query))
         return BytesIO(json.dumps(value).encode())
     monkeypatch.setattr('urllib.request.urlopen', transport)
-    prepared = invitations.prepare(api, OUT)
+    prepared = invitations.prepare(api, OUT, open_invitation=open_invitation)
     rows.append(dict(id=PEER, kind='message', sender='Agent', body='hello',
                      topic=prepared['topic'], start_time='2026-10-01T02:00:00.123456+02:00',
                      end_time='2026-10-01T02:00:00.123456+02:00'))
@@ -104,7 +114,10 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
         assert result['status'] == 'unavailable' and outgoing == []
         assert result['diagnostic'] == {'stage': 'handshake_history', 'category': 'validation'}
     elif earlier:
-        assert result['results'][0]['reason'] == 'No unique first-message handshake.'
+        if open_invitation:
+            assert result['results'] == []
+        else:
+            assert result['results'][0]['reason'] == 'No unique first-message handshake.'
         assert outgoing == []
     else:
         assert result['results'][0]['status'] == 'matched'

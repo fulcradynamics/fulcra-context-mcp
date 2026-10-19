@@ -881,7 +881,7 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
 
 @tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
     "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
-async def prepare_agent_invitation(data_type: str) -> dict:
+async def prepare_agent_invitation(data_type: str, open_invitation: bool = False) -> dict:
     """Prepare a durable random invitation code for an exact owned unshared Event channel.
 
     Requires the user's invitation request, authorizing only the code-matched return
@@ -890,10 +890,13 @@ async def prepare_agent_invitation(data_type: str) -> dict:
 
     Args:
         data_type: Exact owned, unshared Event/<uuid> connection channel to invite on.
+        open_invitation: Reusable group invitation. The channel is an unshared template;
+            each authenticated responder gets a new individual outbox, never the template.
+            Uses the distinct open_invitation topic prefix, not handshake.
     """
     from .agent_invitations import prepare
     try:
-        return await asyncio.to_thread(prepare, get_fulcra_object(), data_type)
+        return await asyncio.to_thread(prepare, get_fulcra_object(), data_type, open_invitation)
     except Exception:
         raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
 
@@ -904,7 +907,9 @@ async def match_agent_invitations() -> dict:
     """Complete only unambiguous first-message handshakes for user-prepared invitations.
 
     Uses authenticated incoming-share ownership, never sender claims. Shares only
-    that invitation's own outbox and independently verifies the grant. Unmatched
+    that invitation's own outbox (a new individual copy for open invitations) and
+    independently verifies the grant. Open templates stay unshared; sender is only
+    display data, labeled <sender> via <open invitation identifier>. Unmatched
     contacts need explicit consent; pending results authorize no fallback share.
     Does not send messages or change response preferences.
     """
