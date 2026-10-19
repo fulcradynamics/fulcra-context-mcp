@@ -139,7 +139,7 @@ test('list loading and text previews stay scoped across contact navigation', asy
   await expect(ui.locator('#debug-preview-active')).toBeVisible();
   await expect(ui.locator('#contact-topic')).toHaveText('Preview topic');
   await expect(ui.locator('#messages .bubble-body')).toHaveText('Preview message');
-  await ui.locator('#message-back').click();
+  await second.click();
   await row.click();
   await expect(ui.locator('#messages .bubble-body')).toHaveText('Preview message');
   await expect(ui.locator('.composer-input')).toBeEnabled();

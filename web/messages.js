@@ -11,7 +11,7 @@ import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { endContact, confirmEndContact } from './end-contact.js';
-import { icon, History, ArrowLeft, Settings } from './icons.js';
+import { icon, History, Settings } from './icons.js';
 import { createDebugPreview, previewAssessment, previewMessages, acknowledgementPreview, setupDebugControls } from './debug-preview.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
@@ -23,8 +23,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const headerAvatar = doc.querySelector('#contact-avatar');
   const contactSubtitle = doc.querySelector('#contact-subtitle');
   const contactTopic = doc.querySelector('#contact-topic');
-  const updateIdentity = contactIdentity(doc, doc.querySelector('.contact-header'));
-  const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
+  const updateIdentity = contactIdentity(doc, doc.querySelector('.contact-name'));
+  const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; doc.querySelector('#advanced-panel').prepend(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
   const retry = doc.querySelector('#message-retry');
@@ -89,6 +89,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     const expand = advanced.hidden;
     advanced.hidden = !expand;
     advancedToggle.setAttribute('aria-expanded', String(expand));
+    if (expand) messageList.reveal(advanced);
   };
   advancedToggle.addEventListener('click', onAdvanced);
   let activeViewer = 'chatgpt';
@@ -101,8 +102,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   // The spinner sits to the right of the button; toggling visibility (not
   // display) keeps its space reserved so the button never shifts.
   const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
-  const back = doc.querySelector('#message-back');
-  back.prepend(icon(ArrowLeft, 'btn-icon'));
+
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'));
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
@@ -420,7 +420,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   more.addEventListener('click', onMore);
   retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
-  back.addEventListener('click', onBack);
+
   function select(thread, button, { acknowledge = false } = {}) {
     acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
@@ -453,6 +453,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     refreshState(state) { refreshState = state; renderStatus(); },
     dispose() {
     generation++; selected = undefined;
+    messageList.dispose();
     stopDebug();
     clearTimeout(statusTimer); loading.hidden = true;
     more.removeEventListener('click', onMore);
@@ -460,7 +461,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     advancedToggle.removeEventListener('click', onAdvanced);
     endButton.removeEventListener('click', onEnd);
     viewer.removeEventListener('input', onViewer);
-    back.removeEventListener('click', onBack);
+
     return contextLifecycle.dispose();
   } };
 }

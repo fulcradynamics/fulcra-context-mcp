@@ -11,12 +11,32 @@ export function contactIdentity(doc, anchor) {
   const panel = doc.createElement('div'); panel.id = 'contact-identity'; panel.hidden = true;
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Fulcra User ID');
   anchor.append(button, panel);
-  let generation = 0;
+  let generation = 0, pinned = false, restoringFocus = false, closeTimer;
   const resets = [];
-  const close = (focus = false) => { panel.hidden = true; generation++; resets.forEach(reset => reset()); button.setAttribute('aria-expanded', 'false'); if (focus) button.focus(); };
+  const open = () => {
+    clearTimeout(closeTimer);
+    panel.hidden = false; button.setAttribute('aria-expanded', 'true');
+  };
+  const close = (focus = false) => {
+    clearTimeout(closeTimer);
+    panel.hidden = true; pinned = false; generation++;
+    resets.forEach(reset => reset()); button.setAttribute('aria-expanded', 'false');
+    if (focus) { restoringFocus = true; button.focus({preventScroll:true}); restoringFocus = false; }
+  };
+  const leave = () => {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      if (!pinned && doc.activeElement !== button && !panel.contains(doc.activeElement)) close();
+    }, 180);
+  };
+  for (const element of [button, panel]) {
+    element.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') open(); });
+    element.addEventListener('pointerleave', leave);
+  }
+  button.addEventListener('focus', () => { if (!restoringFocus) open(); });
   button.addEventListener('click', () => {
-    if (!panel.hidden) { close(); return; }
-    panel.hidden = false; button.setAttribute('aria-expanded', 'true'); panel.querySelector('input')?.focus();
+    if (pinned && !panel.hidden) { close(); return; }
+    pinned = true; open(); panel.querySelector('input')?.focus({preventScroll:true});
   });
   doc.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) { e.preventDefault(); close(true); } });
   doc.addEventListener('pointerdown', e => { if (!panel.hidden && !panel.contains(e.target) && !button.contains(e.target)) close(); });

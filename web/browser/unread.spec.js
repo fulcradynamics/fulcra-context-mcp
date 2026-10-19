@@ -38,7 +38,7 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
 });
 
 test('previews survive metadata-only refreshes while their reads are pending', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true });
+  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'threads' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.clock.runFor(11000);
   await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(2);
@@ -47,7 +47,7 @@ test('previews survive metadata-only refreshes while their reads are pending', a
 });
 
 test('slow list previews do not hold up opening a contact', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true });
+  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'threads' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.evaluate(() => { window.holdReads = false; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
@@ -58,6 +58,8 @@ test('slow list previews do not hold up opening a contact', async ({ page }) => 
 
 test('failed opening reads do not turn a later poll into an acknowledgement', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true });
+  // Settle read-only auto-selection before failing the explicit opening read.
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
   await page.evaluate(() => { window.failReads = true; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect(ui.locator('#message-status')).toContainText('Could not load messages');
@@ -68,19 +70,25 @@ test('failed opening reads do not turn a later poll into an acknowledgement', as
 });
 
 test('leaving before reads finish cancels acknowledgement', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true });
+  const ui = await open(page, 900, { listOnly: true, presentation: 'threads' });
+  await page.evaluate(() => { window.direct = true; });
+  await page.clock.runFor(11000);
+  await expect(ui.locator('.thread-button').filter({hasText:'Alex'})).toBeVisible();
+  await page.evaluate(() => { window.holdReads = true; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect(ui.locator('#connection-detail')).toBeVisible();
-  await ui.locator('#message-back').click();
+  await ui.locator('.thread-button').filter({hasText:'Alex'}).click();
+  // The new selection's own click may acknowledge; the abandoned group may not.
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await page.clock.runFor(11000);
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  await expect(ui.locator('#message-title')).toHaveText('Alex');
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').some(c => c.arguments.expected_peer_userids?.length > 1))).toBe(false);
 });
 
 test('verified acknowledgement clears the list dot and is not sent again on reopening', async ({ page }) => {
   const ui = await open(page, 390, { acceptAck: true });
   await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
-  await ui.locator('#message-back').click();
+  await expect(ui.locator('#connection-list')).toBeVisible();
   await page.clock.runFor(11000);
   const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
   await expect(row.locator('.thread-preview')).toContainText('Broadcast message');

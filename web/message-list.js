@@ -9,43 +9,58 @@ export function messageKeys(messages) {
   });
 }
 
-// Chat order is always oldest first; the newest edge is the bottom row.
+// Chat order is always oldest first; only the message pane owns its scrolling.
 export function createMessageList(list, renderRow) {
   const doc = list.ownerDocument, win = doc.defaultView;
-  let rows = new Map();
-  const bottom = () => {
-    const composerHeight = doc.querySelector('#thread-composer')?.offsetHeight ?? 0;
-    return win.innerHeight - (doc.querySelector('.footer-spacer')?.offsetHeight ?? 0)
-      - composerHeight - (composerHeight ? 12 : 0);
-  };
+  const scroller = doc.querySelector('#message-area');
+  let rows = new Map(), following = true;
+  const top = () => scroller.getBoundingClientRect().top;
+  const bottom = () => scroller.getBoundingClientRect().bottom - 12;
+  const scrollBy = delta => { scroller.scrollTop += delta; };
   function atLatest() {
     const edge = list.lastElementChild?.getBoundingClientRect();
-    return !edge || edge.bottom <= bottom() + 40;
+    const resizeDelta = paneHeight - scroller.clientHeight;
+    return !edge || edge.bottom <= bottom() + resizeDelta + 40;
   }
   function follow() {
     const edge = list.lastElementChild?.getBoundingClientRect();
-    if (edge) win.scrollBy(0, edge.bottom - bottom());
+    if (edge) scrollBy(edge.bottom - bottom());
+  }
+  let paneHeight = scroller.clientHeight;
+  const onScroll = () => {
+    // A resize may dispatch scroll before ResizeObserver. Preserve the old
+    // latest-edge intent until the new pane geometry has been applied.
+    if (scroller.clientHeight === paneHeight) following = atLatest();
+  };
+  scroller.addEventListener('scroll', onScroll);
+  const resize = new win.ResizeObserver(() => {
+    paneHeight = scroller.clientHeight;
+    if (following) follow();
+  });
+  resize.observe(scroller);
+  function anchors() {
+    // Readers above the list retain the history/advanced controls, not a row.
+    if (list.firstElementChild?.getBoundingClientRect().top > top() + 40) return [];
+    return [...list.children].map(el => ({ el, top: el.getBoundingClientRect().top }))
+      .filter(({ el, top: rowTop }) => rowTop < bottom() && el.getBoundingClientRect().bottom > top());
+  }
+  function restore(saved) {
+    const anchor = saved.find(({ el }) => el.isConnected);
+    if (anchor) scrollBy(anchor.el.getBoundingClientRect().top - anchor.top);
   }
   return {
+    reveal(element) {
+      // Explicit navigation takes precedence before scroll/resize delivery.
+      following = false;
+      scrollBy(element.getBoundingClientRect().top - top());
+    },
     preservePosition(change) {
-      // Status wrapping can change height between countdown, retry and pause.
-      const aboveList = list.firstElementChild?.getBoundingClientRect().top > 40;
-      const anchor = aboveList ? null : [...list.children].find(el => {
-        const rect = el.getBoundingClientRect();
-        return rect.top < win.innerHeight && rect.bottom > 0;
-      });
-      const top = anchor?.getBoundingClientRect().top;
+      const saved = anchors();
       change();
-      if (anchor?.isConnected) win.scrollBy(0, anchor.getBoundingClientRect().top - top);
+      restore(saved);
     },
     update(messages, afterRender) {
-      const hadRows = rows.size > 0;
-      const followEdge = atLatest();
-      // Above-list readers keep their viewport, even if a message peeks below
-      // the controls. Anchoring that row would scroll the controls away on prepend.
-      const aboveList = list.firstElementChild?.getBoundingClientRect().top > 40;
-      const anchors = aboveList ? [] : [...list.children].map(el => ({ el, top: el.getBoundingClientRect().top }))
-        .filter(({ el, top }) => top < win.innerHeight && el.getBoundingClientRect().bottom > 0);
+      const hadRows = rows.size > 0, followEdge = atLatest(), saved = anchors();
       const keys = messageKeys(messages), next = new Map();
       const added = keys.some(key => !rows.has(key));
       const selection = win.getSelection();
@@ -73,17 +88,13 @@ export function createMessageList(list, renderRow) {
         const { anchor, anchorOffset, focus, focusOffset } = savedSelection;
         selection.setBaseAndExtent(anchor, anchorOffset, focus, focusOffset);
       }
-      // Status and open context preview can also change height above the anchor.
       afterRender();
-      // First populate jumps to the newest message; live updates follow only when
-      // already at the newest edge, otherwise the reader's position is preserved.
       if (!hadRows && messages.length) follow();
       else if (hadRows && followEdge && added && !doc.activeElement?.matches('input, textarea, summary, select')) follow();
-      else {
-        const anchor = anchors.find(({ el }) => el.isConnected);
-        if (anchor) win.scrollBy(0, anchor.el.getBoundingClientRect().top - anchor.top);
-      }
+      else restore(saved);
+      following = atLatest();
     },
-    clear() { rows.clear(); list.replaceChildren(); },
+    clear() { rows.clear(); list.replaceChildren(); following = true; },
+    dispose() { resize.disconnect(); scroller.removeEventListener('scroll', onScroll); },
   };
 }

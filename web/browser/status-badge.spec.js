@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
 for (const [attention, reason] of [[true, 'Waiting on you'], [false, 'Up to date']]) {
-  test(`list shows the agent status as a two-part pill under the preview (attention ${attention})`, async ({ page }) => {
+  test(`list shows the saved assessment under the preview (attention ${attention})`, async ({ page }) => {
     const ui = await open(page, 900, { listOnly: true, status: { attention, reason, assessed_at: '2026-10-13T11:00:00Z' } });
     const row = ui.locator('.thread-button').filter({ hasText: 'Weekend' });
     const badge = row.locator('.status-badge');
