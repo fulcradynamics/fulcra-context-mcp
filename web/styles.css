@@ -337,8 +337,11 @@ details { margin-block: 16px; }
 summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
 details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
-.invite-section { margin-bottom: 16px; }
-.invite-section p.meta { font-size: 14px; }
+.invite-section { flex: none; margin: 8px 0 12px; }
+.invite-section > [role='status'] { margin: 4px 0 0; line-height: 1.4; max-height: 12vh; overflow-y: auto; }
+.check-status { display: flex; align-items: center; gap: 12px; }
+.check-status p { flex: 1; min-width: 0; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.check-status button { flex: none; font-size: 12px; padding: 6px 10px; }
 .list-intro { font-size: 13px; }
 
 /* A tapered "comet" ring: a conic gradient fading from transparent to teal,
@@ -387,6 +390,5 @@ html { overflow-anchor: none; }
 
 @media (max-width: 520px) {
 
-  .invite-section { margin-bottom: 24px; }
   .section-header h2 { font-size: 11px; }
 }

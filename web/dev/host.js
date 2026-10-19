@@ -11,6 +11,8 @@ if (state === 'no-contacts') {
   scenario.catalog = []; scenario.rows = {};
   scenario.shares = { own_fulcra_userid: own, incoming: [], outgoing: [] };
 }
+const checkStatus = state === 'no-schedule' ? { status: 'not_set_up', label: 'Not set up' }
+  : { status: 'checked', last_checked: new Date(Date.now() - 20 * 60000).toISOString() };
 
 const CATALOG_PREFIX = 'Available data types, grouped by compatible tool: ';
 const text = t => ({ content: [{ type: 'text', text: t }] });
@@ -20,6 +22,7 @@ const text = t => ({ content: [{ type: 'text', text: t }] });
 function toolResult(name, args = {}) {
   if (scenario.fail?.includes(name)) return { isError: true };
   if (name === 'match_agent_invitations') return { structuredContent: { results: [] } };
+  if (name === 'fulcra_check_status') return { structuredContent: checkStatus };
   if (name === 'get_data_catalog') {
     let catalog = scenario.catalog;
     if (args.data_type) catalog = catalog.filter(e => e.id === args.data_type && (e.fulcra_userid || own) === (args.fulcra_userid || own));
