@@ -1,4 +1,5 @@
 import { createThreadComposer } from './thread-composer.js';
+import { contactName, readable, contactIdentity } from './contact-identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
@@ -20,6 +21,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const headerAvatar = doc.querySelector('#contact-avatar');
   const contactSubtitle = doc.querySelector('#contact-subtitle');
   const contactTopic = doc.querySelector('#contact-topic');
+  const updateIdentity = contactIdentity(doc, doc.querySelector('.contact-header'));
   const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
@@ -118,7 +120,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         // Display-only tick. The scheduler alone owns retry requests/deadlines.
         statusTimer = setTimeout(renderStatus, 1000);
       } else text += 'Automatic retries are paused.';
-    } else if (displayed && !displayed.messages.length) text = 'No messages yet.';
+    } else if (displayed && !displayed.messages.length) text = `No messages with ${contactName(selected)} in this history window. Send a message below to start a conversation, or load more history.`;
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages,
@@ -160,7 +162,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       // Under the date: the sending agent name, when it differs from the contact.
       const showSender = incoming && typeof record.sender === 'string' && record.sender.trim()
         && record.sender !== (selected?.identifier || selected?.peer);
-      sender.textContent = showSender ? record.sender : '';
+      sender.textContent = showSender ? readable(record.sender, 'Contact') : '';
       sender.hidden = !showSender;
       const addressing = messageAddressing(record, activeViewer);
       item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
@@ -169,13 +171,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       let recipients = item.querySelector('.message-recipients');
       if (!recipients) { recipients = doc.createElement('span'); recipients.className = 'message-recipients'; meta.append(recipients); }
       recipients.hidden = !selected?.participants || !Array.isArray(record.recipients);
-      const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
+      const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').map(r => readable(r, 'Contact')).join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
       if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
       // Channel provenance (multiparty participants view only).
       let provenance = item.querySelector('.message-source');
       if (!provenance) { provenance = doc.createElement('span'); provenance.className = 'message-source'; meta.append(provenance); }
       provenance.hidden = !selected?.participants;
-      provenance.textContent = selected?.participants ? `${source.fulcra_userid} / ${source.id}${source.association ? ' — association unverified' : ''}` : '';
+      provenance.textContent = selected?.participants ? `${readable(selected.participants.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — association unverified` : '';
       // Optimistic send state for outgoing posts.
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
@@ -195,22 +197,20 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         () => renderedGeneration === generation && !unavailable && selected?.sources.some(s => s.id === source.id && s.fulcra_userid === source.fulcra_userid));
     });
   const setTitle = thread => {
-    // Clean header: just the contact's name + avatar. The exact ID / account go
-    // to the Advanced panel, and the assessment shows only when it needs attention.
-    const name = thread.participants ? (thread.identifier || 'Group conversation')
-      : (thread.identifier || thread.peer || 'Agent Contact');
+    // Display labels are not identity: exact IDs are disclosed on explicit click.
+    const name = contactName(thread);
+    updateIdentity(thread);
     title.textContent = name;
     headerAvatar.textContent = [...String(name).trim()][0]?.toUpperCase() || '?';
-    // Peer ID as a subtle monospace subtitle; hidden for multiparty or when it
-    // would just repeat the title (contact with no readable identifier).
-    contactSubtitle.textContent = thread.participants ? '' : (thread.peer ?? '');
+    // Do not expose a routing identifier as a subtitle or unnamed fallback.
+    contactSubtitle.textContent = '';
     contactSubtitle.hidden = !contactSubtitle.textContent || contactSubtitle.textContent === name;
     renderAssessment(assessment, thread.assessment);
-    assessment.hidden = thread.assessment?.attention !== true;
+    assessment.hidden = false;
     const account = thread.accountName && thread.accountName !== thread.identifier ? thread.accountName : '';
     contactMeta.textContent = thread.participants
-      ? `Participants: ${thread.participants.map(p => p.id).join(', ')}`
-      : (account ? `Account: ${account}` : '');
+      ? `Participants: ${thread.participants.map(p => readable(p.name, 'Contact')).join(', ')}`
+      : (account ? `Account: ${readable(account)}` : '');
     contactMeta.hidden = !contactMeta.textContent;
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
@@ -232,7 +232,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === 'chatgpt' ? ' (assumption; change here)' : ''}`;
     if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
     const confirmed = reconcilePosts(draft, result.messages).at(-1);
-    if (confirmed) doc.querySelector('#send-status').textContent = `Peer ${selected.peer}, message ${confirmed.envelope.id}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
+    if (confirmed) doc.querySelector('#send-status').textContent = `${contactName(selected)}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
     const posts = unavailable ? [] : (draft.posts ?? [])
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
@@ -363,6 +363,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
+    doc.querySelector('#selection-empty').hidden = false;
+    returnFocus?.removeAttribute('aria-current');
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#connections .thread-button'))?.focus();
   };
   const onRetry = () => requestRefresh();
@@ -378,7 +380,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
     clearTimeout(statusTimer); loading.hidden = false;
+    returnFocus?.removeAttribute('aria-current');
     returnFocus = button;
+    button?.setAttribute('aria-current', 'true');
     messageList.clear();
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
@@ -389,7 +393,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     contactTopic.hidden = true; contactTopic.textContent = '';
-    panel.hidden = false; listPanel.hidden = true; back.focus();
+    panel.hidden = false; listPanel.hidden = false;
+    doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
     requestRefresh();
   }

@@ -1,4 +1,5 @@
 import { discoverThreads } from './connections-discovery.js';
+import { contactName, readable } from './contact-identity.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
@@ -123,6 +124,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             button.className = 'thread-button';
             const avatarWrap = doc.createElement('span'); avatarWrap.className = 'row-avatar-wrap';
             const dot = doc.createElement('span'); dot.className = 'unread-dot';
+            dot.textContent = 'Unread';
             dot.setAttribute('aria-label', 'Unread');
             const avatar = doc.createElement('span'); avatar.className = 'row-avatar';
             avatar.setAttribute('aria-hidden', 'true');
@@ -133,6 +135,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
                         const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             const assessment = doc.createElement('p'); assessment.hidden = true;
             textCol.append(name, id, preview, assessment);
+            const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
+            name.after(relationship);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -143,12 +147,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             row.append(button); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          const label = thread.identifier || (thread.participants ? 'Group conversation' : thread.peer) || 'Agent Contact';
+          const label = contactName(thread);
           entry.name.textContent = label;
           entry.avatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
           const idText = thread.participants ? '' : (thread.peer ?? '');
           entry.id.textContent = idText;
-          entry.id.hidden = !idText || idText === label;
+          entry.id.hidden = true;
           renderBadge(entry.assessment, thread.assessment);
         }
         const pendingKeys = new Set();
@@ -175,7 +179,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
               {lifecycle: detail.contextLifecycle, isCurrent: () => !disposed && row.isConnected && !listPanel.closest('[hidden]')});
           }
           entry.source = source;
-          entry.label.textContent = source.identifier || source.name;
+          entry.label.textContent = readable(source.identifier || source.name, 'Pending contact');
           entry.state.textContent = source.state || 'Not connected yet. Invitation sent';
           entry.help.textContent = app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text
             ? '' : 'Chat assistance is unavailable here. Ask your agent to review pending Fulcra contacts in chat; sharing needs your consent.';
@@ -195,7 +199,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             avatarWrap.append(avatar);
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name'; name.textContent = 'Legacy connection';
-            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer;
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
             textCol.append(name, id);
             const button = doc.createElement('button'); button.type = 'button'; button.className = 'legacy-convert'; button.textContent = 'Convert to Contact';
             inner.append(avatarWrap, textCol, button);
@@ -226,11 +230,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         // Reveal the contacts as soon as discovery returns — the per-thread reads
         // that inform unread state and timestamps fill in after, with a small
         // spinner in each time badge until they land, then an animated re-sort.
-        const wasFirst = firstLoad;
+
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; }
         list.hidden = rows.size === 0; empty.hidden = rows.size > 0;
-        if (!listPanel.hidden) { void refreshPreviews().then(sortRows); return true; }
-        if (wasFirst) void refreshPreviews().then(sortRows); // prime the hidden list behind the detail panel
+        void refreshPreviews().then(sortRows);
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;

@@ -40,6 +40,7 @@ test('deselection clears attached context and retains safe context on discovery 
  const ui = await open(page);
  await handoff(ui).click();
  await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
+ await ui.getByRole('button', {name:'OK',exact:true}).click();
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Retained draft');
  await page.evaluate(() => { window.contexts=[]; window.hostMessages=[]; window.failDiscovery=true; });
  await deselect(ui);

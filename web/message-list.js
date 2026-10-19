@@ -13,7 +13,11 @@ export function messageKeys(messages) {
 export function createMessageList(list, renderRow) {
   const doc = list.ownerDocument, win = doc.defaultView;
   let rows = new Map();
-  const bottom = () => win.innerHeight - (doc.querySelector('.footer-spacer')?.offsetHeight ?? 0);
+  const bottom = () => {
+    const composerHeight = doc.querySelector('#thread-composer')?.offsetHeight ?? 0;
+    return win.innerHeight - (doc.querySelector('.footer-spacer')?.offsetHeight ?? 0)
+      - composerHeight - (composerHeight ? 12 : 0);
+  };
   function atLatest() {
     const edge = list.lastElementChild?.getBoundingClientRect();
     return !edge || edge.bottom <= bottom() + 40;
