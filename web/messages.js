@@ -10,6 +10,7 @@ import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
+import { endContact, confirmEndContact } from './end-contact.js';
 import { icon, History, Settings } from './icons.js';
 import { createDebugPreview, previewAssessment, previewMessages, acknowledgementPreview, setupDebugControls } from './debug-preview.js';
 export { parseRecords } from './records.js';
@@ -66,6 +67,24 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   advancedToggle.prepend(icon(Settings, 'btn-icon'));
   const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
   advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
+  const endButton = doc.createElement('button'); endButton.type = 'button'; endButton.id = 'end-contact';
+  endButton.className = 'danger'; endButton.textContent = 'End contact';
+  advanced.append(endButton);
+  const onEnd = async () => {
+    const thread = selected, name = contactName(thread);
+    const choice = await confirmEndContact(doc, name, endButton);
+    if (!choice || thread !== selected) return;
+    endButton.disabled = true; status.textContent = `Ending contact with ${name}…`;
+    try {
+      await endContact(app, thread, choice.archive);
+      if (thread !== selected) return;
+      onBack();
+      doc.querySelector('#status').textContent = `Ended contact with ${name}.`;
+    } catch (error) {
+      if (thread === selected) status.textContent = `Could not end contact with ${name}: ${error.message}`;
+    } finally { endButton.disabled = false; requestRefresh(); }
+  };
+  endButton.addEventListener('click', onEnd);
   const onAdvanced = () => {
     const expand = advanced.hidden;
     advanced.hidden = !expand;
@@ -236,6 +255,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
+    endButton.hidden = Boolean(thread.participants) || !thread.sources.some(s => s.direction === 'Outgoing');
     refreshLegacyHandoff();
   };
   // The thread's current topic (latest meaningful one), shown under the name.
@@ -439,6 +459,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);
+    endButton.removeEventListener('click', onEnd);
     viewer.removeEventListener('input', onViewer);
 
     return contextLifecycle.dispose();

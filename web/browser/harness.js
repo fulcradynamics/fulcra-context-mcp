@@ -36,6 +36,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    if(r.method!=='tools/call')return;
    window.calls.push(r.params); const {name,arguments:a}=r.params;
    if(name==='fulcra_check_status'){reply(r.id,window.checkStatus?{structuredContent:window.checkStatus}:{isError:true});return;}
+   if(name==='end_agent_contact'){window.excludeOut=true;reply(r.id,{structuredContent:{ended:true,archived:a.archive,status:'ended'}});return;}
    if(name==='match_agent_invitations'){
     const respond=()=>reply(r.id,{structuredContent:{results:window.invitationMatches ?? []}});
     if(window.holdMatches)window.releaseMatch=respond;else respond();

@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.14.1 / contacts UI v58 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.15.1 / contacts UI v59 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v58.html`, `ui://fulcra/contacts/threads/v58.html` and
-`ui://fulcra/contacts/thread/v58.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v59.html`, `ui://fulcra/contacts/threads/v59.html` and
+`ui://fulcra/contacts/thread/v59.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -169,6 +169,16 @@ but the browser opens the current file. Shared-owner browsing is read-only and
 never falls back to the viewer's account. No automatic reads or new shares occur.
 Unsupported hosts get copyable requests; uncertain handoffs stay locked against
 duplicates. Host acknowledgement does not prove another app opened.
+
+## Ending a contact
+
+**Advanced** → **End contact** (one-to-one contacts only) opens a confirmation
+modal with an optional **Also archive your messages** choice. Confirming calls
+app-only `end_agent_contact` for each own outgoing channel: it deletes our covering
+shares, reads back that no grant remains, then archives the channel if chosen
+(records kept; `restore_data_type` undoes). The peer's share with us is unchanged,
+matching the connection skill's Ending connections step; the contact may reappear
+under Pending while their share remains. Group conversations end through chat.
 
 ## Pending invitations
 

@@ -98,6 +98,14 @@ body #connections > li { padding: 0; }
 body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
 #host-guidance::backdrop { background: #0009; }
+#end-contact-dialog { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: white; }
+#end-contact-dialog::backdrop { background: #0009; }
+#end-contact-dialog h2 { margin: 0 0 8px; font-size: 16px; }
+#end-contact-dialog label { display: flex; gap: 8px; align-items: center; margin: 12px 0; color: #fff; font-size: 14px; }
+#end-contact-dialog input[type=checkbox] { flex: none; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--teal); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; }
+#end-contact { align-self: flex-start; }
 [hidden] { display: none !important; }
 body { margin: 0; overflow-wrap: anywhere; }
 /* Edge spacing lives on <main>, not <body>: some hosts reset body padding,
