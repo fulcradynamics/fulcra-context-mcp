@@ -1,6 +1,6 @@
 # Agent connection compatibility
 
-Server 1.14.0 / UI v57 pairs with plugin 0.16.2. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
+Server 1.15.0 / UI v58 pairs with plugin 0.16.3. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
 
 ## Current interface
 
@@ -22,11 +22,12 @@ matcher under persisted-invitation authorization. Ordinary discovery/message pol
 remain read-only; matching adds no model turns or arbitrary shares.
 Worker-local locking is not a distributed transaction or cross-worker CAS guarantee.
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v57.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v57.html`.
-- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v57.html`.
+- `fulcra_open`: global list; `ui://fulcra/contacts/v58.html`.
+- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v58.html`.
+- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v58.html`.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
 - `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
+- `end_agent_contact`: app-only End contact; deletes our covering shares for one single-peer channel, verifies none remain and optionally archives it, as the plugin's Ending connections step does.
 - `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: settings/check status.
 - Existing model-visible `open_file_manager`, file and sharing tools support the plugin's new files/send entry skills; no additional file server or upload mechanism.
 

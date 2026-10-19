@@ -7,9 +7,9 @@ from fastmcp import FastMCP
 from fulcra_mcp import server_info
 
 app_mcp = FastMCP("Agents I Know UI")
-UI_URI = "ui://fulcra/contacts/v57.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v57.html"
-THREADS_UI_URI = "ui://fulcra/contacts/threads/v57.html"
+UI_URI = "ui://fulcra/contacts/v58.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v58.html"
+THREADS_UI_URI = "ui://fulcra/contacts/threads/v58.html"
 CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 

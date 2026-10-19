@@ -194,3 +194,31 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
                         'reason': 'Write not verified; authorization or validation stopped further attempts. Do not retry or bypass denial.'}
             return {**result, 'status': 'uncertain', 'reason': 'Write not verified. Keep this ID and content; do not bypass permission denial.'}
         return {**result, 'status': 'rejected', 'reason': str(exc) if isinstance(exc, (ValueError, jsonschema.ValidationError)) else 'Preflight verification failed. Nothing submitted.'}
+
+
+def end(api, *, data_type, peer_userid, archive=False):
+    """End one exact single-peer contact as the connection skill does: delete our
+    covering shares, read back that none remain, then optionally archive our channel.
+    Their share with us is left alone."""
+    result = dict(data_type=data_type, peer_userid=peer_userid, ended=False, archived=False)
+    try:
+        own, _ = owned_connection(api, data_type, peer_userid)
+        covering = [s for s in api.get_datashares() if s.get('fulcra_data_types') == [data_type]]
+        for share in covering:
+            if api.get_fulcra_userid() != own:
+                raise ValueError('Authenticated account changed.')
+            api.delete_datashare(share.get('id') or share['datashare_id'])
+        if any(s.get('share_all_data') or data_type in (s.get('fulcra_data_types') or [])
+               for s in api.get_datashares()):
+            raise ValueError('A covering share remains.')
+        result['ended'] = True
+        if archive:
+            api.update_data_type('Event', data_type.split('/')[1], {'deprecated': True})
+            entries = api.resolve_data_type(data_type, fulcra_userid=own)
+            if len(entries) != 1 or not entries[0].get('deprecated'):
+                raise ValueError('Archive not verified.')
+            result['archived'] = True
+        return {**result, 'status': 'ended'}
+    except Exception as exc:
+        reason = str(exc) if isinstance(exc, ValueError) else 'Not verified. Reload before retrying.'
+        return {**result, 'status': 'partial' if result['ended'] else 'rejected', 'reason': reason}
