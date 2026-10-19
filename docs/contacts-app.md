@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.13.1 / contacts UI v55 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.13.2 / contacts UI v56 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v55.html`, `ui://fulcra/contacts/threads/v55.html` and
-`ui://fulcra/contacts/thread/v55.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v56.html`, `ui://fulcra/contacts/threads/v56.html` and
+`ui://fulcra/contacts/thread/v56.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -63,10 +63,10 @@ automatically. Send replies to the newest unread message and acks the others.
 Receipt-only ack rows are hidden but retained for state/context; substantive ack
 bodies remain visible. Sent receipt bodies are exactly `ack`.
 
-Under the preview, each contact shows the agent's saved status as a two-part pill,
-**Status** then its short reason, with an amber label when it needs attention. The
-pill appears only when every own channel has an assessment (or any says attention);
-the full assessment and oldest time are in its tooltip.
+Under the preview, each contact shows a quiet saved-assessment reason, amber when
+it needs attention. It appears only when every own channel has an assessment (or
+any says attention); the full assessment and oldest time remain in its title and
+the selected contact's Advanced panel. Assessment is distinct from unread state.
 
 Opening a thread reads each channel's latest record, then loads from one week
 before the earlier latest incoming/outgoing record through now (one week ago if
@@ -80,18 +80,33 @@ Uncertain sends do not invent a new ID. Sampling suggestions remain disabled on 
 
 The single-level sidebar stays beside the selected thread, including at narrow
 widths. Current, pending and legacy contacts retain their separate categories.
-The selected button has `aria-current`; rows show connection status, relative latest
-activity and an explicit Unread badge, without avatars. Invite someone lives in
+The selected button has `aria-current`; rows prioritize the name, preview, relative
+activity and an explicit Unread indicator, without avatars. Invite someone lives in
 the sidebar. Empty states distinguish no contacts, no selection and no messages
 in the selected contact's loaded history window.
 
-The compact contact header and reply footer are sticky. The composer follows
-messages in document order; latest-edge scrolling subtracts its height. The
-in-flow footer spacer reserves 232px plus device/host safe-area clearance, not
-body padding. Exact IDs remain in routing and explicit context disclosures,
-not ordinary labels or sender headings. Contact information opens a keyboard
-accessible Fulcra User ID popover with exact selectable IDs; clipboard success
-alone changes the copy icon to a check. Denied clipboard access offers manual copy.
+Global and untargeted thread launches select the first discovered contact read-only.
+Explicit launch IDs wait for their result and must match authorized discovery exactly;
+missing IDs never fall back to another contact. A user's selection wins over a delayed
+launch, and subsequent preview ordering does not change the selected contact. The
+inline picker retains explicit selection/fullscreen navigation; it never requests a
+host mode change automatically. There is no Contacts back button.
+
+The bounded two-pane layout keeps the transparent contact header above an independently
+scrollable message area and pins the reply composer at the pane bottom even for empty
+history. The sidebar reaches the viewport bottom; its inner content reserves safe-bottom
+padding rather than shortening the rail. The conversation footer reserves 72px plus
+the larger of device and host bottom insets (not both). The pane observes resizing to
+keep the latest message above the composer while preserving older reader anchors.
+
+Exact IDs remain in routing and explicit context disclosures, not ordinary labels or
+sender headings. The borderless information control beside the name opens an interactive
+Fulcra User ID popover on hover/focus, with click/touch fallback and Escape/outside dismissal.
+Pointer travel into its selectable fields and copy controls keeps it open. Only confirmed
+clipboard success changes the current attempt's icon to a check; denied access offers
+manual copy. Advanced is right-aligned in the same header. Rubik and Fulcra colors remain;
+the disclosure uses restrained translucency with reduced-transparency/contrast fallbacks,
+and motion respects reduced-motion preferences.
 
 Discuss sends a host request, not a direct peer reply. After acceptance, conditional
 guidance explains expanding host input if details are hidden; it never claims a
@@ -209,5 +224,7 @@ Browser tests exercise the built SDK/app in an `allow-scripts` sandbox with a
 synthetic JSON-RPC host. Python tests mock account transports; no live records or
 shares are written. Local suites do not certify native ChatGPT rendering, consent,
 mentions, file access, session navigation or unattended tasks; those remain manual
-acceptance checks with authorized test accounts. Keep the in-flow footer spacer
-and safe-area clearance for the host composer.
+acceptance checks with authorized test accounts. Local browser coverage verifies actual
+pane scroll ownership, narrow/short iframe resizing, host safe insets and convergence
+when a synthetic host follows the SDK's size notifications. This does not measure a
+native host's floating composer height; keep that acceptance gate separate.

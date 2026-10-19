@@ -20,7 +20,8 @@ for (const presentation of ['global', 'threads']) test(`empty contacts offer an 
   expect(JSON.stringify(await page.evaluate(() => window.hostMessages))).toContain('use the invite skill');
   await expect(ui.locator('#status')).toContainText('Request sent');
   await page.evaluate(() => { window.excludeOwn = false; window.excludeOut = false; window.excludeIncoming = false; });
-  await page.clock.runFor(11000);
+  // A selected peer's revocation backs off the shared discovery/read scheduler.
+  await page.clock.runFor(21000);
   await expect(ui.locator('#connections-empty')).toBeHidden();
   await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
 });

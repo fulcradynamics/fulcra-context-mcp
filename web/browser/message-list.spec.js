@@ -26,7 +26,7 @@ test('oldest-first list follows new messages but preserves readers and focused d
   await page.route('https://message-list.test/**', route => route.fulfill(
     route.request().url().endsWith('.js')
       ? { contentType: 'text/javascript', body: source }
-      : { contentType: 'text/html', body: '<style>body{margin:0}li{height:100px}ul{margin:0;padding:0;overflow-anchor:none}.footer-spacer{height:200px}</style><ul></ul><textarea></textarea><div class="footer-spacer"></div>' }));
+      : { contentType: 'text/html', body: '<style>body{margin:0}li{height:100px}ul{margin:0;padding:0}#message-area{height:412px;overflow:auto;padding-bottom:12px;box-sizing:border-box;overflow-anchor:none}</style><div id="message-area"><ul></ul></div><textarea></textarea>' }));
   await page.goto('https://message-list.test/');
   await page.evaluate(async () => {
     const { createMessageList } = await import('/message-list.js');
@@ -42,7 +42,7 @@ test('oldest-first list follows new messages but preserves readers and focused d
   expect(await bottom()).toBe(400);
 
   // Prepending history while reading in the middle retains the same row/offset.
-  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.evaluate(() => document.querySelector('#message-area').scrollTop = 500);
   const anchor = page.locator('li').filter({ hasText: /^5$/ });
   const before = await anchor.evaluate(el => el.getBoundingClientRect().top);
   await page.evaluate(() => { window.messages.unshift({ ...window.messages[0], record: { id: -1 } }); window.render(); });
@@ -52,11 +52,11 @@ test('oldest-first list follows new messages but preserves readers and focused d
 
   // Even at the newest edge, a focused draft suppresses automatic following.
   const scroll = await page.evaluate(() => {
-    window.scrollBy(0, document.querySelector('li:last-child').getBoundingClientRect().bottom - 400);
+    document.querySelector('#message-area').scrollTop += document.querySelector('li:last-child').getBoundingClientRect().bottom - 400;
     document.querySelector('textarea').focus({ preventScroll: true });
-    return window.scrollY;
+    return document.querySelector('#message-area').scrollTop;
   });
   await page.evaluate(() => { window.add(22); window.render(); });
-  expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+  expect(await page.evaluate(() => document.querySelector('#message-area').scrollTop)).toBe(scroll);
   await expect(page.locator('textarea')).toBeFocused();
 });

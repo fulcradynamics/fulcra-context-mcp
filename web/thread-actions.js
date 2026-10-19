@@ -25,7 +25,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const full = input.scrollHeight + border;
     input.style.overflowY = full > max ? 'auto' : 'hidden';
     input.style.height = `${Math.min(full, max)}px`;
-    if (follow) doc.defaultView.scrollBy(0, edge.bottom - container.getBoundingClientRect().top + 9);
+    if (follow) doc.querySelector('#message-area').scrollTop += edge.bottom - container.getBoundingClientRect().top + 12;
   };
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary send-to-peer';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));

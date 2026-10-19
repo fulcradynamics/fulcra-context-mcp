@@ -91,6 +91,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     detail.select(entry.thread, entry.button, { acknowledge: true });
   }
   let requestedPeer, launchPending = false, userSelected = false;
+  let autoSelect = entrypoint.presentation === 'global';
   const launchStatus = doc.createElement('p');
   launchStatus.id = 'entrypoint-status'; launchStatus.setAttribute('role', 'status');
   if (entrypoint.presentation !== 'global') {
@@ -132,11 +133,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name';
             const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
-                        const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
+            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             const assessment = doc.createElement('p'); assessment.hidden = true;
             textCol.append(name, id, preview, assessment);
-            const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
-            name.after(relationship);
+
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -222,6 +222,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             launchStatus.textContent = '';
             detail.select(matches[0], rows.get(requestedPeer)?.button);
           } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
+        }
+        if (autoSelect && !userSelected && discovery.threads.length) {
+          autoSelect = false;
+          launchStatus.textContent = '';
+          const thread = discovery.threads[0];
+          detail.select(thread, rows.get(thread.peer)?.button);
         }
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
@@ -383,19 +389,23 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       ? 'The initial Agent Contacts list result failed. Refresh Agent Contacts to retry discovery.' : '';
     scheduler.request();
   });
-  else if (entrypoint.presentation === 'thread') entrypoint.consume(result => {
-    if (disposed || userSelected) return;
-    const data = result.structuredContent;
-    if (result.isError || data?.presentation !== 'thread'
-      || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
-      launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
-    } else {
-      requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
-      launchPending = requestedPeer != null;
-      launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : 'Choose an accessible Agent Contact.';
-    }
+  else if (entrypoint.presentation === 'thread') {
+    // Populate the rail while awaiting the opener, without choosing a substitute.
     scheduler.request();
-  });
-  else scheduler.request();
+    entrypoint.consume(result => {
+      if (disposed || userSelected) return;
+      const data = result.structuredContent;
+      if (result.isError || data?.presentation !== 'thread'
+        || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
+        launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
+      } else {
+        requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
+        launchPending = requestedPeer != null;
+        autoSelect = !launchPending;
+        launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : '';
+      }
+      scheduler.request();
+    });
+  } else scheduler.request();
   return dispose;
 }

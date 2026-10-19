@@ -43,9 +43,10 @@ test('empty history gives a readable contact-specific next step', async ({ page 
   await expect(ui.locator('#message-status')).toContainText('Send');
 });
 
-test('contact rows and compact header keep status visible', async ({ page }) => {
+test('contact assessment remains available in Advanced without redundant row labels', async ({ page }) => {
   const ui = await open(page);
-  await expect(ui.locator('.relationship-state').first()).toHaveText('Connected');
+  await expect(ui.locator('.relationship-state')).toHaveCount(0);
+  await ui.locator('#advanced-toggle').click();
   await expect(ui.locator('#contact-assessment')).toBeVisible();
 });
 
@@ -71,7 +72,7 @@ for (const [width, height] of [[390, 600], [320, 700], [900, 700]]) {
       const composer = await ui.locator('#thread-composer').boundingBox();
       expect(last.y).toBeGreaterThanOrEqual(header.y + header.height);
       expect(last.y + last.height).toBeLessThanOrEqual(composer.y + 2);
-      expect(await ui.locator('.footer-spacer').evaluate(el => el.offsetHeight)).toBeGreaterThanOrEqual(232);
+      expect(await ui.locator('.footer-spacer').evaluate(el => el.offsetHeight)).toBe(72);
       expect(await ui.locator('body').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     };
     await visible();
@@ -107,7 +108,7 @@ test('long rail keeps Invite and first contact reachable at document bottom', as
 
 test('composer reserves host overlay clearance below history', async ({ page }) => {
   const ui = await open(page);
-  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(232);
+  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBe(72);
   expect(await ui.locator('#thread-composer').evaluate(el => getComputedStyle(el).top)).toBe('auto');
 });
 

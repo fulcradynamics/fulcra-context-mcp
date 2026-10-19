@@ -29,11 +29,16 @@ for (const navigate of [false, true]) test(`uncertain file handoff locks duplica
   await button.click();
   await expect(button).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
-  if (navigate) await ui.getByRole('button', {name:'Contacts',exact:true}).click();
+  if (navigate) {
+    await page.evaluate(() => { window.direct = true; });
+    await page.clock.runFor(11000);
+    await ui.locator('.thread-button').filter({hasText:'Alex'}).click();
+  }
   await page.evaluate(() => window.releaseMessage());
   if (navigate) {
     await expect(ui.locator('#connection-list')).toBeVisible();
     await expect(ui.locator('#connection-list')).not.toContainText('Could not confirm the handoff');
+    await expect(ui.locator('#message-title')).toHaveText('Alex');
   } else {
     await expect(ui.locator('.artifact [role=status]')).toContainText('Check chat before retrying');
     await expect(button).toBeDisabled();
