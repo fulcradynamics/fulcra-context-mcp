@@ -373,6 +373,23 @@ async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body
                                    artifacts=artifacts)
 
 
+
+@tools_mcp.tool(app={"visibility": ["app"]},
+                annotations={"title": "End Agent Contact", "readOnlyHint": False,
+                             "destructiveHint": True, "idempotentHint": True})
+async def end_agent_contact(data_type: str, peer_userid: str, archive: bool = False) -> dict:
+    """Stop sharing an owned single-peer Event channel and verify no grant remains;
+    optionally archive it (restore_data_type undoes). Their share is unchanged.
+
+    Args:
+        data_type: Owned Event/<uuid> channel.
+        peer_userid: Exact UUID of its sole directly authorized peer.
+        archive: Also archive the channel; records are kept.
+    """
+    from .connection import end
+    return await asyncio.to_thread(end, get_fulcra_object(), data_type=data_type,
+                                   peer_userid=peer_userid, archive=archive)
+
 def _own_legacy_outbox(fulcra, data_type: str, own: str) -> dict:
     entries = fulcra.resolve_data_type(data_type, fulcra_userid=own)
     if len(entries) != 1:
