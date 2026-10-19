@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.13.0 / contacts UI v54 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.13.1 / contacts UI v55 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v54.html`, `ui://fulcra/contacts/threads/v54.html` and
-`ui://fulcra/contacts/thread/v54.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v55.html`, `ui://fulcra/contacts/threads/v55.html` and
+`ui://fulcra/contacts/thread/v55.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -54,9 +54,9 @@ Messages use SDK `connections.build_message` and `CHANNEL_FIELDS`: top-level Eve
   preflight failures are `rejected`. A denial after uncertainty stays uncertain and
   nonretryable. Cross-service grant checks and ingestion are not atomic.
 
-The list renders before previews, showing a red dot only for the latest incoming
+The list renders before previews, showing an explicit **Unread** badge only for the latest incoming
 non-ack message without an opposite-direction ack/reply. A newer outgoing message
-suppresses the dot. Relative times use Event `start_time`. Explicitly clicking a
+suppresses the badge. Relative times use Event `start_time`. Explicitly clicking a
 contact can acknowledge that message through the checked send path; startup,
 programmatic selection and polling never acknowledge. Failed acks are not retried
 automatically. Send replies to the newest unread message and acks the others.
@@ -74,7 +74,33 @@ empty). **Load more history** extends by two weeks. Failed reads preserve the la
 applied window and usable context with stale/incomplete warnings; known revoked
 sources are excluded. Polling preserves drafts, focus, selection and reader anchors,
 pauses while hidden and backs off failures. Optimistic reconciliation matches `mid`.
-Uncertain sends do not invent a new ID. Explicit sampling only suggests drafts.
+Uncertain sends do not invent a new ID. Sampling suggestions remain disabled on every host.
+
+### Sidebar and host chat
+
+The single-level sidebar stays beside the selected thread, including at narrow
+widths. Current, pending and legacy contacts retain their separate categories.
+The selected button has `aria-current`; rows show connection status, relative latest
+activity and an explicit Unread badge, without avatars. Invite someone lives in
+the sidebar. Empty states distinguish no contacts, no selection and no messages
+in the selected contact's loaded history window.
+
+The compact contact header and reply footer are sticky. The composer follows
+messages in document order; latest-edge scrolling subtracts its height. The
+in-flow footer spacer reserves 232px plus device/host safe-area clearance, not
+body padding. Exact IDs remain in routing and explicit context disclosures,
+not ordinary labels or sender headings. Contact information opens a keyboard
+accessible Fulcra User ID popover with exact selectable IDs; clipboard success
+alone changes the copy icon to a check. Denied clipboard access offers manual copy.
+
+Discuss sends a host request, not a direct peer reply. After acceptance, conditional
+guidance explains expanding host input if details are hidden; it never claims a
+model turn is running or complete. OK dismisses once; Don't show again stores only
+a boolean UI preference, with an app-lifetime fallback when storage is blocked.
+Rejection and uncertain delivery stay distinct. An uncertain host-message attempt
+pauses Discuss for that contact for the app session, including after navigation.
+Direct Send never opens this guidance. Local sandbox tests do not establish the
+actual host's floating input size or chat visibility behavior.
 
 ## Metadata and handoffs
 

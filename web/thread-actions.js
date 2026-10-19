@@ -2,6 +2,8 @@ import { clearPostedDraft, matchesPost, messageId, postRecord } from './connecti
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
+import { showHostGuidance } from './host-guidance.js';
+import { contactName, readable } from './contact-identity.js';
 const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
@@ -11,15 +13,19 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const label = doc.createElement('label');
   const input = doc.createElement('textarea'); input.rows = 1; input.maxLength = 4000; input.className = 'composer-input';
   input.value = draft.value; label.append(input);
-  // Grow the input line-by-line up to 4 lines; only then does it scroll.
+  // Grow up to four lines (two on narrow screens), then scroll the draft.
   const autosize = () => {
+    const edge = doc.querySelector('#messages')?.lastElementChild?.getBoundingClientRect();
+    const follow = doc.activeElement === input && edge && Math.abs(edge.bottom - container.getBoundingClientRect().top) <= 40;
     input.style.height = 'auto';
     const s = getComputedStyle(input);
     const border = parseFloat(s.borderTopWidth) + parseFloat(s.borderBottomWidth);
-    const max = (parseFloat(s.lineHeight) || 22) * 4 + parseFloat(s.paddingTop) + parseFloat(s.paddingBottom) + border;
+    const lines = parseFloat(s.getPropertyValue('--composer-lines')) || 4;
+    const max = (parseFloat(s.lineHeight) || 22) * lines + parseFloat(s.paddingTop) + parseFloat(s.paddingBottom) + border;
     const full = input.scrollHeight + border;
     input.style.overflowY = full > max ? 'auto' : 'hidden';
     input.style.height = `${Math.min(full, max)}px`;
+    if (follow) doc.defaultView.scrollBy(0, edge.bottom - container.getBoundingClientRect().top + 9);
   };
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary send-to-peer';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));
@@ -81,11 +87,11 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   }
   const update = () => {
     const current = view();
-    const contactName = current.thread?.identifier || current.thread?.accountName || 'your contact';
-    const placeholder = `Message ${contactName}…`;
+    const name = contactName(current.thread);
+    const placeholder = `Message ${name}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = app.getHostVersion()?.name;
-    const hintText = `Send replies to ${contactName}; Discuss opens it in ${host || 'chat'}.`;
+    const hintText = `Send replies to ${name}; Discuss requests help in ${host || 'chat'}.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
@@ -96,7 +102,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       for (const s of outgoing) {
         const option = doc.createElement('option'); option.value = s.id;
         const duplicate = outgoing.some(other => other.id !== s.id && other.name === s.name);
-        option.textContent = s.name ? `${s.name}${duplicate ? ` (${s.id})` : ''}` : s.id;
+        option.textContent = `${readable(s.name, 'Outbox')}${duplicate ? ` (${outgoing.indexOf(s) + 1})` : ''}`;
         outbox.append(option);
       }
       draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
@@ -122,7 +128,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     autosize();
     send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !current.viewingAgent?.trim() || !input.value.trim()
       || draft.posts.some(p => p.state === 'sending' || p.state === 'uncertain');
-    handoff.disabled = !supported || lifecycle.pending || !isCurrent() || !context();
+    handoff.disabled = !supported || lifecycle.pending || draft.handoffUncertain || !isCurrent() || !context();
   };
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
   outbox.addEventListener('change', () => { draft.outbox = outbox.value; update(); });
@@ -143,7 +149,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
-    const report = text => { status.textContent = `Peer ${peer}, message ${mid}: ${text}`; };
+    const originName = contactName(view().thread);
+    const report = text => { status.textContent = `${originName}: ${text}`; };
     draft.value = '';
     draft.posts.push(post); lifecycle.pending = true; changed(); update();
     report('Posting…');
@@ -203,7 +210,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const session = source?.setupSession, snapshot = context();
     const text = sessionHandoff(submitted, snapshot, session);
     const version = draft.version, token = lifecycle.token();
-    const origin = `Submitted request #${++lifecycle.requestSequence} for peer ID ${JSON.stringify(peerId())} (not the current draft): `;
+    const origin = `Submitted request #${++lifecycle.requestSequence} for ${contactName(view().thread)} (not the current draft): `;
     const report = message => { status.textContent = origin + message; };
     const current = () => isCurrent() && lifecycle.current(token) && source?.setupSession === session;
     const restore = () => { if (draft.version === version) draft.value = submitted; };
@@ -218,12 +225,16 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       }
       attempted = true; report('Awaiting host confirmation…');
       const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, options);
-      if (result.isError) throw new Error('Host rejected message');
+      if (result.isError) {
+        restore(); report('Host rejected the request. No acceptance confirmed; draft retained.'); return;
+      }
       report('Request accepted by the host. Check the conversation for the response; no connection reply was posted by this handoff.');
+      if (current()) showHostGuidance(doc, app.getHostVersion()?.name, handoff);
       if (draft.version === version) { draft.value = ''; draft.version++; }
     } catch {
       restore();
-      report(attempted ? 'Could not confirm delivery. Check the conversation before retrying; draft retained.'
+      if (attempted) draft.handoffUncertain = true;
+      report(attempted ? 'Could not confirm delivery. Check the conversation; Discuss is paused for this contact for this app session to avoid duplicates. Draft retained.'
         : 'Could not confirm context attachment. No message sent; draft retained.');
     } finally { lifecycle.pending = false; lifecycle.onChange(); }
   });

@@ -32,14 +32,67 @@
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
-  /* Bottom breathing room (symmetric with the top) plus whatever the host
-     reports it needs reserved for its input bar. max() avoids double-counting
+  /* Floating host input clearance plus device/host safe-area insets.
+     max() avoids double-counting
      when the device safe area is exposed via both env() and the host context. */
-  --footer-clearance: calc(24px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
+  --footer-clearance: calc(232px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
+/* Persistent single-level contacts rail; the document remains the scroll owner. */
+.contacts-layout { display: grid; grid-template-columns: minmax(120px, 26%) minmax(0, 1fr); gap: 20px; align-items: start; }
+/* Span the status rows too: bottom feedback must not push the rail upward. */
+#connection-list { grid-column: 1; grid-row: 1 / 4; position: sticky; top: 12px; max-height: calc(100vh - var(--footer-clearance) - 24px); overflow-y: auto; min-width: 0; border-right: 1px solid var(--divider); padding-right: 12px; }
+#connection-detail { min-width: 0; }
+#connection-detail, #selection-empty { grid-column: 2; grid-row: 1; }
+#send-status { grid-column: 2; grid-row: 2; }
+#context-status { grid-column: 2; grid-row: 3; }
+.contacts-layout { row-gap: 0; }
+body main { max-width: 1200px; }
+body .contact-header { position: sticky; top: 0; z-index: 3; background: #000; padding: 8px 0; margin: 0; }
+body #thread-composer { position: sticky; bottom: var(--footer-clearance); z-index: 2; background: #000; padding: 12px 0; border-top: 1px solid var(--divider); }
+body .thread-button { padding: 10px 8px; gap: 6px; flex-wrap: wrap; }
+.thread-button[aria-current='true'] { background: var(--violet-tint); box-shadow: inset 3px 0 var(--lavender); }
+body #invite { margin: 0; width: 100%; justify-content: start; }
+body .section-tag, body .list-intro { display: none; }
+@media (max-width: 520px) {
+  body main { padding-inline: 8px; }
+  .contacts-layout { gap: 10px; grid-template-columns: minmax(105px, 32%) minmax(0, 1fr); }
+  #connection-list { padding-right: 6px; }
+  body .section-header { gap: 4px; flex-wrap: wrap; }
+  body .detail-topbar { gap: 4px; flex-wrap: wrap; }
+  .composer-input { --composer-lines: 2; }
+  body #thread-composer:not(:empty) { padding: 6px; }
+  #thread-composer .composer-actions { margin-top: 4px; gap: 4px; flex-wrap: nowrap; }
+  #thread-composer .composer-actions button { min-height: 32px; padding: 4px; font-size: 12px; gap: 3px; }
+  #thread-composer .composer-actions .btn-icon { width: 14px; height: 14px; }
+  #thread-composer .composer-hint { margin-top: 4px; font-size: 11px; line-height: 1.3; }
+  body .contact-header { gap: 4px; padding-block: 4px; }
+  .contact-headings h2 { font-size: 18px; }
+  body .section-header h2 { padding: 3px; letter-spacing: 0; }
+}
+
+#contact-identity { position: absolute; right: 0; top: 100%; width: min(340px, 100%); background: var(--raised); border: 1px solid var(--divider); padding: 12px; z-index: 5; }
+#contact-identity > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-top: 8px; }
+#contact-identity [role='status'] { grid-column: 1 / -1; margin: 0; }
+#contact-identity input { width: 100%; font-size: 12px; }
+.copy-success { animation: copy-check .2s ease-out; }
+@keyframes copy-check { from { transform: scale(.8); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
 * { box-sizing: border-box; }
+body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
+body .row-avatar-wrap { width: auto; height: auto; flex: none; }
+body .unread-dot { display: none; position: static; width: auto; height: auto; border: 0; border-radius: 4px; padding: 2px 5px; font-size: 11px; background: var(--violet-tint); color: var(--lavender); }
+body .unread-dot.on { display: inline-block; }
+body .pending-row { flex-wrap: wrap; padding: 8px; }
+body .pending-row .thread-text { min-width: 0; }
+body .thread-text { min-width: 0; flex-basis: 100%; }
+body .thread-name { white-space: normal; overflow: visible; }
+.relationship-state { display: block; font-size: 11px; color: var(--muted); }
+body #connections > li { padding: 0; }
+body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
+#host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
+#host-guidance::backdrop { background: #0009; }
 [hidden] { display: none !important; }
 body { margin: 0; overflow-wrap: anywhere; }
 /* Edge spacing lives on <main>, not <body>: some hosts reset body padding,
@@ -276,9 +329,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 .unread-dot.on { visibility: visible; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
-/* Floating reply composer: sticks to the top so it stays reachable while the
-   newest messages (at the bottom) are in view. */
-#thread-composer { position: sticky; top: 0; z-index: 3; }
+/* Reply footer remains below history with room for the host floating input. */
+#thread-composer { position: sticky; top: auto; z-index: 3; }
 #thread-composer:not(:empty) { background: #000; border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }

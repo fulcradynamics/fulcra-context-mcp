@@ -4,6 +4,14 @@
 // ChatGPT, or a live account. Dev-only; never shipped in the built app.
 import { scenario, own } from './mock-data.js';
 
+// Preview empty states using the same app/SDK bridge, not a replacement mock UI.
+const state = new URLSearchParams(location.search).get('state');
+if (state === 'no-history') scenario.rows = {};
+if (state === 'no-contacts') {
+  scenario.catalog = []; scenario.rows = {};
+  scenario.shares = { own_fulcra_userid: own, incoming: [], outgoing: [] };
+}
+
 const CATALOG_PREFIX = 'Available data types, grouped by compatible tool: ';
 const text = t => ({ content: [{ type: 'text', text: t }] });
 

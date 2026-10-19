@@ -11,7 +11,7 @@ for (const kind of ['direct', 'multiparty']) {
       await ui.locator('.thread-button').filter({ hasText: peer }).filter({ hasNotText: 'Weekend' }).click();
       await expect(ui.locator('#messages .message-row')).toHaveCount(3);
     }
-    await expect(ui.locator('#message-title')).toHaveText(kind === 'direct' ? peer : 'Weekend');
+    await expect(ui.locator('#message-title')).toHaveText(kind === 'direct' ? 'Alex' : 'Weekend');
     await expect(ui.getByRole('button', {
       name: 'Discuss in synthetic', exact: true,
     })).toBeEnabled();
