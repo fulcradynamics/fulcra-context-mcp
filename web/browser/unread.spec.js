@@ -58,6 +58,8 @@ test('slow list previews do not hold up opening a contact', async ({ page }) => 
 
 test('failed opening reads do not turn a later poll into an acknowledgement', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true });
+  // Settle read-only auto-selection before failing the explicit opening read.
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
   await page.evaluate(() => { window.failReads = true; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect(ui.locator('#message-status')).toContainText('Could not load messages');

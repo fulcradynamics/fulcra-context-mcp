@@ -11,10 +11,11 @@ import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { icon, History, Settings } from './icons.js';
+import { createDebugPreview, previewAssessment, previewMessages, acknowledgementPreview, setupDebugControls } from './debug-preview.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
 
-export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
+export function setupMessages(app, doc, requestRefresh, presentation = 'global', debug = createDebugPreview()) {
   const panel = doc.querySelector('#connection-detail');
   const listPanel = doc.querySelector('#connection-list');
   const title = doc.querySelector('#message-title');
@@ -87,6 +88,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
+  const syncDebug = setupDebugControls(doc, debug, () => selected?.peer);
+  const ackPreview = doc.createElement('p'); ackPreview.id = 'debug-ack-status'; ackPreview.className = 'meta'; ackPreview.hidden = true;
+  status.after(ackPreview);
+  let visibleMessages = [], liveTopic = '';
+  const stopDebug = debug.subscribe(peer => {
+    if (peer !== selected?.peer) return;
+    syncDebug();
+    renderAssessment(assessment, previewAssessment(selected.assessment, debug.get(peer)));
+    renderDisplay();
+  });
   const converted = doc.createElement('p'); converted.hidden = true;
   const convertedLabel = doc.createElement('span'); convertedLabel.textContent = 'Converted from legacy connection';
   const oldMessages = doc.createElement('button'); oldMessages.type = 'button'; oldMessages.textContent = 'chat about old messages';
@@ -121,6 +132,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         statusTimer = setTimeout(renderStatus, 1000);
       } else text += 'Automatic retries are paused.';
     } else if (displayed && !displayed.messages.length) text = `No messages with ${contactName(selected)} in this history window. Send a message below to start a conversation, or load more history.`;
+    const overrides = debug.get(selected.peer);
+    if (!unavailable && !loadFailed) {
+      if (overrides.messages === 'empty') text = 'No messages in this history window. (Debug preview)';
+      if (overrides.messages === 'error') text = 'Could not load messages. (Debug preview; live retries unchanged)';
+    }
+    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt || !!displayed;
+    messages.hidden = overrides.messages === 'loading';
+    ackPreview.hidden = !overrides.ack;
+    ackPreview.textContent = overrides.ack ? `Debug preview: ${acknowledgementPreview[overrides.ack]}` : '';
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages,
@@ -205,7 +225,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     // Do not expose a routing identifier as a subtitle or unnamed fallback.
     contactSubtitle.textContent = '';
     contactSubtitle.hidden = !contactSubtitle.textContent || contactSubtitle.textContent === name;
-    renderAssessment(assessment, thread.assessment);
+    renderAssessment(assessment, previewAssessment(thread.assessment, debug.get(thread.peer)));
+    syncDebug();
     assessment.hidden = false;
     const account = thread.accountName && thread.accountName !== thread.identifier ? thread.accountName : '';
     contactMeta.textContent = thread.participants
@@ -218,9 +239,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     refreshLegacyHandoff();
   };
   // The thread's current topic (latest meaningful one), shown under the name.
-  const setThreadTopic = messages => {
-    const topic = messages.map(m => m.record.topic)
-      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) ?? '';
+  const setThreadTopic = () => {
+    const topic = debug.get(selected?.peer).topic || liveTopic;
     contactTopic.textContent = topic;
     contactTopic.hidden = !topic;
   };
@@ -245,15 +265,24 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         if (!Number.isFinite(bt)) return -1;
         return at - bt;
       }) };
-    const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
+    liveTopic = result.messages.map(m => m.record.topic)
+      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) || '';
+    visibleMessages = result.messages.filter(({ record }) => record.kind !== 'ack'
       || (record.body != null && (typeof record.body !== 'string'
         || (record.body.trim() && record.body.trim().toLowerCase() !== 'ack'))));
-    messageList.update(visible, () => {
+    renderDisplay(() => {
       setTitle(selected);
-      setThreadTopic(result.messages);
       renderStatus();
       placeMore();
       updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
+    });
+  }
+
+  function renderDisplay(afterRender = () => {}) {
+    messageList.update(previewMessages(visibleMessages, debug.get(selected?.peer)), () => {
+      setThreadTopic();
+      renderStatus();
+      afterRender();
     });
   }
 
@@ -275,7 +304,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
 
   async function read(discovery) {
     if (!selected) return true;
-    loading.hidden = !firstAttempt;
+    renderStatus();
     const requestGeneration = generation, requestSourceGeneration = sourceGeneration;
     const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
     try {
@@ -333,7 +362,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
     } finally {
-      if (current()) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
+      if (current()) { firstAttempt = false; renderStatus(); more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
     }
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
@@ -384,6 +413,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     returnFocus = button;
     button?.setAttribute('aria-current', 'true');
     messageList.clear();
+    visibleMessages = []; liveTopic = '';
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
@@ -396,6 +426,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     panel.hidden = false; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
+    renderDisplay();
     requestRefresh();
   }
   return { select, back: onBack, refresh: read, failed, contextLifecycle,
@@ -403,6 +434,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     dispose() {
     generation++; selected = undefined;
     messageList.dispose();
+    stopDebug();
     clearTimeout(statusTimer); loading.hidden = true;
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);

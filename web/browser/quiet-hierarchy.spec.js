@@ -4,7 +4,7 @@ import { open } from './harness.js';
 test('quiet contact hierarchy keeps assessment in Advanced and name beside info', async ({page}) => {
   const ui = await open(page,390,{listOnly:true});
   await expect(ui.locator('#message-title')).toHaveText('Weekend');
-  await expect(ui.locator('.relationship-state')).toHaveCount(0);
+  await expect(ui.locator('.relationship-state')).toBeHidden();
   await expect(ui.locator('#contact-assessment')).toBeHidden();
   const name = await ui.locator('#message-title').boundingBox();
   const info = await ui.locator('.identity-info').boundingBox();

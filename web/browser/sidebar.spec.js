@@ -45,7 +45,7 @@ test('empty history gives a readable contact-specific next step', async ({ page 
 
 test('contact assessment remains available in Advanced without redundant row labels', async ({ page }) => {
   const ui = await open(page);
-  await expect(ui.locator('.relationship-state')).toHaveCount(0);
+  await expect(ui.locator('.relationship-state')).toBeHidden();
   await ui.locator('#advanced-toggle').click();
   await expect(ui.locator('#contact-assessment')).toBeVisible();
 });
