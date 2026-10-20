@@ -124,10 +124,32 @@ def _readback(api, entry, record):
     return matches[0] if matches else None
 
 
+def _clear_attention(api, entry):
+    """Replying addresses what needed the user, so a saved attention status no
+    longer applies. Best effort: the post already succeeded."""
+    from .contact_status import parse_status, write_status
+    try:
+        if not (parse_status(entry.get('description')) or {}).get('attention'):
+            return False
+        description = write_status(entry['description'], dict(
+            attention=False, reason='Waiting on them',
+            assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')))
+        api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
+        return channel_entry(api, entry['fulcra_userid'], entry['id']).get('description') == description
+    except Exception:
+        return False
+
+
 def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
          kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None,
          expected_peer_userids=None):
     result = dict(mid=mid, outbox=outbox, peer_userid=peer_userid, peer_acknowledged=False)
+
+    def posted(entry, row):
+        # A message or reply answers the contact; an ack only marks read.
+        cleared = {} if kind == 'ack' else {'attention_cleared': _clear_attention(api, entry)}
+        return {**result, 'status': 'posted', 'record': row, **cleared}
+
     attempted = False
     try:
         if (not _uuid(peer_userid) or not _uuid(mid)
@@ -155,7 +177,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
                             format_checker=jsonschema.FormatChecker())
         existing = _readback(api, entry, record)
         if existing:
-            return {**result, 'status': 'posted', 'record': existing}
+            return posted(entry, existing)
         if api.validate_records(outbox, [record], 'v1'):
             raise ValueError('Channel schema validation failed; nothing submitted.')
         for attempt in range(2):
@@ -178,7 +200,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
             for poll in range(2):
                 observed = _readback(api, entry, record)
                 if observed:
-                    return {**result, 'status': 'posted', 'record': observed}
+                    return posted(entry, observed)
                 if poll == 0:
                     time.sleep(RETRY_DELAY)
             if uploaded:

@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.16.1 / contacts UI v62 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.3 / contacts UI v64 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v62.html`, `ui://fulcra/contacts/threads/v62.html` and
-`ui://fulcra/contacts/thread/v62.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v64.html`, `ui://fulcra/contacts/threads/v64.html` and
+`ui://fulcra/contacts/thread/v64.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -92,6 +92,8 @@ Under the preview, each contact shows a quiet saved-assessment reason, amber whe
 it needs attention. It appears only when every own channel has an assessment (or
 any says attention); the full assessment and oldest time remain in its title and
 the selected contact's Advanced panel. Assessment is distinct from unread state.
+Contacts needing attention sort first, then unread contacts, then by latest
+activity; contacts without a readable message come last.
 
 Opening a thread reads each channel's latest record, then loads from one week
 before the earlier latest incoming/outgoing record through now (one week ago if
@@ -166,6 +168,9 @@ reason is trimmed single-line Unicode, 1–80 code points without controls. Malf
 status is unknown and cannot be silently replaced. Any own-channel attention wins;
 clear requires every own channel to have a valid clear assessment. The oldest time
 is disclosed. Status is not unread state; an ack alone cannot resolve a decision.
+A posted message or reply (not an ack) through `agent_connection_send` rewrites an
+attention status on that channel to `Waiting on them` and reports `attention_cleared`;
+a failed clear does not fail the post.
 Use current status preferences and complete scoped reads; optional write failure
 must not block read/report/checkpoint work. Multiparty status stays in chat.
 

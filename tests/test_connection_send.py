@@ -124,3 +124,44 @@ async def test_event_identifier_preserves_conversion_provenance(api, monkeypatch
     assert result['verified'] and result['changed']
     assert len(updates) == 1
     assert entry['description'] == description.replace('"Old"', '"New"')
+
+
+def _with_status(api, attention):
+    from fulcra_mcp.contact_status import write_status
+    api.description = write_status('connect-agents-with-anyone channel', dict(
+        attention=attention, reason='Waiting on you' if attention else 'Up to date', assessed_at='2026-10-13T12:00:00Z'))
+    api.updates = []
+    api.resolve_data_type = lambda channel, fulcra_userid: [dict(
+        id=channel, fulcra_userid=fulcra_userid, api_version='v1', recordable=True,
+        description=api.description, record_spec={'type': 'event'})]
+    def update(base, type_id, change):
+        api.updates.append((base, type_id, change)); api.description = change['description']
+    api.update_data_type = update
+
+
+@pytest.mark.parametrize('kind', ['message', 'reply'])
+def test_posted_message_or_reply_clears_attention(api, kind):
+    from fulcra_mcp.contact_status import parse_status
+    _with_status(api, True)
+    result = send(api, **({'kind': 'reply', 'in_reply_to': TARGET} if kind == 'reply' else {}))
+    assert result['status'] == 'posted' and result['attention_cleared'] is True
+    assert api.updates[0][:2] == ('Event', OUT.split('/')[1])
+    status = parse_status(api.description)
+    assert status['attention'] is False and status['reason'] == 'Waiting on them'
+
+
+def test_ack_and_clear_status_leave_status_alone(api):
+    _with_status(api, True)
+    result = send(api, kind='ack', body='ack', in_reply_to=TARGET)
+    assert result['status'] == 'posted' and 'attention_cleared' not in result and api.updates == []
+    _with_status(api, False)
+    api.rows = []
+    assert send(api)['attention_cleared'] is False and api.updates == []
+
+
+def test_failed_clear_does_not_fail_the_post(api):
+    _with_status(api, True)
+    def denied(*args): raise HTTPError('u', 403, 'denied', None, None)
+    api.update_data_type = denied
+    result = send(api)
+    assert result['status'] == 'posted' and result['attention_cleared'] is False
