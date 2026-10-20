@@ -47,7 +47,7 @@ async def test_contact_identifier_http_auth_and_contract(tmp_path, monkeypatch):
         assert tool['annotations']['idempotentHint'] is True
         status_tool = next(t for t in listed if t['name'] == 'set_contact_status')
         assert set(status_tool['inputSchema']['properties']) == {'data_type', 'peer_userid', 'attention', 'reason'}
-        assert status_tool['_meta']['ui']['visibility'] == ['model']
+        assert status_tool['_meta']['ui']['visibility'] == ['app']
         assert status_tool['annotations']['readOnlyHint'] is False
         status_call = {'name': 'set_contact_status', 'arguments': {
             'data_type': 'Event/12345678-1234-4234-8234-123456789abc',

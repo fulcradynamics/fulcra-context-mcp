@@ -83,7 +83,7 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
         descriptor, = (await rpc("resources/read", direct_read))["result"]["contents"]
         assert descriptor["uri"] == item["uri"]
         assert descriptor["mimeType"] == item["mimeType"]
-        assert json.loads(descriptor["text"])["open_tool"] == {"name": "agent_contacts_open", "arguments": {}}
+        assert json.loads(descriptor["text"])["open_tool"] == {"name": "agent_contact_open", "arguments": {}}
         # Discovery failures must not masquerade as an empty peer list.
         factory.side_effect = RuntimeError("backend offline")
         for query in ["anyquery", "Agent Contacts", "unmatched"]:

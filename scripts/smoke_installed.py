@@ -24,20 +24,33 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.16.1'
+                assert initialized.serverInfo.version == '1.17.0'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
                 tools = {t.name:t for t in (await client.list_tools()).tools}
+                assert 'agent_contacts_open' not in tools
+                for name in ('agent_connection_send', 'set_contact_identifier', 'set_contact_status',
+                             'get_contact_preferences', 'set_contact_preferences',
+                             'fulcra_settings_read', 'fulcra_settings_update',
+                             'prepare_agent_invitation', 'match_agent_invitations'):
+                    assert tools[name].meta['ui']['visibility'] == ['app']
+                assert 'model' in (tools['send_agent_message'].meta or {}).get('ui', {}).get('visibility', ['model'])
+                metadata = tools['update_data_type_metadata']
+                assert metadata.inputSchema['required'] == ['data_type']
+                assert set(metadata.inputSchema['properties']) == {
+                    'data_type', 'name', 'description', 'expected_description'}
+                rejected_metadata = await client.call_tool('update_data_type_metadata', {'data_type': 'Event'})
+                assert rejected_metadata.structuredContent['status'] == 'rejected'
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 for name in ('prepare_agent_invitation', 'match_agent_invitations'):
-                    assert tools[name].meta['ui']['visibility'] == ['app', 'model']
+                    assert tools[name].meta['ui']['visibility'] == ['app']
                     assert tools[name].annotations.readOnlyHint is False
                 assert tools['prepare_agent_invitation'].inputSchema['required'] == ['data_type']
                 assert tools['prepare_agent_invitation'].inputSchema['properties']['open_invitation']['default'] is False
                 assert tools['match_agent_invitations'].inputSchema['properties'] == {}
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
-                assert tools['fulcra_settings_read'].meta['ui']['visibility'] == ['app', 'model']
+                assert tools['fulcra_settings_read'].meta['ui']['visibility'] == ['app']
                 rejected = await client.call_tool('fulcra_settings_update', {'set': {'interval': 30}})
                 assert rejected.isError
                 schema = tools['agent_connection_send'].inputSchema
@@ -61,27 +74,29 @@ async def main():
                 assert set(status.inputSchema['required']) == {'data_type', 'peer_userid', 'attention', 'reason'}
                 assert 'assessed_at' not in status.inputSchema['properties']
                 assert status.annotations.readOnlyHint is False
-                assert status.meta['ui']['visibility'] == ['model']
+                assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v62.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v62.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v62.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v63.html', 'global'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v63.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
-                    text = (await client.read_resource(uri)).contents[0].text
+                    resource = (await client.read_resource(uri)).contents[0]
+                    assert resource.meta['openai/ui'] == {
+                        'preferredDisplayMode': 'fullscreen', 'availableDisplayModes': ['fullscreen']}
+                    text = resource.text
                     assert f'name="connection-presentation" content="{marker}"' in text
                     assert 'id="message-back"' not in text
                     assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 24px' in text
                     for value in ('id="check-status"', 'fulcra_check_status', 'Start automatic checking', 'Check for new messages',
                                   'set-up-agent-contacts', 'check-messages skill'):
                         assert value in text, value
-                    for value in ('ack-status', 'Read acknowledgement unconfirmed',
-                                  'Read acknowledgement rejected', 'no duplicate acknowledgement'):
+                    for value in ('ack-status', 'confirm messages read',
+                                  'The read state is kept and no duplicate will be sent.'):
                         assert value in text, value
-                    for value in ('open_invitation=true', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
+                    for value in ('open_invitation followed by one space', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
@@ -90,8 +105,13 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v63.html?startup=resource')).contents[0]
+                assert '<meta name="connection-startup" content="resource">' in direct.text
+                assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
+                listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
+                assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v62 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v63 entrypoints verified.')
 
 
 if __name__ == '__main__':

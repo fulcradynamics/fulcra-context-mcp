@@ -62,7 +62,27 @@ arguments/results, UI resources and skill bodies are outside this serialized
 budget; keep longer workflows in skills while preserving essential safety and
 routing in tool metadata and backend enforcement.
 
-## Before/after measurement
+## Skill-first surface (1.17.0)
+
+Compared with the unchanged 1.16.1 source at
+`0a86795acd6f1f7df92aeb4a78287497a7266766`, using the same locked environment,
+namespace `fulcra` and prod-mode command above:
+
+- Model-visible tools: **39 → 30**. Nine domain operations move to app-only,
+  one redundant opener is removed and one generic metadata updater is added.
+- Candidate/charged bytes: **53,778 → 44,333**, a reduction of **9,445 (17.56%)**.
+- Shared-budget headroom when measured alone: **19,667 bytes**; not reserved.
+- Raw MCP tools JSON (including app-only tools): **46,513 → 47,276 bytes**.
+  This increases because app operations remain callable and metadata update is new;
+  it is not the model-facing context budget.
+- Initialize instructions: **396 → 395 bytes**. No description/instruction truncation.
+
+The remaining contact opener is `agent_contact_open`; canonical `send_agent_message`
+and the separate `open_file_manager` remain model-visible. Native settings, UI
+operations and mentions keep their app-only calls. This is a local working-tree
+measurement, not a claim that the plugin or a native host loaded these tools.
+
+## Historical description-compaction measurement
 
 Baseline: merge revision `8acd245d0f84115dcbe7828ad277be8300d36c24`, incorporating
 main `913e1e07cbc2e1595352e9a744592ed57ca760fd`. Metadata was captured **after the

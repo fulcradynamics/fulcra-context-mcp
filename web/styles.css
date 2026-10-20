@@ -465,10 +465,6 @@ html { overflow-anchor: none; }
 
 /* Use host mode, not viewport width, to choose spacing. Insets stay separate. */
 :root[data-display-mode='fullscreen'] { --composer-clearance: 24px; }
-.compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
-.compact-threads .invite-section > p:not([role='status']) { display: none; }
-.compact-threads #connections > li { padding: 0; }
-.compact-threads #connection-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
 

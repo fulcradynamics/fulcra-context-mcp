@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
-for (const presentation of ['global', 'thread', 'threads']) {
+for (const presentation of ['global', 'thread']) {
   for (const sampling of [false, true]) {
     test(`${presentation} has no reply suggestions with sampling=${sampling}`, async ({ page }) => {
       const ui = await open(page, 900, { presentation, sampling });

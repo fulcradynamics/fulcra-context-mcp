@@ -5,12 +5,12 @@ import { spinButton, continueMessage } from './toast.js';
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
   + 'First offer a single-person invitation or an open invitation I can share with a group. For a single-person invitation, ask for my name and the name of the person I am inviting. '
-  + 'For that single-person choice, then prepare a dedicated unshared channel and call prepare_agent_invitation(data_type) to durably generate its random code. Show me a copyable invitation prompt for the other person to give their agent, '
-  + 'using the returned own_userid and code and the connection skill URL. Their agent must share its own channel with me and its FIRST message topic must be exactly handshake followed by one space and the code. Do not ask for the other user\'s ID; if I already gave it, share the prepared outbox with exactly that user after preparing the code. '
+  + 'Follow the skill’s private invitation procedure using available generic tools. Without secure code execution, the native Invite someone dialog supports single-person only; new open invitations are unavailable on this host. Reuse verified existing prepared open codes and matching when available. Do not loop back to the dialog for open mode or silently downgrade it. Never invent a random code. Show me a copyable invitation prompt for the other person to give their agent, '
+  + 'using my verified Fulcra user ID and persisted code and the connection skill URL. Their agent must share its own channel with me and its FIRST message topic must be exactly handshake followed by one space and the code. Do not ask for the other user\'s ID; if I already gave it, share the prepared outbox with exactly that user after preparing the code. '
   + 'This request authorizes you to prepare a dedicated unshared outbox with the identifier <their name>\'s agent (for example Lucian\'s agent) and the original setup session URL when available, without another confirmation. '
   + 'Then ask whether I want to add optional context about what the invite is for, so you can personalize the prompt and draft an outgoing message. '
-  + 'For a single-person invitation, this request authorizes match_agent_invitations to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Keep it unshared until that match; unmatched sharing needs my explicit consent. '
-  + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Call prepare_agent_invitation(data_type, open_invitation=true); use its returned topic exactly: open_invitation followed by one space and the code, NOT handshake. The template is never shared; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
+  + 'For a single-person invitation, this request authorizes the skill’s verified matching procedure to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Keep it unshared until that match; unmatched sharing needs my explicit consent. '
+  + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Follow the skill’s open-invitation procedure; use the topic exactly: open_invitation followed by one space and the code, NOT handshake. The template is never shared; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
 
 // Sends one user request to the chat after clearing any attached thread context.
 // opts.button: show a spinner on the triggering button instead of an inline
@@ -78,7 +78,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   const alt = doc.createElement('div'); alt.className = 'dialog-alt';
   alt.hidden = !app.getHostCapabilities()?.message?.text;
   const altText = doc.createElement('p'); altText.className = 'dialog-alt-text';
-  altText.textContent = `Inviting a group, or want help? Continue in ${host} and your agent will set it up.`;
+  altText.textContent = `Inviting a group, or want help? Continue in ${host}. New open invitations require secure code execution in that host; this dialog creates single-person invitations only.`;
   const chat = doc.createElement('button'); chat.type = 'button'; chat.className = 'dialog-alt-action'; chat.textContent = `Continue in ${host}`;
   alt.append(altText, chat);
   dialog.append(head, intro, form, alt); doc.body.append(dialog);
@@ -90,7 +90,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
       .filter(([, value]) => value.trim()).map(([key, value]) => `${key}: ${value.trim()}`);
     // Keep the dialog open with a spinner on the button during send; then close.
     await requestInChat(app, status, invitationPrompt + (entered.length ? ` Details I already entered: ${entered.join('; ')}.` : ''),
-      `${continueMessage(app, handoff.inlineList)} No invitation has been sent yet.`,
+      `${continueMessage(app)} No invitation has been sent yet.`,
       { button: chat, toast: handoff.notifySent });
     close();
   });

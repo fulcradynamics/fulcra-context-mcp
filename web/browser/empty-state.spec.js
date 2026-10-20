@@ -3,7 +3,7 @@ import { open } from './harness.js';
 
 const emptyText = 'Contacts that you’ve invited (or that have invited you) will show here when the connection is complete.';
 
-for (const presentation of ['global', 'threads']) test(`empty contacts offer an invitation without panel guidance: ${presentation}`, async ({page}) => {
+for (const presentation of ['global', 'thread']) test(`empty contacts offer an invitation without panel guidance: ${presentation}`, async ({page}) => {
   const ui = await open(page, 390, {listOnly: true, presentation});
   await expect(ui.locator('#connections-empty')).toBeHidden();
   await page.evaluate(() => { window.excludeOwn = true; window.excludeOut = true; window.excludeIncoming = true; });
