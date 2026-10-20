@@ -1,8 +1,23 @@
 # Agents I Know
 
-Server 1.17.0 / contacts UI v66 / file manager v3 requires a skill-first plugin for model-driven contact operations.
+Server 1.17.1 / contacts UI v67 / file manager v3 requires a skill-first plugin for model-driven contact operations.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
+
+## Chat-only controls
+
+With `FULCRA_CONTACTS_CONTROLS=chat`, the server serves the bundle with its
+`connection-controls` meta set to `chat`, and every action control (the
+composer, **Continue in chat**, **Invite someone’s agent**, **Set up automatic
+checking**, **Ask my agent**, **Update connection**, **End contact**, **Open file**
+and **chat about old messages**) is replaced by teal monospace text such as
+`Ask ChatGPT to reply to Alex`, using the host's name, with a copy button for the
+request (`Reply to Alex`). Nothing is sent to chat. Polling, matching,
+acknowledging on open and selected-contact context continue. Hosts that support
+`updateModelContext` also get a short general context naming this app, the
+suggested requests and the skill for each, ahead of any selected-contact context.
+Unset or any other value keeps the controls described below (meta `full`); the
+browser harness uses `full` unless a test passes `controls: 'chat'`.
 
 ## Entrypoints and discovery
 
@@ -10,9 +25,9 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 open the full-panel list; optional exact `peer_fulcra_userid` or `thread_id`
 selects an authorized contact without acknowledging messages. App-only
 `fulcra_open` retains the native global entrypoint. Both use the same packaged
-`fulcra_mcp/ui/contacts.html` renderer, through `ui://fulcra/contacts/v66.html`
-and `ui://fulcra/contacts/thread/v66.html`. The direct-list URI is
-`ui://fulcra/contacts/thread/v66.html?startup=resource` and needs no tool result.
+`fulcra_mcp/ui/contacts.html` renderer, through `ui://fulcra/contacts/v67.html`
+and `ui://fulcra/contacts/thread/v67.html`. The direct-list URI is
+`ui://fulcra/contacts/thread/v67.html?startup=resource` and needs no tool result.
 The obsolete compact opener/resource are removed without aliases.
 OpenAI resource metadata advertises only fullscreen; the generic MCP Apps bridge
 may separately support PiP. Host mode changes never reset selection or drafts.
