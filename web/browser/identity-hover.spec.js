@@ -8,7 +8,7 @@ test('touch can open and dismiss identity without hover', async ({page}) => {
   const info = ui.locator('.identity-info');
   await info.tap();
   await expect(ui.locator('#contact-identity')).toBeVisible();
-  await expect(ui.locator('#contact-identity input').first()).toBeFocused();
+  await expect(ui.locator('#contact-identity .identity-id').first()).toBeFocused();
   await ui.locator('#message-title').tap();
   await expect(ui.locator('#contact-identity')).toBeHidden();
 });
@@ -19,8 +19,8 @@ test('identity disclosure bridges hover, focus, and click without stealing focus
   const panel = ui.getByRole('dialog', {name:'Fulcra User ID'});
   await info.hover();
   await expect(panel).toBeVisible();
-  await expect(panel.locator('input').first()).not.toBeFocused();
-  await panel.locator('input').first().hover();
+  await expect(panel.locator('.identity-id').first()).not.toBeFocused();
+  await panel.locator('.identity-id').first().hover();
   await page.clock.runFor(500);
   await expect(panel).toBeVisible();
   await panel.getByRole('button',{name:'Copy ID'}).first().click();

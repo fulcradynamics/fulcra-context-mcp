@@ -6,8 +6,8 @@ test('IDs are private until the keyboard-accessible identity popover opens', asy
   expect(await ui.locator('body').innerText()).not.toContain(peer);
   await ui.getByRole('button', { name: 'Contact information', exact: true }).click();
   const popover = ui.getByRole('dialog', { name: 'Fulcra User ID' });
-  await expect(popover.locator('input').nth(1)).toHaveValue(peer);
-  await expect(popover.locator('input').nth(2)).toHaveValue(other);
+  await expect(popover.locator('.identity-id').nth(1)).toHaveText(peer);
+  await expect(popover.locator('.identity-id').nth(2)).toHaveText(other);
   await popover.getByRole('button', { name: 'Copy ID' }).first().click();
   await expect(popover).toContainText('Select and copy');
   await page.keyboard.press('Escape');
@@ -137,7 +137,7 @@ test('copy indicates success only after the clipboard resolves and closes outsid
   await expect(dialog.getByRole('button', {name:'Copied',exact:true})).toHaveCount(0);
   expect(await ui.locator('body').evaluate(el => el.ownerDocument.defaultView.copiedID)).toBe(peer);
   await ui.locator('body').evaluate(el => el.ownerDocument.defaultView.finishCopy());
-  await expect(dialog.getByRole('button', {name:'Copied',exact:true})).toHaveText('✓');
+  await expect(dialog.getByRole('button', {name:'Copied',exact:true})).toHaveClass(/copy-success/);
   await ui.locator('#message-title').click();
   await expect(dialog).toBeHidden();
 });
@@ -147,10 +147,10 @@ for (const width of [320, 900]) {
     const ui = await open(page, width);
     await ui.getByRole('button', {name:'Contact information',exact:true}).click();
     const dialog = ui.getByRole('dialog', {name:'Fulcra User ID'});
-    const input = await dialog.locator('input').first().boundingBox();
-    const copy = await dialog.locator('button').first().boundingBox();
-    expect(copy.x).toBeGreaterThanOrEqual(input.x + input.width);
-    expect(Math.abs(copy.y + copy.height / 2 - input.y - input.height / 2)).toBeLessThan(2);
+    const id = await dialog.locator('.identity-id').first().boundingBox();
+    const copy = await dialog.locator('.identity-copy').first().boundingBox();
+    expect(copy.x).toBeGreaterThanOrEqual(id.x + id.width);
+    expect(Math.abs(copy.y + copy.height / 2 - id.y - id.height / 2)).toBeLessThan(2);
   });
 }
 
@@ -164,7 +164,7 @@ test('repeat copy clears success while pending, on failure, and fences reopened 
   const info = ui.getByRole('button', {name:'Contact information',exact:true});
   await info.click();
   const dialog = ui.getByRole('dialog', {name:'Fulcra User ID'});
-  const copy = dialog.locator('button').first();
+  const copy = dialog.locator('.identity-copy').first();
   await copy.click();
   await ui.locator('body').evaluate(el => el.ownerDocument.defaultView.copies[0].resolve());
   await expect(copy).toHaveAttribute('aria-label','Copied');
@@ -173,7 +173,7 @@ test('repeat copy clears success while pending, on failure, and fences reopened 
   await expect(copy).not.toHaveClass(/copy-success/);
   await ui.locator('body').evaluate(el => el.ownerDocument.defaultView.copies[1].reject(new Error('denied')));
   await expect(dialog).toContainText('Select and copy');
-  await expect(copy).toHaveText('⧉');
+  await expect(copy).not.toHaveClass(/copy-success/);
   await expect(copy).toHaveAttribute('aria-label','Copy ID');
   await copy.click();
   await page.keyboard.press('Escape');
@@ -233,7 +233,7 @@ test('an ID-valued contact label never becomes the visible name', async ({ page 
   await expect(ui.locator('#message-title')).toHaveText('Unnamed contact');
   expect(await ui.locator('body').innerText()).not.toContain(peer);
   await ui.getByRole('button', {name:'Contact information',exact:true}).click();
-  await expect(ui.getByRole('dialog', {name:'Fulcra User ID'}).locator('input')).toHaveValue(peer);
+  await expect(ui.getByRole('dialog', {name:'Fulcra User ID'}).locator('.identity-id')).toHaveText(peer);
 });
 
 test('contacts stay selectable beside the thread and composer follows history', async ({ page }) => {

@@ -36,7 +36,7 @@ for (const width of [320, 390, 900]) test(`instructional layout and aligned rail
 test('untargeted launch stays instructional through polls and invites without forms', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true });
   await expect(ui.locator('#selection-empty')).toBeVisible();
-  await expect(ui.locator('#selection-empty h2')).toHaveText('A shared conversation. Between agents you know.');
+  await expect(ui.locator('#selection-empty h2')).toHaveText('A shared conversation between agents you know.');
   await expect(ui.locator('#connection-detail')).toBeHidden();
   await page.clock.runFor(11000);
   await expect(ui.locator('#selection-empty')).toBeVisible();
