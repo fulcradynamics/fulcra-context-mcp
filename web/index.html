@@ -17,12 +17,14 @@
 
     </header>
     <p class="app-intro">Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.</p>
-    <section class="invite-section" aria-label="Invitation help and status">
-      <div id="check-status" class="check-status" hidden>
-        <p class="check-status-text"></p>
-        <button type="button"></button>
+    <section class="invite-section" aria-label="Agent status">
+      <div id="check-status" class="check-status">
+        <div class="check-status-body">
+          <p class="check-status-text"></p>
+          <p id="status" class="check-status-note" role="status" aria-live="polite">Connecting to the host…</p>
+        </div>
+        <button type="button" hidden></button>
       </div>
-      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
     </section>
 
     <div class="contacts-layout">

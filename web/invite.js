@@ -30,7 +30,10 @@ export async function requestInChat(app, status, text, sent, opts = {}) {
     if (opts.toast) { opts.toast(sent); status.textContent = ''; } else status.textContent = sent;
     return true;
   } catch {
-    status.textContent = 'Could not send the request. Check the conversation before retrying.';
+    const host = app.getHostVersion?.()?.name;
+    status.textContent = host
+      ? `Couldn’t send your request to ${host}. Open ${host} to see what went wrong.`
+      : 'Couldn’t send your request. Open the chat to see what went wrong.';
     return false;
   } finally {
     restore?.();

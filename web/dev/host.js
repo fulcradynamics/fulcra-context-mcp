@@ -67,7 +67,9 @@ addEventListener('message', ({ data: r, source }) => {
       content: { type: 'text', text: JSON.stringify(['Sounds good — let’s do it.', 'Thanks, I’ll follow up tomorrow.']) } });
   } else if (r.method === 'ui/message') {
     // Dev-only: delay the send ack so the button spinner is visible before the toast.
-    setTimeout(() => reply(r.id, {}), 2000);
+    // state=handoff-error surfaces the #status error label that lives in the gap
+    // between the check-status card and the side panel.
+    setTimeout(() => reply(r.id, state === 'handoff-error' ? { isError: true } : {}), 2000);
   } else if (r.method === 'ui/update-model-context') {
     reply(r.id, {});
   } else if (r.id !== undefined && typeof r.method === 'string' && r.method.startsWith('ui/')) {

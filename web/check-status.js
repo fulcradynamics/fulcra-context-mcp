@@ -47,9 +47,14 @@ export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue i
   });
   async function refresh() {
     if (doc.visibilityState !== 'visible') return;
+    // Keep the card open with a loading line through the first fetch so it doesn't
+    // collapse (and jolt the side panel) between the connect message clearing and
+    // the status arriving. Later refreshes leave the existing line in place.
+    if (!text.textContent) text.textContent = 'Checking your agent’s status…';
     try { current = describeCheckStatus(await readCheckStatus(app)); } catch { current = null; }
-    row.hidden = !current;
-    if (!current) return;
+    // The card collapses on its own (CSS :has) when both the status line and the
+    // feedback note are empty, so here we only fill or clear the status line.
+    if (!current) { text.textContent = ''; button.hidden = true; return; }
     text.textContent = current.text;
     button.textContent = current.action;
     button.hidden = !canMessage;
