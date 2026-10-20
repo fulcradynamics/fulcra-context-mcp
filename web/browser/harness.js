@@ -6,12 +6,12 @@ export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-400
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
 // Explicit read-only opener for layout tests; untargeted launches stay unselected.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, sampling = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false } = {}) {
+export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, sampling = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, controls = 'full' } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,controls})=>{
   window.direct = direct;
   window.second = second;
   window.holdReads = holdReads; window.checkStatus = checkStatus;
@@ -88,8 +88,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
      || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
   }); frame.srcdoc=bundle.replace('name="connection-presentation" content="global"', `name="connection-presentation" content="${presentation}"`)
-    .replace('</head>', resourceStartup ? '<meta name="connection-startup" content="resource"></head>' : '</head>');
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second});
+    .replace('</head>', resourceStartup ? '<meta name="connection-startup" content="resource"></head>' : '</head>')
+    .replace('name="connection-controls" content="full"', `name="connection-controls" content="${controls}"`);
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,controls});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();

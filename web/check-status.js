@@ -1,6 +1,7 @@
 import { requestInChat } from './invite.js';
 import { showToast } from './toast.js';
 import { icon, Sparkles, X } from './icons.js';
+import { CHAT_ONLY, chatInstruction } from './chat-only.js';
 
 const REFRESH_MS = 60000;
 // UI-only preference (never an account ID or message): keep the dismissed nudge down.
@@ -27,6 +28,14 @@ export async function readCheckStatus(app) {
 const explainer = host => `Set up ${host} to automatically check for new messages and reply on your behalf. `
   + 'New messages still show up here either way — this just lets your agent act on them without you asking.';
 
+const setupAction = (doc, host, className, onSetup) => {
+  if (CHAT_ONLY) return chatInstruction(doc, host, 'set up automatic checking');
+  const button = doc.createElement('button'); button.type = 'button'; button.className = className;
+  button.textContent = 'Set up automatic checking';
+  button.addEventListener('click', () => onSetup(button));
+  return button;
+};
+
 // The prominent, dismissible card shown atop the message view when no schedule exists.
 function fillStickyCard(container, host, onSetup, onDismiss) {
   const doc = container.ownerDocument;
@@ -41,10 +50,7 @@ function fillStickyCard(container, host, onSetup, onDismiss) {
   head.append(dismiss);
   const text = doc.createElement('p'); text.className = 'onboarding-text'; text.textContent = explainer(host);
   // Same teal-tint style as the side-panel invite button (not the solid primary).
-  const button = doc.createElement('button'); button.type = 'button'; button.className = 'onboarding-action';
-  button.textContent = 'Set up automatic checking';
-  button.addEventListener('click', () => onSetup(button));
-  container.append(head, text, button);
+  container.append(head, text, setupAction(doc, host, 'onboarding-action', onSetup));
 }
 
 // The quiet always-available version in the Advanced panel (no dismiss) so a user
@@ -53,10 +59,7 @@ function fillAdvanced(container, host, onSetup) {
   const doc = container.ownerDocument;
   container.replaceChildren();
   const text = doc.createElement('p'); text.className = 'meta'; text.textContent = explainer(host);
-  const button = doc.createElement('button'); button.type = 'button'; button.className = 'onboarding-advanced-action';
-  button.textContent = 'Set up automatic checking';
-  button.addEventListener('click', () => onSetup(button));
-  container.append(text, button);
+  container.append(text, setupAction(doc, host, 'onboarding-advanced-action', onSetup));
 }
 
 export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue in the conversation.',

@@ -516,3 +516,17 @@ html { overflow-anchor: none; }
   .welcome-illustration { width: 120px; margin-bottom: 12px; }
   .welcome-content > p { font-size: 12px; }
 }
+
+/* Chat-only instructions: emphasized teal monospace text (not a button look),
+   followed by a small icon-only copy button. */
+.chat-instruction { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--teal);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.chat-instruction > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.chat-instruction[hidden] { display: none; }
+.instruction-copy { flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center; background: transparent; color: var(--muted); border-radius: 6px; }
+.instruction-copy:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.instruction-copy.copy-success { color: var(--teal); }
+#thread-composer:has(> .chat-instruction) { background: transparent; border: 0; padding: 4px 0 8px; }
+#thread-composer > p.chat-instruction { margin: 0; color: var(--teal); font-size: 14px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

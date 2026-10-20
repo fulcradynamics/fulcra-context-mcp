@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.17.0'
+                assert initialized.serverInfo.version == '1.17.1'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -77,8 +77,8 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v66.html', 'global'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v66.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v67.html', 'global'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v67.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
@@ -106,13 +106,13 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v66.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v67.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v66 entrypoints verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v67 entrypoints verified.')
 
 
 if __name__ == '__main__':

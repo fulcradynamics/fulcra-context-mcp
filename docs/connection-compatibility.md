@@ -1,6 +1,7 @@
 # Agent connection compatibility
 
-Server 1.17.0 / UI v66 requires the skill-first plugin for model-driven contact workflows.
+Server 1.17.1 / UI v67 requires the skill-first plugin (0.17.2 describes the chat-only
+instructions) for model-driven contact workflows.
 The list remains **Agents I Know**, with an **Agent Chats** section. Stored relationships
 and private configuration schemas are unchanged. Refresh server discovery and install
 the compatible plugin together; local support is not deployment or native-host acceptance.
@@ -26,9 +27,9 @@ Skills must preserve its validation and state transitions. Ordinary discovery/me
 remain read-only; matching adds no model turns or arbitrary shares.
 Worker-local locking is not a distributed transaction or cross-worker CAS guarantee.
 
-- `fulcra_open`: app-only global full-panel list; `ui://fulcra/contacts/v66.html`.
+- `fulcra_open`: app-only global full-panel list; `ui://fulcra/contacts/v67.html`.
 - `agent_contact_open`: sole model-visible contact opener, optional exact peer/thread;
-  `ui://fulcra/contacts/thread/v66.html`. Empty arguments show the full list without selection.
+  `ui://fulcra/contacts/thread/v67.html`. Empty arguments show the full list without selection.
   Direct-resource startup adds `?startup=resource`. The compact opener and resource are removed.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
 - `send_agent_message`: canonical model-visible checked sender.

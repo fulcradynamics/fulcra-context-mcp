@@ -20,7 +20,7 @@ async def test_contact_resources_and_bundle():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         uri = tools['fulcra_open'].meta['ui']['resourceUri']
-        assert uri == 'ui://fulcra/contacts/v66.html'
+        assert uri == 'ui://fulcra/contacts/v67.html'
         html = (await client.read_resource(uri))[0].text
     assert '<h1>Agents I Know</h1>' in html
     assert 'Agent Contacts' in html
