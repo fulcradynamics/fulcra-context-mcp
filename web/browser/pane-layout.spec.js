@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { open, readOnlyThread } from './harness.js';
 
 for (const [width, height] of [[390,600], [320,700], [900,700]]) {
-  test(`panes own scrolling and pin empty/short composer at ${width}x${height}`, async ({page}) => {
+  test(`panes own scrolling; composer scrolls into its bottom gap at ${width}x${height}`, async ({page}) => {
     const ui = await open(page, width, readOnlyThread);
     await expect(ui.locator('#messages .message-row')).toHaveCount(6);
     await page.locator('iframe').evaluate((el,h) => el.style.height = `${h}px`, height);
@@ -15,21 +15,16 @@ for (const [width, height] of [[390,600], [320,700], [900,700]]) {
         horizontal:el.scrollWidth > el.clientWidth};
     });
     await expect.poll(async () => (await measure()).railBottom).toBe(height);
-    let m = await measure();
+    // The composer scrolls at the end of the conversation, not pinned; scroll to the
+    // bottom to bring it into its half-screen gap above the window edge.
+    await ui.locator('#message-area').evaluate(el => el.scrollTop = el.scrollHeight);
+    const m = await measure();
     expect(m.documentOverflow).toBe(false);
     expect(m.horizontal).toBe(false);
-    expect(m.composerBottom).toBe(height - 24);
-    await ui.locator('#message-area').evaluate(el => el.scrollTop = el.scrollHeight);
-    m = await measure();
+    expect(m.composerBottom).toBe(height / 2);
     expect(m.lastTop).toBeGreaterThanOrEqual(m.headerBottom);
     expect(m.lastBottom).toBeLessThanOrEqual(m.composerTop);
-    await page.evaluate(() => {window.emptyRecords = true;});
-    await page.clock.runFor(11000);
-    await expect(ui.locator('#messages li')).toHaveCount(0);
-    expect(await ui.locator('#thread-composer').evaluate(el => el.getBoundingClientRect().bottom)).toBe(height - 24);
-    // Host insets are separate, dynamic, and do not shorten the rail.
-    await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/host-context-changed',params:{safeAreaInsets:{top:0,right:12,bottom:20,left:16}}},'*'));
-    await expect.poll(() => ui.locator('#thread-composer').evaluate(el => el.getBoundingClientRect().bottom)).toBe(height - 44);
+    // Host insets are separate and do not shorten the rail.
     expect(await ui.locator('#connection-list').evaluate(el => el.getBoundingClientRect().bottom)).toBe(height);
     expect(await ui.locator('main').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBe(width <= 520 ? 24 : 40);
   });

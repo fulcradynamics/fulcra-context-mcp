@@ -1,10 +1,12 @@
 import { requestInChat } from './invite.js';
 import { showToast } from './toast.js';
+import { icon, Sparkles, X } from './icons.js';
 
 const REFRESH_MS = 60000;
+// UI-only preference (never an account ID or message): keep the dismissed nudge down.
+const DISMISS_KEY = 'fulcra.contacts.onboarding-dismissed';
 export const startPrompt = 'Please use the set-up-agent-contacts skill to start automatically checking my Fulcra messages. '
   + 'This is an explicit scheduling request: skip the invitation offer and ask whether I want checks only or checks with replies.';
-export const checkPrompt = 'Please use the check-messages skill to check my Fulcra messages now.';
 
 const call = async (app, args) => {
   const result = await app.callServerTool({ name: 'fulcra_check_status', arguments: args }, { timeout: 30000 });
@@ -22,42 +24,75 @@ export async function readCheckStatus(app) {
   return checked[0] ?? all[0];
 }
 
-export function describeCheckStatus(status) {
-  if (status.status === 'not_set_up') return { text: 'Your agent is not automatically checking for messages.', action: 'Start automatic checking', prompt: startPrompt };
-  if (status.status === 'never_checked') return { text: 'Your agent has not checked for messages yet.', action: 'Check for new messages', prompt: checkPrompt };
-  if (status.status === 'checked') {
-    const when = new Date(status.last_checked).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return { text: `Your agent last checked for messages ${when}.`, action: 'Check for new messages', prompt: checkPrompt };
-  }
-  return null;
+const explainer = host => `Set up ${host} to automatically check for new messages and reply on your behalf. `
+  + 'New messages still show up here either way — this just lets your agent act on them without you asking.';
+
+// The prominent, dismissible card shown atop the message view when no schedule exists.
+function fillStickyCard(container, host, onSetup, onDismiss) {
+  const doc = container.ownerDocument;
+  container.replaceChildren();
+  const head = doc.createElement('div'); head.className = 'onboarding-head';
+  head.append(icon(Sparkles, 'onboarding-icon', 18));
+  const title = doc.createElement('p'); title.className = 'onboarding-title'; title.textContent = 'Let your agent keep up for you';
+  head.append(title);
+  const dismiss = doc.createElement('button'); dismiss.type = 'button'; dismiss.className = 'onboarding-dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss'); dismiss.append(icon(X, 'btn-icon', 16));
+  dismiss.addEventListener('click', onDismiss);
+  head.append(dismiss);
+  const text = doc.createElement('p'); text.className = 'onboarding-text'; text.textContent = explainer(host);
+  // Same teal-tint style as the side-panel invite button (not the solid primary).
+  const button = doc.createElement('button'); button.type = 'button'; button.className = 'onboarding-action';
+  button.textContent = 'Set up automatic checking';
+  button.addEventListener('click', () => onSetup(button));
+  container.append(head, text, button);
+}
+
+// The quiet always-available version in the Advanced panel (no dismiss) so a user
+// who dismissed the card can still start setup from the UI.
+function fillAdvanced(container, host, onSetup) {
+  const doc = container.ownerDocument;
+  container.replaceChildren();
+  const text = doc.createElement('p'); text.className = 'meta'; text.textContent = explainer(host);
+  const button = doc.createElement('button'); button.type = 'button'; button.className = 'onboarding-advanced-action';
+  button.textContent = 'Set up automatic checking';
+  button.addEventListener('click', () => onSetup(button));
+  container.append(text, button);
 }
 
 export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue in the conversation.',
   notifySent = message => showToast(doc, { title: 'Request sent', description: message })) {
-  const row = doc.querySelector('#check-status');
-  const text = row.querySelector('.check-status-text');
-  const button = row.querySelector('button');
+  const sticky = doc.querySelector('#onboarding-thread');
+  const advanced = doc.querySelector('#onboarding-advanced');
   const feedback = doc.querySelector('#status');
-  let current = null, sending = false;
-  button.addEventListener('click', async () => {
-    if (!current || sending) return;
+  const host = app.getHostVersion()?.name || 'your agent';
+  let sending = false, notSetUp = false, dismissed = false;
+  try { dismissed = doc.defaultView.localStorage.getItem(DISMISS_KEY) === '1'; } catch { /* Opaque sandbox origin. */ }
+  const onSetup = async button => {
+    if (sending) return;
     sending = true;
-    await requestInChat(app, feedback, current.prompt, sentMessage, { button, toast: notifySent });
+    await requestInChat(app, feedback, startPrompt, sentMessage, { button, toast: notifySent });
     sending = false;
-  });
+  };
+  // Dismissing the prominent card sends the offer to the Advanced panel instead.
+  const onDismiss = () => {
+    dismissed = true;
+    try { doc.defaultView.localStorage.setItem(DISMISS_KEY, '1'); } catch { /* Session-only fallback. */ }
+    render();
+  };
+  fillStickyCard(sticky, host, onSetup, onDismiss);
+  fillAdvanced(advanced, host, onSetup);
+  function render() {
+    sticky.hidden = !(notSetUp && !dismissed);
+    advanced.hidden = !(notSetUp && dismissed);
+  }
   async function refresh() {
     if (doc.visibilityState !== 'visible') return;
-    // Keep the card open with a loading line through the first fetch so it doesn't
-    // collapse (and jolt the side panel) between the connect message clearing and
-    // the status arriving. Later refreshes leave the existing line in place.
-    if (!text.textContent) text.textContent = 'Checking your agent’s status…';
-    try { current = describeCheckStatus(await readCheckStatus(app)); } catch { current = null; }
-    // The card collapses on its own (CSS :has) when both the status line and the
-    // feedback note are empty, so here we only fill or clear the status line.
-    if (!current) { text.textContent = ''; button.hidden = true; return; }
-    text.textContent = current.text;
-    button.textContent = current.action;
-    button.hidden = !canMessage;
+    let status;
+    try { status = await readCheckStatus(app); } catch { status = null; }
+    // Only offer setup where the host can carry the request to chat, and only when
+    // no schedule exists.
+    notSetUp = canMessage && status?.status === 'not_set_up';
+    render();
   }
   refresh();
   const timer = setInterval(refresh, REFRESH_MS);

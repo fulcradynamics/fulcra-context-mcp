@@ -16,7 +16,7 @@ test('IDs are private until the keyboard-accessible identity popover opens', asy
 
 test('a successful handoff shows a host-named toast', async ({ page }) => {
   const ui = await open(page);
-  await ui.getByRole('button', { name: 'Discuss in synthetic' }).click();
+  await ui.getByRole('button', { name: 'Continue in synthetic' }).click();
   await expect(ui.locator('.toast')).toContainText('Request sent to synthetic');
   // The composer footer status lines were removed entirely.
   await expect(ui.locator('#send-status')).toHaveCount(0);
@@ -69,7 +69,6 @@ for (const [width, height] of [[390, 600], [320, 700], [900, 700]]) {
       const composer = await ui.locator('#thread-composer').boundingBox();
       expect(last.y).toBeGreaterThanOrEqual(header.y + header.height);
       expect(last.y + last.height).toBeLessThanOrEqual(composer.y + 2);
-      expect(await ui.locator('.footer-spacer').evaluate(el => el.offsetHeight)).toBe(24);
       expect(await ui.locator('body').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     };
     await visible();
@@ -102,22 +101,16 @@ test('long rail keeps Invite and first contact reachable at document bottom', as
   expect(first.y + first.height).toBeLessThanOrEqual(bounds.y + bounds.height);
 });
 
-test('composer reserves host overlay clearance below history', async ({ page }) => {
-  const ui = await open(page);
-  expect(await ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height)).toBe(24);
-  expect(await ui.locator('#thread-composer').evaluate(el => getComputedStyle(el).top)).toBe('auto');
-});
-
 test('uncertain host delivery is not retried across navigation', async ({ page }) => {
   const ui = await open(page);
   await page.evaluate(() => { window.holdMessages = true; });
-  await ui.getByRole('button', {name:'Discuss in synthetic'}).click();
+  await ui.getByRole('button', {name:'Continue in synthetic'}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   await page.clock.runFor(16000);
   await expect(ui.locator('.toast')).toContainText('Couldn’t confirm your request');
-  await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeDisabled();
+  await expect(ui.getByRole('button', {name:'Continue in synthetic'})).toBeDisabled();
   await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
-  await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeDisabled();
+  await expect(ui.getByRole('button', {name:'Continue in synthetic'})).toBeDisabled();
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
 });
 
@@ -188,9 +181,9 @@ test('a rejected direct send and a rejected handoff each surface an error toast'
   // The draft returns to the composer so it can be retried.
   await expect(ui.locator('.composer-input')).toHaveValue('Direct message');
   await page.evaluate(() => { window.rejectMessages = true; });
-  await ui.getByRole('button', {name:'Discuss in synthetic'}).click();
+  await ui.getByRole('button', {name:'Continue in synthetic'}).click();
   await expect(ui.locator('.toast')).toContainText('Couldn’t reach synthetic');
-  await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeEnabled();
+  await expect(ui.getByRole('button', {name:'Continue in synthetic'})).toBeEnabled();
 });
 
 test('user IDs in generated recipient headings remain private', async ({ page }) => {
