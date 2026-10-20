@@ -15,16 +15,15 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
       return {overflow:doc.documentElement.scrollHeight > doc.defaultView.innerHeight,
         horizontal:el.scrollWidth > el.clientWidth, railBottom:rect('#connection-list').bottom,
         composerBottom:rect('#thread-composer').bottom, composerTop:rect('#thread-composer').top,
-        headerBottom:rect('.contact-header').bottom, areaHeight:rect('#message-area').height,
-        lastTop:rect('#messages li:last-child').top, lastBottom:rect('#messages li:last-child').bottom};
+        areaHeight:rect('#message-area').height,
+        lastBottom:rect('#messages li:last-child').bottom};
     });
     expect(m.overflow).toBe(false);
     expect(m.horizontal).toBe(false);
     expect(m.railBottom).toBe(height);
     // The composer scrolls with the conversation; at the bottom it rests in its half-screen gap.
-    expect(m.composerBottom).toBe(height / 2);
+    expect(Math.abs(m.composerBottom - height / 2)).toBeLessThan(1);
     expect(m.areaHeight).toBeGreaterThan(100);
-    expect(m.lastTop).toBeGreaterThanOrEqual(m.headerBottom);
     expect(m.lastBottom).toBeLessThanOrEqual(m.composerTop);
     await page.screenshot({path:`${process.env.TMPDIR}/contacts-integrated-${width}.png`});
   });

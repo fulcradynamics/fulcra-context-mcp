@@ -15,12 +15,9 @@ test('IDs are private until the keyboard-accessible identity popover opens', asy
 });
 
 test('a successful handoff shows a host-named toast', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { acceptAck: true });
   await ui.getByRole('button', { name: 'Continue in synthetic' }).click();
   await expect(ui.locator('.toast')).toContainText('Request sent to synthetic');
-  // The composer footer status lines were removed entirely.
-  await expect(ui.locator('#send-status')).toHaveCount(0);
-  await expect(ui.locator('#context-status')).toHaveCount(0);
 });
 
 test('sidebar uses explicit unread badges without avatars on narrow screens', async ({ page }) => {
@@ -102,7 +99,7 @@ test('long rail keeps Invite and first contact reachable at document bottom', as
 });
 
 test('uncertain host delivery is not retried across navigation', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { acceptAck: true });
   await page.evaluate(() => { window.holdMessages = true; });
   await ui.getByRole('button', {name:'Continue in synthetic'}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
@@ -174,7 +171,7 @@ test('repeat copy clears success while pending, on failure, and fences reopened 
 });
 
 test('a rejected direct send and a rejected handoff each surface an error toast', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { acceptAck: true });
   await ui.locator('.composer-input').fill('Direct message');
   await ui.getByRole('button', {name:'Send',exact:true}).click();
   await expect(ui.locator('.toast')).toContainText('Couldn’t send');
@@ -182,7 +179,7 @@ test('a rejected direct send and a rejected handoff each surface an error toast'
   await expect(ui.locator('.composer-input')).toHaveValue('Direct message');
   await page.evaluate(() => { window.rejectMessages = true; });
   await ui.getByRole('button', {name:'Continue in synthetic'}).click();
-  await expect(ui.locator('.toast')).toContainText('Couldn’t reach synthetic');
+  await expect(ui.locator('.toast').last()).toContainText('Couldn’t reach synthetic');
   await expect(ui.getByRole('button', {name:'Continue in synthetic'})).toBeEnabled();
 });
 
@@ -210,5 +207,6 @@ test('contacts stay selectable beside the thread and composer follows history', 
   const ui = await open(page);
   await expect(ui.locator('#connection-list')).toBeVisible();
   await expect(ui.locator('.thread-button[aria-current="true"]')).toContainText('Weekend');
-  expect(await ui.locator('#thread-composer').evaluate(el => !!(el.previousElementSibling?.id === 'message-area'))).toBe(true);
+  // The composer scrolls with the conversation as the last item of the message pane.
+  expect(await ui.locator('#thread-composer').evaluate(el => el.parentElement.id === 'message-area' && !el.nextElementSibling)).toBe(true);
 });

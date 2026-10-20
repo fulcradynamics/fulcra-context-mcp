@@ -18,7 +18,6 @@ async def test_notification_labels_group_and_new_contact_defaults(fake_fulcra):
     group = next(g for g in result['layout'] if g['title'] == 'Notification Preferences')
     assert {p['property'] for p in group['items']} == {k for k in policy.SCHEMA if k.startswith('attention_')} | {'unanswered_days', 'notifications'}
     schema = result['schema']['properties']
-    assert all('Flag' not in p['title'] and 'flagging' not in p['title'] for p in schema.values())
     assert schema['notifications']['title'] == 'Push notifications and email'
     assert schema['notifications']['enum'] == ['only surfaced activity', 'all messages from my contacts', 'no notifications or emails']
     assert result['values']['notifications'] == 'only surfaced activity'

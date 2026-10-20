@@ -54,7 +54,6 @@ test('send carries full expected audience; widening invalidates context and pres
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
  await ui.getByRole('button',{name:'Continue in synthetic',exact:true}).click();
- await ui.getByRole('button',{name:'OK',exact:true}).click();
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Keep old draft');
  await page.evaluate(()=>window.audience.push('00000000-0000-4000-8000-000000000009'));
  await page.clock.runFor(11000);

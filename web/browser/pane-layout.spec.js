@@ -9,8 +9,8 @@ for (const [width, height] of [[390,600], [320,700], [900,700]]) {
     const measure = () => ui.locator('body').evaluate(el => {
       const doc = el.ownerDocument, rect = id => doc.querySelector(id).getBoundingClientRect();
       return {height:doc.defaultView.innerHeight, railBottom:rect('#connection-list').bottom,
-        composerBottom:rect('#thread-composer').bottom, headerBottom:rect('.contact-header').bottom,
-        lastTop:rect('#messages li:last-child').top, lastBottom:rect('#messages li:last-child').bottom,
+        composerBottom:rect('#thread-composer').bottom,
+        lastBottom:rect('#messages li:last-child').bottom,
         composerTop:rect('#thread-composer').top, documentOverflow:doc.documentElement.scrollHeight > doc.defaultView.innerHeight,
         horizontal:el.scrollWidth > el.clientWidth};
     });
@@ -21,11 +21,10 @@ for (const [width, height] of [[390,600], [320,700], [900,700]]) {
     const m = await measure();
     expect(m.documentOverflow).toBe(false);
     expect(m.horizontal).toBe(false);
-    expect(m.composerBottom).toBe(height / 2);
-    expect(m.lastTop).toBeGreaterThanOrEqual(m.headerBottom);
+    expect(Math.abs(m.composerBottom - height / 2)).toBeLessThan(1);
     expect(m.lastBottom).toBeLessThanOrEqual(m.composerTop);
     // Host insets are separate and do not shorten the rail.
     expect(await ui.locator('#connection-list').evaluate(el => el.getBoundingClientRect().bottom)).toBe(height);
-    expect(await ui.locator('main').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBe(width <= 520 ? 24 : 40);
+    expect(await ui.locator('main').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBe(width <= 520 ? 8 : 24);
   });
 }

@@ -59,7 +59,6 @@ test('message, loading and acknowledgement previews never enter sends or host co
   const attached = await page.evaluate(() => JSON.stringify(contexts));
   expect(attached).toContain('Broadcast message');
   expect(attached).not.toContain('PREVIEW ONLY');
-  await ui.getByRole('button', { name: 'OK', exact: true }).click();
   await ui.locator('.composer-input').fill('Real reply');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'agent_connection_send' && c.arguments.body === 'Real reply').length)).toBe(1);

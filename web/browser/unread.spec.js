@@ -57,7 +57,7 @@ test('slow list previews do not hold up opening a contact', async ({ page }) => 
 });
 
 test('failed opening reads do not turn a later poll into an acknowledgement', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true });
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false });
   // No opening reads or acknowledgements occur before the explicit choice.
   await expect(ui.locator('#connection-detail')).toBeHidden();
   await page.evaluate(() => { window.failReads = true; });

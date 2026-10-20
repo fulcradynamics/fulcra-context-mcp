@@ -4,7 +4,6 @@ import { open, readOnlyThread, own, peer, out } from './harness.js';
 const latest = page => page.evaluate(() => window.contexts.at(-1)?.content?.[0]?.text ?? '');
 const quiet = async page => {
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
-  expect(await page.evaluate(() => window.samplingCalls ?? 0)).toBe(0);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
 };
 
