@@ -1,5 +1,6 @@
 import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
+import { spinButton, continueMessage } from './toast.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
@@ -12,70 +13,90 @@ export const invitationPrompt = 'I want to invite another user to connect our ag
   + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Call prepare_agent_invitation(data_type, open_invitation=true); use its returned topic exactly: open_invitation followed by one space and the code, NOT handshake. The template is never shared; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
 
 // Sends one user request to the chat after clearing any attached thread context.
-export async function requestInChat(app, status, text, sent) {
+// opts.button: show a spinner on the triggering button instead of an inline
+// "Sending…" line. opts.toast: a (message) => void shown on success instead of
+// writing the sent message inline. Errors always report inline on status.
+export async function requestInChat(app, status, text, sent, opts = {}) {
   const lifecycle = getContextLifecycle(app, status);
   if (lifecycle.pending) return false;
   lifecycle.pending = true; lifecycle.onChange();
-  status.textContent = 'Sending request to the conversation…';
+  const restore = opts.button ? spinButton(opts.button) : null;
+  if (!opts.button) status.textContent = 'Sending request to the conversation…';
   try {
     await lifecycle.invalidate();
     if (!lifecycle.isClear()) throw new Error('Previous thread context not cleared');
     const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, { timeout: 15000 });
     if (result.isError) throw new Error('Host rejected message');
-    status.textContent = sent;
+    if (opts.toast) { opts.toast(sent); status.textContent = ''; } else status.textContent = sent;
     return true;
   } catch {
     status.textContent = 'Could not send the request. Check the conversation before retrying.';
     return false;
   } finally {
+    restore?.();
     lifecycle.pending = false; lifecycle.onChange();
   }
 }
 
-function field(doc, label, name, optional = false) {
-  const wrap = doc.createElement('label'); wrap.textContent = label;
+function field(doc, label, name, { optional = false, placeholder = '', help = '' } = {}) {
+  const wrap = doc.createElement('label');
+  const text = doc.createElement('span'); text.className = 'field-label'; text.textContent = label;
   const input = doc.createElement('input'); input.type = 'text'; input.name = name; input.maxLength = name === 'recipient_userid' ? 36 : 80;
-  input.required = !optional; wrap.append(input);
+  input.required = !optional; if (placeholder) input.placeholder = placeholder;
+  wrap.append(text, input);
+  if (help) { const hint = doc.createElement('span'); hint.className = 'field-help'; hint.textContent = help; wrap.append(hint); }
   return [wrap, input];
 }
 
 // Prepares a single-person invitation without the model, or hands what the user
 // typed to the invite skill in chat. Open invitations stay in chat.
-export function openInviteDialog(app, doc, status, returnFocus) {
+export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   doc.querySelector('#invite-dialog')?.remove();
   const dialog = doc.createElement('dialog'); dialog.id = 'invite-dialog'; dialog.className = 'app-dialog';
   dialog.setAttribute('aria-labelledby', 'invite-title');
+  const head = doc.createElement('div'); head.className = 'dialog-head';
   const title = doc.createElement('h2'); title.id = 'invite-title'; title.textContent = 'Invite someone';
+  head.append(title);
+  const intro = doc.createElement('p'); intro.className = 'dialog-intro';
+  intro.textContent = 'Send an invitation so your agents can message each other. It sets up a private connection just for the two of you.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
-  const [inviterLabel, inviter] = field(doc, 'Your name', 'inviter_name');
-  const [recipientLabel, recipient] = field(doc, 'Their name', 'recipient_name');
-  const [idLabel, userid] = field(doc, 'Their Fulcra user ID (optional)', 'recipient_userid', true);
-  const help = doc.createElement('p'); help.className = 'meta';
-  help.textContent = 'Creates a channel for this contact and an invitation to copy and send them. With their ID, the channel is shared with them now. For a group invitation, continue in chat.';
-  const error = doc.createElement('p'); error.className = 'meta'; error.setAttribute('role', 'alert');
+  const [inviterLabel, inviter] = field(doc, 'Your name', 'inviter_name', { placeholder: 'e.g. Jordan' });
+  const [recipientLabel, recipient] = field(doc, 'Their name', 'recipient_name', { placeholder: 'e.g. Alex' });
+  const [idLabel, userid] = field(doc, 'Their Fulcra user ID', 'recipient_userid',
+    { optional: true, placeholder: 'Optional', help: 'If you have it, you’ll connect right away. Otherwise they’ll get an invitation to accept.' });
+  const error = doc.createElement('p'); error.className = 'dialog-error'; error.setAttribute('role', 'alert');
   const actions = doc.createElement('div'); actions.className = 'dialog-actions';
-  const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
-  const chat = doc.createElement('button'); chat.type = 'button'; chat.textContent = 'Continue in chat';
-  chat.hidden = !app.getHostCapabilities()?.message?.text;
+  const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.className = 'dialog-ghost'; cancel.textContent = 'Cancel';
   const create = doc.createElement('button'); create.type = 'button'; create.className = 'primary'; create.textContent = 'Create invitation';
-  actions.append(cancel, chat, create);
-  form.append(inviterLabel, recipientLabel, idLabel, help, error, actions);
-  dialog.append(title, form); doc.body.append(dialog);
+  actions.append(cancel, create);
+  form.append(inviterLabel, recipientLabel, idLabel, error, actions);
+  // A separate path: hand the invite off to the agent in chat (e.g. for groups).
+  const host = app.getHostVersion()?.name || 'chat';
+  const alt = doc.createElement('div'); alt.className = 'dialog-alt';
+  alt.hidden = !app.getHostCapabilities()?.message?.text;
+  const altText = doc.createElement('p'); altText.className = 'dialog-alt-text';
+  altText.textContent = `Inviting a group, or want help? Continue in ${host} and your agent will set it up.`;
+  const chat = doc.createElement('button'); chat.type = 'button'; chat.className = 'dialog-alt-action'; chat.textContent = `Continue in ${host}`;
+  alt.append(altText, chat);
+  dialog.append(head, intro, form, alt); doc.body.append(dialog);
   const close = () => { dialog.close(); dialog.remove(); if (returnFocus?.isConnected) returnFocus.focus(); };
   cancel.addEventListener('click', close);
   dialog.addEventListener('cancel', e => { e.preventDefault(); close(); });
   chat.addEventListener('click', async () => {
     const entered = [['my name', inviter.value], ['their name', recipient.value], ['their Fulcra user ID', userid.value]]
       .filter(([, value]) => value.trim()).map(([key, value]) => `${key}: ${value.trim()}`);
-    close();
+    // Keep the dialog open with a spinner on the button during send; then close.
     await requestInChat(app, status, invitationPrompt + (entered.length ? ` Details I already entered: ${entered.join('; ')}.` : ''),
-      'Request sent. Continue in the conversation; no invitation has been sent yet.');
+      `${continueMessage(app, handoff.inlineList)} No invitation has been sent yet.`,
+      { button: chat, toast: handoff.notifySent });
+    close();
   });
   // Sandboxed hosts block form submission; validate and act on click.
   create.addEventListener('click', async () => {
     const missing = [inviter, recipient].find(input => !input.value.trim());
-    if (missing) { error.textContent = 'Enter both names.'; missing.focus(); return; }
-    create.disabled = true; error.textContent = 'Creating invitation…';
+    if (missing) { error.textContent = 'Please enter both names.'; missing.focus(); return; }
+    error.textContent = '';
+    const restore = spinButton(create);
     const args = { inviter_name: inviter.value.trim(), recipient_name: recipient.value.trim(),
       ...(userid.value.trim() ? { recipient_userid: userid.value.trim().toLowerCase() } : {}) };
     try {
@@ -85,8 +106,9 @@ export function openInviteDialog(app, doc, status, returnFocus) {
       showTemplate(invitationTemplate({ inviterAgent: `${args.inviter_name}'s ${app.getHostVersion()?.name || 'agent'}`,
         ownUserid: value.own_userid, topic: value.topic }), args.recipient_name);
     } catch (e) {
-      error.textContent = `Could not create the invitation. ${e.message} Check Pending before retrying.`;
-      create.disabled = false;
+      error.textContent = `Couldn’t create the invitation. ${e.message} Check Pending before retrying.`;
+    } finally {
+      restore();
     }
   });
   function showTemplate(text, name) {
@@ -112,9 +134,9 @@ export function openInviteDialog(app, doc, status, returnFocus) {
   return dialog;
 }
 
-export async function setupInvite(app, buttons, status) {
+export async function setupInvite(app, buttons, status, handoff = {}) {
   for (const button of buttons) button.addEventListener('click', () => {
-    if (!button.disabled) openInviteDialog(app, button.ownerDocument, status, button);
+    if (!button.disabled) openInviteDialog(app, button.ownerDocument, status, button, handoff);
   });
   try {
     await app.connect();

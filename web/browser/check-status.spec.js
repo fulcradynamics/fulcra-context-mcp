@@ -8,7 +8,7 @@ test('no schedule offers Start automatic checking, which asks the agent to set o
   await row.getByRole('button', {name: 'Start automatic checking'}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   expect(JSON.stringify(await page.evaluate(() => window.hostMessages))).toContain('set-up-agent-contacts');
-  await expect(ui.locator('#status')).toContainText('Request sent');
+  await expect(ui.locator('.toast')).toContainText('Request sent');
   await page.screenshot({path: `${process.env.TMPDIR ?? '../test-results'}/check-status-start.png`});
 });
 

@@ -126,6 +126,28 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .app-dialog .dialog-form { display: grid; gap: 12px; }
 .app-dialog .dialog-form p, .app-dialog > p { margin: 0 0 8px; }
+/* Friendly invite dialog: a warm header, plain intro, and themed inputs instead
+   of a clinical default-styled form. */
+.app-dialog { padding: 22px; box-shadow: 0 16px 48px #0008; }
+.app-dialog .dialog-head { margin-bottom: 10px; }
+.app-dialog .dialog-head h2 { margin: 0; font-size: 18px; }
+.app-dialog .dialog-intro { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog .dialog-form label { gap: 6px; font-size: 13px; color: #fff; font-weight: 500; }
+.app-dialog .dialog-form input[type=text] { min-height: 44px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 10px; background: var(--raised); color: #fff; font-weight: 400; }
+.app-dialog .dialog-form input[type=text]::placeholder { color: #6a6a71; }
+.app-dialog .dialog-form input[type=text]:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-color: transparent; }
+.app-dialog .field-help { font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.4; }
+.app-dialog .dialog-form .dialog-error { margin: 0; color: #ff8a80; font-size: 13px; line-height: 1.4; }
+.app-dialog .dialog-error:empty { display: none; }
+.app-dialog .dialog-ghost { background: transparent; }
+.app-dialog .dialog-ghost:hover:not(:disabled) { background: var(--raised); }
+.app-dialog .dialog-actions { margin-top: 6px; }
+.app-dialog .dialog-actions .dialog-ghost { margin-right: auto; }
+/* Secondary path: hand the invite to the agent in chat, set apart from Create. */
+.app-dialog .dialog-alt { border-top: 1px solid var(--divider); margin-top: 18px; padding-top: 16px; display: grid; gap: 10px; }
+.app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog .dialog-alt-action { justify-self: start; min-height: 0; padding: 7px 11px; font-size: 12px; }
+.app-dialog button:active:not(:disabled) { transform: scale(.98); }
 #invite-template { font-size: 13px; margin-bottom: 8px; }
 button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
 button.danger:hover:not(:disabled) { background: #ff8a802e; }
@@ -400,6 +422,21 @@ details[open] > summary { color: var(--violet); }
 #message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
 /* Loading label as a dark chip, matching the section-header badges. */
 .loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
+/* Spinner shown inside a button while its request is in flight. */
+.btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
+/* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
+.toast.toast-shown { opacity: 1; transform: translateY(0); }
+.toast-body { flex: 1; min-width: 0; }
+.toast-title { margin: 0; font-weight: 600; font-size: 14px; }
+.toast-text { margin: 2px 0 0; color: #c4c4cc; font-size: 13px; line-height: 1.45; }
+.toast-action { flex: none; min-height: 0; padding: 6px 10px; font-size: 12px; font-weight: 500; border-radius: 8px; background: var(--teal-tint); color: var(--teal); }
+.toast-action:hover:not(:disabled) { background: var(--teal-tint-hover); }
+.toast-action:active:not(:disabled) { transform: scale(.97); }
+.toast-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease; }
+.toast-close:hover:not(:disabled) { background: var(--surface); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: opacity .2s ease; transform: none; } }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 
@@ -437,7 +474,7 @@ html { overflow-anchor: none; }
 #selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
-.welcome-eyebrow { color: var(--teal); font-size: 12px; font-weight: 500; margin: 0 0 8px; }
+.welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
 #welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }

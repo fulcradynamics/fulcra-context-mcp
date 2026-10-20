@@ -38,7 +38,7 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
     await assertLayout();
     await page.screenshot({path:`${process.env.TMPDIR}/contacts-integrated-${width}.png`});
     await ui.getByRole('button', {name:'Check for new messages', exact:true}).click();
-    await expect(ui.locator('#status')).toContainText('Request sent');
+    await expect(ui.locator('.toast')).toContainText('Request sent');
     await assertLayout();
   });
 }

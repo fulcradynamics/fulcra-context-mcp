@@ -65,7 +65,10 @@ addEventListener('message', ({ data: r, source }) => {
   } else if (r.method === 'ui/create-sampling-message') {
     reply(r.id, { role: 'assistant', stopReason: 'endTurn',
       content: { type: 'text', text: JSON.stringify(['Sounds good — let’s do it.', 'Thanks, I’ll follow up tomorrow.']) } });
-  } else if (r.method === 'ui/message' || r.method === 'ui/update-model-context') {
+  } else if (r.method === 'ui/message') {
+    // Dev-only: delay the send ack so the button spinner is visible before the toast.
+    setTimeout(() => reply(r.id, {}), 2000);
+  } else if (r.method === 'ui/update-model-context') {
     reply(r.id, {});
   } else if (r.id !== undefined && typeof r.method === 'string' && r.method.startsWith('ui/')) {
     reply(r.id, {}); // Acknowledge any other request so the SDK never hangs.

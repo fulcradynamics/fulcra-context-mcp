@@ -1,4 +1,5 @@
 import { requestInChat } from './invite.js';
+import { showToast } from './toast.js';
 
 const REFRESH_MS = 60000;
 export const startPrompt = 'Please use the set-up-agent-contacts skill to start automatically checking my Fulcra messages. '
@@ -31,7 +32,8 @@ export function describeCheckStatus(status) {
   return null;
 }
 
-export function setupCheckStatus(app, doc, canMessage) {
+export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue in the conversation.',
+  notifySent = message => showToast(doc, { title: 'Request sent', description: message })) {
   const row = doc.querySelector('#check-status');
   const text = row.querySelector('.check-status-text');
   const button = row.querySelector('button');
@@ -39,9 +41,9 @@ export function setupCheckStatus(app, doc, canMessage) {
   let current = null, sending = false;
   button.addEventListener('click', async () => {
     if (!current || sending) return;
-    sending = true; button.disabled = true;
-    await requestInChat(app, feedback, current.prompt, 'Request sent. Continue in the conversation.');
-    sending = false; button.disabled = false;
+    sending = true;
+    await requestInChat(app, feedback, current.prompt, sentMessage, { button, toast: notifySent });
+    sending = false;
   });
   async function refresh() {
     if (doc.visibilityState !== 'visible') return;
