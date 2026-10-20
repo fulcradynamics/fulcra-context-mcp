@@ -26,7 +26,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const status = doc.querySelector('#connection-status');
   const listPanel = doc.querySelector('#connection-list');
   const list = doc.querySelector('#connections');
-  const count = doc.querySelector('#connection-count');
   const pendingSection = doc.querySelector('#pending-section');
   const pendingList = doc.querySelector('#pending-connections');
   const pendingRows = new Map();
@@ -36,10 +35,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const legacySection = doc.createElement('section');
   const legacyHeader = doc.createElement('div'); legacyHeader.className = 'section-header';
   const legacyTitle = doc.createElement('h2'); legacyTitle.textContent = 'Legacy Connections';
-  const legacyCount = doc.createElement('span'); legacyCount.className = 'section-count';
   const legacyRule = doc.createElement('span'); legacyRule.className = 'section-rule'; legacyRule.setAttribute('aria-hidden', 'true');
   const legacyTag = doc.createElement('span'); legacyTag.className = 'section-tag'; legacyTag.textContent = 'legacy';
-  legacyHeader.append(legacyTitle, legacyCount, legacyRule, legacyTag);
+  legacyHeader.append(legacyTitle, legacyRule, legacyTag);
   const legacyList = doc.createElement('ul'); legacyList.id = 'legacy-connections';
   const legacyHelp = doc.createElement('p'); legacyHelp.className = 'legacy-help';
   legacyHelp.textContent = 'From the older connect-our-agents skill. Convert to a Contact for more reliable messaging.';
@@ -222,7 +220,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           entry.thread = thread;
           entry.refresh();
         }
-        legacyCount.textContent = legacyRows.size ? String(legacyRows.size) : '';
         legacySection.hidden = legacyRows.size === 0;
         if (launchPending) {
           launchPending = false;
@@ -234,7 +231,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
 
         lastSuccess = new Date().toISOString();
-        count.textContent = String(discovery.threads.length);
         listFailed = false; listWarnings = discovery.warnings.join(' '); renderConnectionStatus();
         if (doc.visibilityState !== 'visible') return true;
         // Reveal the contacts as soon as discovery returns — the per-thread reads

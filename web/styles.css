@@ -32,11 +32,12 @@
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
-  /* Floating host input clearance plus device/host safe-area insets.
-     max() avoids double-counting
-     when the device safe area is exposed via both env() and the host context. */
+  /* Bottom clearance is a floor, not an addition: use our own spacing when the
+     host reports no bottom inset (native input minimized), but when the host
+     chrome is up its reported inset already reserves the room — don't stack ours
+     on top of it. max() also de-dupes the device safe area (env vs host). */
   --composer-clearance: 36px;
-  --footer-clearance: calc(var(--composer-clearance) + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
+  --footer-clearance: max(var(--composer-clearance), env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
@@ -55,10 +56,8 @@ body .thread-button[aria-current='true'], body .thread-button[aria-current='true
 .thread-button .thread-text { display: contents; }
 .thread-name { grid-column: 1; grid-row: 1; }
 .thread-time { grid-column: 2; grid-row: 1; }
-.thread-preview { grid-column: 1 / -1; grid-row: 2; }
-.status-badge { grid-column: 1 / -1; grid-row: 4; }
-.row-avatar-wrap { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
-.row-avatar-wrap:not(:has(.unread-dot.on)) { display: none; }
+.thread-preview { grid-column: 1 / -1; grid-row: 2; padding-right: 12px; }
+.status-badge { grid-column: 1 / -1; grid-row: 3; }
 body #invite { margin: 0; width: 100%; justify-content: start; }
 body .section-tag, body .list-intro { display: none; }
 @media (max-width: 520px) {
@@ -87,9 +86,10 @@ body .section-tag, body .list-intro { display: none; }
 @media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
 * { box-sizing: border-box; }
 body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
-body .row-avatar-wrap { width: auto; height: auto; flex: none; }
-body .unread-dot { display: none; position: static; width: auto; height: auto; border: 0; padding: 0; font-size: 11px; background: transparent; color: var(--lavender); }
-body .unread-dot.on { display: inline-block; }
+body .row-avatar-wrap { display: contents; }
+/* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
+body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #f0506b; font-size: 0; color: transparent; }
+body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
 body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
 body .pending-row .thread-text { min-width: 0; }
 body .thread-text { min-width: 0; flex-basis: 100%; }
@@ -100,7 +100,7 @@ body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr);
 .legacy-convert { grid-column: 1; justify-self: start; }
 .legacy-convert, .pending-assist { font-size: 12px; padding: 8px 6px; overflow-wrap: normal; }
 .legacy-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
-body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
+body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
 #host-guidance::backdrop { background: #0009; }
 #end-contact-dialog, .app-dialog { width: min(440px, 90vw); box-sizing: border-box; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: white; }
@@ -143,8 +143,6 @@ p { margin: 12px 0; }
 /* Weight and spacing separate sections without another layer of badges. */
 .section-header { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
 .section-header h2 { margin: 0; font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--muted); }
-.section-count { font-size: 12px; color: rgba(138, 138, 142, .6); font-variant-numeric: tabular-nums; }
-.section-count:empty { display: none; }
 .section-rule { display: none; }
 .section-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: rgba(86, 214, 183, .7); }
 
