@@ -13,6 +13,8 @@ for (const presentation of ['global', 'thread']) test(`empty contacts offer an i
   await expect(ui.locator('#connections')).toBeHidden();
   await expect(ui.locator('body')).not.toContainText('conversation panel');
   await page.screenshot({path: `${process.env.TMPDIR ?? '../test-results'}/empty-state-${presentation}.png`});
+  // Fit the frame to the viewport so the centered modal is on screen.
+  await page.locator('iframe').evaluate(el => el.style.height = '1100px');
   const invite = ui.locator('#invite');
   await expect(invite).toBeEnabled();
   await invite.click();

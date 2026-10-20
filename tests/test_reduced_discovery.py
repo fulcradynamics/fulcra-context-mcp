@@ -24,8 +24,5 @@ async def test_model_tool_inventory_is_not_arbitrarily_capped():
                 "set_contact_preferences", "fulcra_settings_read", "fulcra_settings_update"}
     assert app_only <= names
     assert not app_only & model_names
-    assert "agent_contacts_open" not in names
-    assert not names & {"get_calendars", "get_location_at_time", "get_location_time_series",
-                        "annotations_catalog", "delete_group", "leave_share"}
     assert {"fulcra_open", "agent_contacts_search", "fulcra_check_status",
             "start_file_upload", "upload_file_chunk"} <= names

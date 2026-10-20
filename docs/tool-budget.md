@@ -62,111 +62,16 @@ arguments/results, UI resources and skill bodies are outside this serialized
 budget; keep longer workflows in skills while preserving essential safety and
 routing in tool metadata and backend enforcement.
 
-## Skill-first surface (1.17.0)
+## Latest measurement (1.17.0)
 
-Compared with the unchanged 1.16.1 source at
-`0a86795acd6f1f7df92aeb4a78287497a7266766`, using the same locked environment,
-namespace `fulcra` and prod-mode command above:
+Against 1.16.1 (`0a86795`), same environment and namespace `fulcra`:
 
-- Model-visible tools: **39 → 30**. Nine domain operations move to app-only,
-  one redundant opener is removed and one generic metadata updater is added.
-- Candidate/charged bytes: **53,778 → 44,333**, a reduction of **9,445 (17.56%)**.
-- Shared-budget headroom when measured alone: **19,667 bytes**; not reserved.
-- Raw MCP tools JSON (including app-only tools): **46,513 → 47,276 bytes**.
-  This increases because app operations remain callable and metadata update is new;
-  it is not the model-facing context budget.
-- Initialize instructions: **396 → 395 bytes**. No description/instruction truncation.
+- Model-visible tools: **39 → 30** (nine contact operations made app-only, one
+  opener removed, `update_data_type_metadata` added).
+- Charged bytes: **53,778 → 44,333**, leaving **19,667 bytes** of shared headroom
+  when Fulcra is the only plugin. Nothing is truncated.
+- Raw MCP tools JSON, including app-only tools: 46,513 → 47,276 bytes. This is not
+  the model-facing budget.
 
-The remaining contact opener is `agent_contact_open`; canonical `send_agent_message`
-and the separate `open_file_manager` remain model-visible. Native settings, UI
-operations and mentions keep their app-only calls. This is a local working-tree
-measurement, not a claim that the plugin or a native host loaded these tools.
-
-## Historical description-compaction measurement
-
-Baseline: merge revision `8acd245d0f84115dcbe7828ad277be8300d36c24`, incorporating
-main `913e1e07cbc2e1595352e9a744592ed57ca760fd`. Metadata was captured **after the
-merge and before shortening**. After: the metadata changes accompanying this
-report. Locked environment: Python 3.14.7, FastMCP 3.4.7, MCP 1.28.1,
-fulcra-api 0.1.53, Pydantic 2.13.4. Both measurements use namespace `fulcra`.
-
-The actual baseline still had an experimental server filter: 31 model-visible
-tools, totaling 62,268 bytes. The comparison below restores its eight filtered
-consolidated tools using their real baseline definitions, so it compares the
-**same full surface**, not a smaller inventory against a larger one.
-
-To reproduce that projection, capture `Client(mcp).list_tools()` and initialize
-instructions at the baseline revision; also capture
-`Client(tools_mcp).list_tools()`. Combine by tool name, with composed-server
-entries taking precedence. Save the combined tools and original instructions
-as an inventory, then pass it to the current script with `--codex --inventory`.
-No backend calls or user credentials are needed. Do not describe this projection
-as the inventory actually advertised by the filtered baseline.
-
-- Full-surface candidate bytes: **78,701 → 53,778** (24,923 fewer; 31.67%).
-- Model-visible tools: **39 → 39**. After: all admitted when measured alone.
-- Function bytes: 36,854 → 35,799.
-- Repeated namespace overhead: 41,847 → 17,979.
-- Raw initialize instructions: **1,426 → 396 UTF-8 bytes**; after fits untruncated.
-- Raw visible tools/list array JSON, excluding initialize: 42,901 → 41,846 bytes.
-  This is `json.dumps(visible_tools, ensure_ascii=False, separators=(",", ":"))`
-  encoded as UTF-8, including the array brackets and commas. Each entry is an
-  MCP Tool `model_dump(by_alias=True, exclude_none=True)`.
-- After: largest spec 2,739 bytes; zero generic fallbacks or compacted schemas.
-- **10,222 bytes** remain in the shared accumulator when Fulcra is alone.
-  Other enabled plugins can still cause tools to be hidden.
-
-Obsolete unreleased-plugin tool aliases were removed from repeated instructions;
-current skills use current tool names. Persisted markers and explicit-consent
-requirements remain. Released legacy-mesh conversion/history support is unchanged.
-
-In the supplied baseline projection order, nine tools were hidden and 63,835
-bytes admitted; that hidden set is order-dependent. Aggregate candidate cost is
-not. Actual filtered baseline versus complete after is 62,268 → 53,778 bytes
-while restoring eight tools—not the equal-surface prose savings above.
-
-Each row includes its repeated namespace wrapper. A star marks a tool excluded
-by the baseline **server filter**, not by simulated host admission.
-
-| Tool | Before full | After | Saved bytes |
-|---|---:|---:|---:|
-| agent_connection_send | 2835 | 2089 | 746 |
-| agent_contact_open | 1682 | 975 | 707 |
-| agent_contacts_open | 1470 | 739 | 731 |
-| archive_data_type | 1563 | 951 | 612 |
-| create_data_type | 3351 | 2739 | 612 |
-| create_group * | 2611 | 1999 | 612 |
-| create_share | 2871 | 2259 | 612 |
-| delete_file | 1536 | 924 | 612 |
-| delete_records | 1861 | 1249 | 612 |
-| delete_share | 1653 | 1041 | 612 |
-| fulcra_settings_read | 1313 | 701 | 612 |
-| fulcra_settings_update | 1457 | 845 | 612 |
-| get_calendar_events * | 2021 | 1409 | 612 |
-| get_contact_preferences | 1594 | 982 | 612 |
-| get_data_catalog | 2477 | 1865 | 612 |
-| get_data_updates | 2341 | 1729 | 612 |
-| get_groups * | 1818 | 1206 | 612 |
-| get_location | 2622 | 2010 | 612 |
-| get_records | 2465 | 1853 | 612 |
-| get_sleep * | 2338 | 1726 | 612 |
-| get_time_series * | 2462 | 1850 | 612 |
-| get_user_info | 1345 | 733 | 612 |
-| get_workouts * | 1769 | 1157 | 612 |
-| join_group * | 1674 | 1062 | 612 |
-| leave_group * | 1740 | 1128 | 612 |
-| list_files | 1933 | 1321 | 612 |
-| list_shares | 1743 | 1131 | 612 |
-| match_agent_invitations | 1764 | 1044 | 720 |
-| open_file_manager | 1682 | 1070 | 612 |
-| prepare_agent_invitation | 1951 | 1173 | 778 |
-| read_file | 2066 | 1454 | 612 |
-| record_data | 2957 | 2345 | 612 |
-| restore_data_type | 1391 | 779 | 612 |
-| restore_file | 1451 | 839 | 612 |
-| send_agent_message | 2808 | 2156 | 652 |
-| set_contact_identifier | 1802 | 1094 | 708 |
-| set_contact_preferences | 1712 | 1100 | 612 |
-| set_contact_status | 2264 | 1355 | 909 |
-| write_file | 2308 | 1696 | 612 |
-| **Total** | **78701** | **53778** | **24923** |
+An earlier pass (1.16.1) shortened descriptions and server instructions on the same
+39-tool surface: 78,701 → 53,778 bytes, with initialize instructions 1,426 → 396 bytes.

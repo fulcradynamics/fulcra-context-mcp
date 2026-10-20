@@ -3,6 +3,8 @@ import { open, own, peer } from './harness.js';
 
 async function dialog(page) {
   const ui = await open(page, 900, {listOnly: true});
+  // Fit the frame to the viewport so the centered modal is on screen.
+  await page.locator('iframe').evaluate(el => el.style.height = '1100px');
   await ui.locator('#invite').click();
   return [ui, ui.getByRole('dialog', {name: 'Invite someone'})];
 }

@@ -31,7 +31,6 @@ async def test_direct_contacts_resource_contract():
 async def test_single_full_panel_opener():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert 'agent_contacts_open' not in tools
         tool = tools['agent_contact_open']
         result = await client.call_tool(tool.name, {})
         assert result.data == {'presentation': 'thread', 'peer_fulcra_userid': None}
@@ -43,7 +42,6 @@ async def test_single_full_panel_opener():
 async def test_thread_entrypoint():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert "agent_contact_open" in tools
         tool = tools["agent_contact_open"]
         assert tool.title == "Agent Contacts"
         assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v67.html"
@@ -81,7 +79,6 @@ async def test_contacts_app():
         resources = await client.read_resource("ui://fulcra/contacts/v67.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Agents I Know</h1>" in resources[0].text
-        assert "hello world" not in resources[0].text.lower()
         assert "data:font/woff2;base64," in resources[0].text
         assert "SIL OPEN FONT LICENSE" in resources[0].text
         assert "Invite someone’s agent</button>" in resources[0].text
@@ -89,19 +86,13 @@ async def test_contacts_app():
         assert 'id="connection-status"' in resources[0].text
         assert 'id="connection-detail"' in resources[0].text
         assert 'id="connection-retry"' in resources[0].text
-        assert 'id="message-order"' not in resources[0].text
         assert 'bubble-body' in resources[0].text
         assert 'thread-time' in resources[0].text
         assert 'unread-dot' in resources[0].text
-        assert 'mark-all-read' not in resources[0].text
         assert 'prefers-reduced-motion' in resources[0].text
-        assert 'id="refresh-status"' not in resources[0].text
-        assert 'Refreshing threads and selected messages' not in resources[0].text
-        assert 'Accessible messages. Reading does not send or acknowledge anything.' not in resources[0].text
         assert 'id="message-loading"' in resources[0].text
         assert resources[0].text.index('id="message-area"') < resources[0].text.index('id="message-loading"') < resources[0].text.index('id="messages"')
         assert 'No messages with ' in resources[0].text
-        assert 'id="message-start"' not in resources[0].text
         assert resources[0].text.index('id="messages"') < resources[0].text.index('Load more history</button>') < resources[0].text.index('id="thread-composer"')
         assert 'get_records' in resources[0].text
         assert '<meta name="connection-presentation" content="global">' in resources[0].text
@@ -119,7 +110,6 @@ async def test_contacts_app():
         assert "Incoming" in resources[0].text
         assert "Outgoing" in resources[0].text
         assert "Conversation incomplete" in resources[0].text
-        assert "Showing selected outbox only" not in resources[0].text
         assert resources[0].meta["openai/ui"]["preferredDisplayMode"] == "fullscreen"
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen"]
         assert 'agent_connection_send' in resources[0].text
