@@ -16,6 +16,7 @@ for (const presentation of ['global', 'threads']) test(`empty contacts offer an 
   const invite = ui.getByRole('button', {name: 'Invite a new contact'});
   await expect(invite).toBeEnabled();
   await invite.click();
+  await ui.getByRole('dialog', {name: 'Invite someone'}).getByRole('button', {name: 'Continue in chat'}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   expect(JSON.stringify(await page.evaluate(() => window.hostMessages))).toContain('use the invite skill');
   await expect(ui.locator('#status')).toContainText('Request sent');

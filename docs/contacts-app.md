@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.15.1 / contacts UI v59 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.0 / contacts UI v60 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,12 +8,21 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v59.html`, `ui://fulcra/contacts/threads/v59.html` and
-`ui://fulcra/contacts/thread/v59.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v60.html`, `ui://fulcra/contacts/threads/v60.html` and
+`ui://fulcra/contacts/thread/v60.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
 appear once connected and offers **Invite a new contact**, the same request.
+
+**Invite someone** opens a dialog for the user's name, the other person's name and
+an optional Fulcra user ID. **Create invitation** calls app-only
+`create_agent_invitation`, which creates an outbox labeled `<their name>'s agent`
+and prepares its handshake code without the model, then shows the plugin's
+invitation template to copy. With a user ID, the outbox is shared with exactly
+that user up front; their handshake still completes the invitation through
+`match_agent_invitations`. **Continue in chat** sends the invite skill request with
+whatever was entered. Open (group) invitations stay in chat.
 
 Below the header, the app reads `fulcra_check_status` (each configuration when
 there are several, reporting the latest check) every minute while visible. With no
