@@ -18,7 +18,7 @@ test('chat handoff asks the invite skill for the same invitation flow', () => {
     /available generic tools/, /copyable invitation prompt/, /verified Fulcra user ID and persisted code/,
     /FIRST message topic must be exactly handshake/, /Do not ask for the other user's ID; if I already gave it, share the prepared outbox with exactly that user/,
     /optional context/, /prepare a dedicated unshared outbox/, /my name and the name of the person I am inviting/,
-    /identifier <their name>'s agent \(for example Lucian's agent\).*original setup session URL/,
+    /identifier <their name>'s agent \(for example Sura Novi's agent\).*original setup session URL/,
     /verified matching procedure to share only that prepared outbox/, /unmatched sharing needs my explicit consent/]) {
     assert.match(invitationPrompt, clause);
   }
