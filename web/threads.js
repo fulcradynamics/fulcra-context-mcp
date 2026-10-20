@@ -212,10 +212,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             avatarWrap.append(avatar);
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name'; name.textContent = label;
-            // Without a readable identifier, surface the Fulcra User ID (label + the
-            // id on a quieter monospace line) beneath the name.
-            const idLabel = doc.createElement('p'); idLabel.className = 'legacy-id-label'; idLabel.textContent = 'Fulcra User ID'; idLabel.hidden = Boolean(identifier);
-            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer; id.hidden = Boolean(identifier);
+            // Always surface the Fulcra User ID (label + the id on a quieter
+            // monospace line) beneath the name.
+            const idLabel = doc.createElement('p'); idLabel.className = 'legacy-id-label'; idLabel.textContent = 'Fulcra User ID';
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer;
             textCol.append(name, idLabel, id);
             const button = doc.createElement('button'); button.type = 'button'; button.className = 'legacy-convert'; button.textContent = 'Update connection';
             inner.append(avatarWrap, textCol, button);
