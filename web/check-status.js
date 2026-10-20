@@ -22,11 +22,11 @@ export async function readCheckStatus(app) {
 }
 
 export function describeCheckStatus(status) {
-  if (status.status === 'not_set_up') return { text: 'Your agent is not automatically checking for messages.', action: 'Start Checking', prompt: startPrompt };
-  if (status.status === 'never_checked') return { text: 'Your agent has not checked for messages yet.', action: 'Check Now', prompt: checkPrompt };
+  if (status.status === 'not_set_up') return { text: 'Your agent is not automatically checking for messages.', action: 'Start automatic checking', prompt: startPrompt };
+  if (status.status === 'never_checked') return { text: 'Your agent has not checked for messages yet.', action: 'Check for new messages', prompt: checkPrompt };
   if (status.status === 'checked') {
     const when = new Date(status.last_checked).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return { text: `Your agent last checked for messages ${when}.`, action: 'Check Now', prompt: checkPrompt };
+    return { text: `Your agent last checked for messages ${when}.`, action: 'Check for new messages', prompt: checkPrompt };
   }
   return null;
 }

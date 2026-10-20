@@ -6,7 +6,7 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
     const ui = await open(page, width, {...readOnlyThread, checkStatus:{status:'not_set_up'}});
     await page.locator('iframe').evaluate((el,h) => el.style.height = `${h}px`, height);
     await expect(ui.locator('#messages li')).toHaveCount(6);
-    await expect(ui.getByRole('button', {name:'Start Checking'})).toBeVisible();
+    await expect(ui.getByRole('button', {name:'Start automatic checking'})).toBeVisible();
     const measure = () => ui.locator('body').evaluate(el => {
       const doc = el.ownerDocument, rect = selector => doc.querySelector(selector).getBoundingClientRect();
       return {overflow:doc.documentElement.scrollHeight > doc.defaultView.innerHeight,
@@ -30,14 +30,14 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
     await ui.locator('.composer-input').fill('A draft that stays while status changes.');
     await page.evaluate(() => { window.checkStatus = {status:'checked',last_checked:'2026-10-13T11:40:00Z'}; });
     await page.clock.runFor(61000);
-    await expect(ui.getByRole('button', {name:'Check Now', exact:true})).toBeVisible();
+    await expect(ui.getByRole('button', {name:'Check for new messages', exact:true})).toBeVisible();
     await expect(ui.locator('#message-title')).toHaveText('Weekend');
     await expect(ui.locator('.composer-input')).toHaveValue('A draft that stays while status changes.');
     expect(await page.evaluate(() => window.calls.filter(c => !['get_data_catalog','list_shares','get_records','match_agent_invitations','fulcra_check_status'].includes(c.name)))).toEqual([]);
     expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
     await assertLayout();
     await page.screenshot({path:`${process.env.TMPDIR}/contacts-integrated-${width}.png`});
-    await ui.getByRole('button', {name:'Check Now', exact:true}).click();
+    await ui.getByRole('button', {name:'Check for new messages', exact:true}).click();
     await expect(ui.locator('#status')).toContainText('Request sent');
     await assertLayout();
   });
