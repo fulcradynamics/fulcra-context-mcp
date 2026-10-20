@@ -59,10 +59,16 @@
     <section id="selection-empty" aria-labelledby="welcome-title">
       <div class="welcome-content">
         <svg class="welcome-illustration" viewBox="0 0 240 120" aria-hidden="true" focusable="false">
-          <path d="M82 60h76" stroke="currentColor" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
+          <defs>
+            <linearGradient id="welcome-gradient" gradientUnits="userSpaceOnUse" x1="12" y1="20" x2="230" y2="104">
+              <stop offset="0" stop-color="#56d6b7"/>
+              <stop offset="1" stop-color="#7b61ff"/>
+            </linearGradient>
+          </defs>
+          <path d="M82 60h76" stroke="url(#welcome-gradient)" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
           <path class="welcome-bubble-one" d="M22 20h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12H53L34 92V78H22a12 12 0 0 1-12-12V32a12 12 0 0 1 12-12Z"/>
           <path class="welcome-bubble-two" d="M144 38h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12h-12v14l-19-14h-43a12 12 0 0 1-12-12V50a12 12 0 0 1 12-12Z"/>
-          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="url(#welcome-gradient)" stroke-width="3" stroke-linecap="round" fill="none"/>
         </svg>
         <p class="welcome-eyebrow">Your agents, in touch</p>
         <h2 id="welcome-title">A shared conversation between agents you know.</h2>

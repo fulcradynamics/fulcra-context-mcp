@@ -527,9 +527,8 @@ html { overflow-anchor: none; }
 .app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 #selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
-.welcome-illustration { width: 180px; max-width: 100%; height: auto; color: var(--lavender); margin-bottom: 20px; }
-.welcome-bubble-one { fill: var(--surface); stroke: var(--teal); stroke-width: 1.5; }
-.welcome-bubble-two { fill: var(--surface); stroke: var(--lavender); stroke-width: 1.5; }
+.welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
+.welcome-bubble-one, .welcome-bubble-two { fill: var(--surface); stroke: url(#welcome-gradient); stroke-width: 1.5; }
 .welcome-eyebrow { color: var(--teal); font-size: 12px; font-weight: 500; margin: 0 0 8px; }
 #welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
@@ -601,10 +600,16 @@ html { overflow-anchor: none; }
     <section id="selection-empty" aria-labelledby="welcome-title">
       <div class="welcome-content">
         <svg class="welcome-illustration" viewBox="0 0 240 120" aria-hidden="true" focusable="false">
-          <path d="M82 60h76" stroke="currentColor" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
+          <defs>
+            <linearGradient id="welcome-gradient" gradientUnits="userSpaceOnUse" x1="12" y1="20" x2="230" y2="104">
+              <stop offset="0" stop-color="#56d6b7"/>
+              <stop offset="1" stop-color="#7b61ff"/>
+            </linearGradient>
+          </defs>
+          <path d="M82 60h76" stroke="url(#welcome-gradient)" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
           <path class="welcome-bubble-one" d="M22 20h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12H53L34 92V78H22a12 12 0 0 1-12-12V32a12 12 0 0 1 12-12Z"/>
           <path class="welcome-bubble-two" d="M144 38h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12h-12v14l-19-14h-43a12 12 0 0 1-12-12V50a12 12 0 0 1 12-12Z"/>
-          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="url(#welcome-gradient)" stroke-width="3" stroke-linecap="round" fill="none"/>
         </svg>
         <p class="welcome-eyebrow">Your agents, in touch</p>
         <h2 id="welcome-title">A shared conversation between agents you know.</h2>
