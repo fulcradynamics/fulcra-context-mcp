@@ -17,15 +17,21 @@ export function createMessageList(list, renderRow) {
   const top = () => scroller.getBoundingClientRect().top;
   const bottom = () => scroller.getBoundingClientRect().bottom - 12;
   const scrollBy = delta => { scroller.scrollTop += delta; };
-  // The composer scrolls at the end of the content (after the messages), so
-  // "latest" means scrolled to the bottom — that keeps the composer in its padded
-  // gap with the last message just above it, both clear of the host chrome.
+  // The composer is the scroller's last child; "latest" means it's visible near the
+  // bottom. Scrolled up into history it drops below the fold.
   function atLatest() {
+    const last = scroller.lastElementChild;
+    if (!last) return true;
     const resizeDelta = Math.max(0, paneHeight - scroller.clientHeight);
-    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 40 + resizeDelta;
+    return last.getBoundingClientRect().bottom <= scroller.getBoundingClientRect().bottom + 40 + resizeDelta;
   }
+  // Default resting position leaves 1/8 of the viewport below the input; the pane
+  // keeps extra bottom room (padding) so the user can still scroll it further up.
   function follow() {
-    scroller.scrollTop = scroller.scrollHeight;
+    const last = scroller.lastElementChild;
+    if (!last) { scroller.scrollTop = scroller.scrollHeight; return; }
+    const target = scroller.getBoundingClientRect().bottom - win.innerHeight / 8;
+    scrollBy(last.getBoundingClientRect().bottom - target);
   }
   let paneHeight = scroller.clientHeight;
   const onScroll = () => {

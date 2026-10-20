@@ -410,16 +410,22 @@ details[open] > summary { color: var(--violet); }
 /* Standalone app status line (host connect / handoff feedback). Collapses when
    empty via the shared [role=status]:empty rule, so it adds no persistent chrome. */
 .app-status { flex: none; margin: 8px 0 10px; max-height: 12vh; overflow-y: auto; }
-/* Onboarding card: shown only when no automatic-check schedule exists, both in the
-   empty-state welcome panel and as a sticky header atop the message view. */
+/* Onboarding card: the dismissible nudge atop the message view when no
+   automatic-check schedule exists. */
 .onboarding-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px;
-  background: var(--teal-tint); border: 1px solid color-mix(in srgb, var(--teal) 28%, transparent); text-align: left; }
+  background: var(--raised); text-align: left; }
 .onboarding-head { display: flex; align-items: center; gap: 8px; }
 .onboarding-icon { color: var(--teal); flex: none; }
 .onboarding-title { margin: 0; color: #fff; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.onboarding-dismiss { flex: none; margin-left: auto; width: 24px; height: 24px; min-height: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: transparent; color: var(--muted); }
+.onboarding-dismiss:hover:not(:disabled) { background: var(--raised); color: #fff; }
 .onboarding-text { margin: 0; color: #c4c4cc; font-size: 13px; line-height: 1.5; }
 .onboarding-action { align-self: flex-start; margin-top: 2px; font-size: 13px; }
 .onboarding-card--sticky { position: sticky; top: 0; z-index: 2; margin: 0 4px 10px; }
+/* Quiet re-entry point in the Advanced panel once the card is dismissed. */
+#onboarding-advanced { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.onboarding-advanced-action { align-self: flex-start; font-size: 13px; }
 .list-intro { font-size: 13px; }
 
 /* A tapered "comet" ring: a conic gradient fading from transparent to teal,
