@@ -143,7 +143,8 @@ Released `fulcra-mesh` users keep their legacy outboxes in a separate section wi
 no composer. **Update connection** asks the chat to create a new Event channel,
 keep old records and post a final legacy notice. A
 `converted_from_mesh: [{"id": ..., "fulcra_userid": ...}]` line (up to 32 sources)
-on our channel hides the legacy row once every source is covered.
+on our channel hides the legacy row once every source is covered. A two-way
+contact with the same user (converted or newly connected) also hides it.
 
 ## Layout
 

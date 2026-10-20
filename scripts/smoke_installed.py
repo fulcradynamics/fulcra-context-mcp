@@ -77,8 +77,8 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v67.html', 'global'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v67.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v68.html', 'global'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v68.html', 'thread'),
                 ):
                     assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
                         {'src': f'https://mcp.fulcradynamics.com/menu-{theme}.svg',
@@ -110,7 +110,7 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v67.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v68.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
