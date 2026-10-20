@@ -38,7 +38,6 @@ export function createContextLifecycle(app, status) {
     pending: false,
     handoffLocks: new Set(),
     isClear: () => !dirty,
-    requestSequence: 0,
     onChange: () => {},
     token: () => epoch,
     current: token => !disposed && epoch === token,

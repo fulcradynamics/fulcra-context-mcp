@@ -27,7 +27,6 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   expect(await page.evaluate(() => window.sends)).toEqual([]);
   await ui.locator('.thread-button').filter({ hasText: 'Bob' }).click();
   await expect(ui.locator('#messages')).toContainText('Yes, received.');
-  await expect(ui.locator('#send-status')).toHaveText('');
   await ui.locator('.thread-button').filter({ hasText: 'Alice' }).click();
   await expect(ui.locator('#message-title')).toHaveText('Alice');
   await page.clock.runFor(11000);
@@ -37,9 +36,10 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   expect(await page.evaluate(() => window.sends.map(args => args.kind))).toEqual(['ack']);
   await ui.locator('.composer-input').fill('Synthetic reply');
   await ui.locator('.send-to-peer').click();
-  await expect(ui.locator('#send-status')).toContainText('Posted to your outbox');
   await page.clock.runFor(11000);
   await expect(ui.locator('#messages')).toContainText('Synthetic reply');
+  // Success shows as the message's own badge, not a footer status line.
+  await expect(ui.locator('#messages .message-row').filter({ hasText: 'Synthetic reply' }).locator('.send-badge')).toHaveText('sent');
   await ui.locator('.thread-button').filter({ hasText: 'Alice' }).click();
   await expect(ui.locator('#message-title')).toHaveText('Alice');
   await expect(ui.locator('.thread-row').filter({ hasText: 'Bob' }).locator('.unread-dot')).toBeHidden();

@@ -9,10 +9,9 @@ const leave = async (page, ui) => {
   await ui.locator('.thread-button').filter({ hasText: 'Quiet contact' }).click();
   await expect(ui.locator('#message-title')).toHaveText('Quiet contact');
   await expect(ui.locator('.composer-input')).toHaveValue('');
-  await expect(ui.locator('#ack-status')).toHaveText('');
 };
 
-test('Send auto-acks retain uncertain writes without overwriting send status or newer drafts', async ({ page }) => {
+test('Send auto-acks retain uncertain writes without duplicating or overwriting newer drafts', async ({ page }) => {
   const ui = await open(page, 900, { acceptAck: true });
   await expect.poll(() => writes(page)).toHaveLength(1);
   await page.evaluate(() => {
@@ -30,19 +29,17 @@ test('Send auto-acks retain uncertain writes without overwriting send status or 
   await ui.locator('.composer-input').fill('My reply');
   await ui.locator('.send-to-peer').click();
   await expect.poll(() => writes(page)).toHaveLength(6); // open ack, reply, four remaining acks
-  await expect(ui.locator('#send-status')).toContainText('Posted to your outbox');
-  await expect(ui.locator('#ack-status')).toContainText('unconfirmed');
+  // Uncertain read-acks surface as a transient toast, not a persistent footer line.
+  await expect(ui.locator('.toast')).toContainText('Couldn’t confirm messages read');
   await ui.locator('.composer-input').fill('New draft');
   const first = await writes(page);
-  expect(new Set(first.map(a => a.mid)).size).toBe(first.length);
+  expect(new Set(first.map(a => a.mid)).size).toBe(first.length); // No duplicate IDs.
   await leave(page, ui);
   await choose(ui);
-  await expect(ui.locator('#ack-status')).toContainText('unconfirmed');
   await page.clock.runFor(11000);
-  expect(await writes(page)).toEqual(first);
+  expect(await writes(page)).toEqual(first); // Reopening never re-sends an ack.
   await page.evaluate(() => { window.ownRecords.push(...window.pendingAcks); });
   await page.clock.runFor(11000);
-  await expect(ui.locator('#ack-status')).toHaveText('');
   await expect(ui.locator('.composer-input')).toHaveValue('New draft');
   await expect(ui.locator('.send-to-peer')).toBeEnabled();
   expect(await writes(page)).toEqual(first);
@@ -69,28 +66,23 @@ for (const outcome of ['uncertain', 'lost', 'rejected']) {
     await choose(ui);
     await expect.poll(() => writes(page)).toHaveLength(1);
     if (outcome === 'lost') await page.clock.runFor(31000);
-    const status = ui.locator('#ack-status');
-    await expect(ui.locator('#connection-detail')).toContainText(outcome === 'rejected' ? 'rejected' : 'unconfirmed');
-    await expect(ui.locator('#connection-detail')).not.toContainText('Private arbitrary host error');
-    await expect(ui.locator('#send-status')).not.toContainText('Reopen');
+    // The host's private reason is never surfaced anywhere in the UI.
+    await expect(ui.locator('body')).not.toContainText('Private arbitrary host error');
     const first = await writes(page);
     await ui.locator('.composer-input').fill('Keep my draft');
     await leave(page, ui);
     await choose(ui);
     await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-    await expect(status).toContainText(outcome === 'rejected' ? 'rejected' : 'unconfirmed');
     await expect(ui.locator('.composer-input')).toHaveValue('Keep my draft');
     await page.clock.runFor(11000);
-    expect(await writes(page)).toEqual(first);
+    expect(await writes(page)).toEqual(first); // Reopening never re-sends the ack.
     if (outcome !== 'rejected') {
       await page.evaluate(() => { window.ownRecords.push(...window.pendingAcks); });
       await page.clock.runFor(11000);
-      await expect(status).toHaveText('');
       await expect(ui.locator('.composer-input')).toHaveValue('Keep my draft');
       await leave(page, ui);
       await choose(ui);
       await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-      await expect(status).toHaveText('');
       expect(await writes(page)).toEqual(first);
     }
   });

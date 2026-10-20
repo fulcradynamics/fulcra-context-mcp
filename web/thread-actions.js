@@ -2,14 +2,15 @@ import { clearPostedDraft, matchesPost, messageId, postRecord } from './connecti
 import { unreadMessages } from './unread.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
-import { showHostGuidance } from './host-guidance.js';
+import { showToast, continueMessage, spinButton } from './toast.js';
 import { contactName, readable } from './contact-identity.js';
 const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
 // Drafts/posts belong to the peer; in-flight host operations belong to the app.
-export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, view, changed) {
+export function setupThreadActions(app, lifecycle, context, container, isCurrent, draft, peerId, view, changed, presentation = 'global') {
   const doc = container.ownerDocument;
+  const inlineList = presentation === 'thread';
   const label = doc.createElement('label');
   const input = doc.createElement('textarea'); input.rows = 1; input.maxLength = 4000; input.className = 'composer-input';
   input.value = draft.value; label.append(input);
@@ -51,11 +52,9 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const addressHelp = doc.createElement('p');
   addressHelp.textContent = 'Uses an existing outgoing connection channel only. Everyone in this connection can read the message. No sharing is created.';
   address.append(addressTitle, outboxLabel, outboxId, addressHelp);
-  let status = doc.querySelector('#send-status');
-  if (!status) {
-    status = doc.createElement('p'); status.id = 'send-status'; status.setAttribute('role', 'status');
-    doc.querySelector('#context-status').before(status);
-  }
+  // Send/handoff outcomes speak through per-message badges and transient toasts —
+  // there is no persistent status line under the composer.
+  const notify = (title, description) => showToast(doc, { title, description });
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(handoff, send);
   container.append(label, actions, hint);
@@ -64,13 +63,10 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   advanced?.querySelectorAll('.composer-advanced').forEach(el => el.remove());
   (advanced ?? container).append(address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
-  if (!supported) status.textContent = 'This host does not support sending a request with separate thread context. Direct connection Send remains available.';
-  let source, sourceIdentity, selectionVersion = 0;
+  let source, sourceIdentity, selectionVersion = 0, sending = false;
   draft.posts ??= []; draft.acks ??= new Map();
   // Peer-owned attempts survive remounts. Never allocate a second ID for a target,
   // including after a lost response or rejection; polling only reconciles reads.
-  const ackStatus = doc.createElement('p'); ackStatus.id = 'ack-status'; ackStatus.setAttribute('role', 'status');
-  container.append(ackStatus);
   const ackAddress = () => ({ audience: view().thread?.expectedPeerUserids, outboxId: source?.id, sender: view().viewingAgent });
   async function ack(targets, { audience, outboxId, sender } = ackAddress()) {
     if (!outboxId || !sender?.trim()) return false;
@@ -90,22 +86,21 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       } catch { if (attempt.state !== 'posted') attempt.state = 'uncertain'; }
       changed();
     }
+    // Marking-read runs quietly in the background; only surface a failure, and only
+    // once, as a transient toast rather than a persistent status line.
+    if (isCurrent() && attempts.some(a => a.state === 'rejected' || a.state === 'uncertain'))
+      notify('Couldn’t confirm messages read', 'The read state is kept and no duplicate will be sent.');
     return true;
   }
   const update = () => {
     const current = view();
-    const ackStates = [...draft.acks.values()].map(a => a.state);
-    ackStatus.textContent = [
-      ackStates.includes('sending') ? 'Marking messages read…' : '',
-      ackStates.includes('uncertain') ? 'Read acknowledgement unconfirmed. Waiting for readback; no duplicate acknowledgement will be sent.' : '',
-      ackStates.includes('rejected') ? 'Read acknowledgement rejected. Messages were not marked read by that request. No automatic retry.' : '',
-    ].filter(Boolean).join(' ');
-    ackStatus.hidden = !ackStatus.textContent;
     const name = contactName(current.thread);
     const placeholder = `Message ${name}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = app.getHostVersion()?.name;
-    const hintText = `Send replies to ${name}; Discuss requests help in ${host || 'chat'}.`;
+    const hintText = supported
+      ? `Send replies to ${name}; Discuss requests help in ${host || 'chat'}.`
+      : `Send replies to ${name} directly. Discuss in chat isn’t available on this host.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
@@ -133,7 +128,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (session && !transfer.isConnected) address.before(transferHelp, transfer);
     if (!session) { transferHelp.remove(); transfer.remove(); }
     original.disabled = lifecycle.pending || !isCurrent();
-    handoff.textContent = session ? 'Ask in current chat' : `Discuss in ${host || 'chat'}`;
+    // Leave the label (and its spinner) alone while a handoff is in flight.
+    if (!sending) handoff.textContent = session ? 'Ask in current chat' : `Discuss in ${host || 'chat'}`;
     const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';
@@ -142,7 +138,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     autosize();
     send.disabled = lifecycle.pending || !isCurrent() || !current.ready || !source || !current.viewingAgent?.trim() || !input.value.trim()
       || draft.posts.some(p => p.state === 'sending' || p.state === 'uncertain');
-    handoff.disabled = !supported || lifecycle.pending || draft.handoffUncertain || !isCurrent() || !context();
+    handoff.disabled = sending || !supported || lifecycle.pending || draft.handoffUncertain || !isCurrent() || !context();
   };
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
   outbox.addEventListener('change', () => { draft.outbox = outbox.value; update(); });
@@ -157,18 +153,13 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: view().viewingAgent, kind: target ? 'reply' : 'message', priority: 'P2',
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
-    const posted = () => {
-      report('Posted to your outbox; not confirmed delivered or read by the peer.');
-      ack(unread.slice(0, -1), acknowledgementAddress);
-    };
+    // Progress and success show as the message's own badge (sending… → sent).
+    const posted = () => { ack(unread.slice(0, -1), acknowledgementAddress); };
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };
-    const originName = contactName(view().thread);
-    const report = text => { status.textContent = `${originName}: ${text}`; };
     draft.value = '';
     draft.posts.push(post); lifecycle.pending = true; changed(); update();
-    report('Posting…');
     try {
       const { response, result } = await postRecord(app, { peer_userid: peer, outbox: post.source.id,
         sender: envelope.sender, body: envelope.body, mid, ...(target ? { kind: 'reply', in_reply_to: target.record.id } : {}),
@@ -180,22 +171,24 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         clearPostedDraft(draft, post);
         posted();
       } else if (!response.isError && result.status === 'rejected' && result.mid === mid && result.outbox === post.source.id) {
+        // Rejected: the message leaves the thread and returns to the composer, so a
+        // toast (not a bubble) carries the news.
         draft.posts = draft.posts.filter(p => p !== post);
         if (draft.version === post.version) draft.value = envelope.body;
-        report(`Message not posted. ${result.reason ?? ''} Draft retained.`);
+        notify('Couldn’t send', result.reason ? result.reason : 'Your message is back in the box — try again.');
       } else throw new Error('Unconfirmed');
     } catch {
       // Polling may prove the exact write even while its response is lost.
       if (post.state === 'posted') posted();
       else {
-        report('Sending… Waiting for confirmation.');
-        const waitingStatus = status.textContent;
         // Allow ingestion/polling to confirm the write before showing uncertainty.
         setTimeout(() => {
           if (post.state !== 'sending') return;
+          // The bubble flips to "not confirmed"; a toast warns against resending
+          // blind, since the message may actually have gone out.
           post.state = 'uncertain';
           if (draft.version === post.version) draft.value = envelope.body;
-          if (status.textContent === waitingStatus) report('Posting unconfirmed. Draft retained; Send is paused for this peer. Check the outbox for this message ID before retrying.');
+          notify('Couldn’t confirm your message', 'Check the conversation before sending it again — it may have gone through.');
           changed(); lifecycle.onChange();
         }, Math.max(0, 60000 - (Date.now() - startedAt)));
       }
@@ -206,17 +199,17 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const url = source.setupSession, outboxId = source.id, peer = peerId();
     const token = lifecycle.token(), version = selectionVersion;
     // Never pair a late navigation result with another display's copyable handoff.
-    const report = text => {
+    const report = (title, description) => {
       if (isCurrent() && lifecycle.current(token) && peerId() === peer && selectionVersion === version
-          && source?.id === outboxId && source?.setupSession === url) status.textContent = text;
+          && source?.id === outboxId && source?.setupSession === url) notify(title, description);
     };
     lifecycle.pending = true; update();
     try {
       const result = await app.openLink({ url }, options);
       if (result.isError) throw new Error('Host rejected link');
-      report('Host accepted the request to open the original setup session. Your message and context were not transferred; copy the handoff and paste it there.');
+      report('Opening the setup session', 'Your message and context don’t carry over — copy the handoff and paste it there.');
     } catch {
-      report(`The host could not confirm opening the original setup session. Open ${url} manually and copy the handoff, or ask in the current chat. Your draft is unchanged.`);
+      report('Couldn’t open the setup session', 'Open the link yourself and copy the handoff, or ask in the current chat. Your draft is unchanged.');
     } finally { lifecycle.pending = false; lifecycle.onChange(); }
   });
   handoff.addEventListener('click', async () => {
@@ -225,33 +218,32 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const session = source?.setupSession, snapshot = context();
     const text = sessionHandoff(submitted, snapshot, session);
     const version = draft.version, token = lifecycle.token();
-    const origin = `Submitted request #${++lifecycle.requestSequence} for ${contactName(view().thread)} (not the current draft): `;
-    const report = message => { status.textContent = origin + message; };
+    const host = app.getHostVersion()?.name;
     const current = () => isCurrent() && lifecycle.current(token) && source?.setupSession === session;
     const restore = () => { if (draft.version === version) draft.value = submitted; };
+    // Progress shows on the button spinner; outcomes speak through toasts.
     draft.value = '';
+    sending = true; const stopSpinner = spinButton(handoff);
     lifecycle.pending = true; update();
     let attempted = false;
-    report('Attaching displayed context before sending…');
     try {
       if (!await lifecycle.attach(snapshot, token) || !current()) {
         restore();
-        report('Context changed before sending. No message sent; draft retained.'); return;
+        notify('Nothing sent', 'This conversation changed while sending, so nothing went out. Your draft was kept.'); return;
       }
-      attempted = true; report('Awaiting host confirmation…');
+      attempted = true;
       const result = await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] }, options);
       if (result.isError) {
-        restore(); report('Host rejected the request. No acceptance confirmed; draft retained.'); return;
+        restore(); notify(host ? `Couldn’t reach ${host}` : 'Couldn’t send', 'Nothing was sent. Your draft was kept — try again.'); return;
       }
-      report('Request accepted by the host. Check the conversation for the response; no connection reply was posted by this handoff.');
-      if (current()) showHostGuidance(doc, app.getHostVersion()?.name, handoff);
+      if (current()) notify(host ? `Request sent to ${host}` : 'Request sent', continueMessage(app, inlineList));
       if (draft.version === version) { draft.value = ''; draft.version++; }
     } catch {
       restore();
       if (attempted) draft.handoffUncertain = true;
-      report(attempted ? 'Could not confirm delivery. Check the conversation; Discuss is paused for this contact for this app session to avoid duplicates. Draft retained.'
-        : 'Could not confirm context attachment. No message sent; draft retained.');
-    } finally { lifecycle.pending = false; lifecycle.onChange(); }
+      notify(attempted ? 'Couldn’t confirm your request' : 'Couldn’t send',
+        attempted ? `Check ${host || 'your chat'} to see whether it arrived. Your draft was kept.` : 'Nothing was sent. Your draft was kept — try again.');
+    } finally { sending = false; stopSpinner(); lifecycle.pending = false; lifecycle.onChange(); }
   });
   update();
   update.markRead = ack;

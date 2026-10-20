@@ -52,7 +52,6 @@
 .rail-content { padding: 12px 12px var(--footer-clearance); }
 .conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
-#send-status, #context-status { flex: none; max-height: 16vh; overflow-y: auto; margin: 0; }
 body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
 body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
 body #thread-composer { flex: none; }
@@ -293,8 +292,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-status { margin: 4px 0 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .contact-status.attention { color: #c79448; }
 .thread-preview { margin: 4px 0 0; color: #a5a5ad; font-size: 13px; font-weight: 400; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.preview-sender { color: var(--teal); }
-.preview-sender.outgoing { color: var(--lavender); }
+.preview-sender { color: inherit; font-style: italic; }
 /* A quiet timestamp, without pill chrome. */
 .thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; color: var(--muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .thread-time:empty { display: none; }
@@ -380,7 +378,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 
 /* Reply composer action buttons (Send + handoff) on one wrapping row. */
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-.send-badge { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+.send-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+.send-badge .send-spinner { flex: none; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
 /* Unread indicator: a small badge on the avatar's upper-left corner, ringed in
    the row background so it reads as a notification dot. Hidden (not removed) so
    row layout never shifts. */

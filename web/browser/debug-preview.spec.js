@@ -41,7 +41,7 @@ test('message, loading and acknowledgement previews never enter sends or host co
   await ui.getByLabel('Message delivery', { exact: true }).selectOption('uncertain');
   await ui.getByLabel('Acknowledgement', { exact: true }).selectOption('rejected');
   await expect(ui.locator('#messages .bubble-body')).toHaveText('PREVIEW ONLY <script>');
-  await expect(ui.locator('#messages .send-badge')).toHaveText('unconfirmed');
+  await expect(ui.locator('#messages .send-badge')).toHaveText('not confirmed');
   await expect(ui.locator('#debug-ack-status')).toContainText('Could not mark');
   expect(await page.evaluate(() => calls.length)).toBe(before);
   await ui.getByLabel('Messages', { exact: true }).selectOption('loading');
