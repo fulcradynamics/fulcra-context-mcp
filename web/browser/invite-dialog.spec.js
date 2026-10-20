@@ -3,7 +3,7 @@ import { open, own, peer } from './harness.js';
 
 async function dialog(page) {
   const ui = await open(page, 900, {listOnly: true});
-  await ui.getByRole('button', {name: 'Invite someone'}).click();
+  await ui.locator('#invite').click();
   return [ui, ui.getByRole('dialog', {name: 'Invite someone'})];
 }
 
@@ -26,7 +26,7 @@ test('creates an invitation without the model and shows the copyable template', 
 test('Continue in chat carries what was entered', async ({page}) => {
   const [ui, modal] = await dialog(page);
   await modal.getByLabel('Their name').fill('Lucian');
-  await modal.getByRole('button', {name: 'Continue in chat'}).click();
+  await modal.getByRole('button', {name: /Continue in /}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   const text = JSON.stringify(await page.evaluate(() => window.hostMessages));
   expect(text).toContain('use the invite skill');

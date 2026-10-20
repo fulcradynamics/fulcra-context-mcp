@@ -32,17 +32,24 @@
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
-  /* Floating host input clearance plus device/host safe-area insets.
-     max() avoids double-counting
-     when the device safe area is exposed via both env() and the host context. */
-  --footer-clearance: calc(72px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
+  /* Bottom clearance is a floor, not an addition: use our own spacing when the
+     host reports no bottom inset (native input minimized), but when the host
+     chrome is up its reported inset already reserves the room — don't stack ours
+     on top of it. max() also de-dupes the device safe area (env vs host). */
+  --composer-clearance: 36px;
+  --footer-clearance: max(var(--composer-clearance), env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
 .contacts-layout { display: grid; grid-template-columns: minmax(120px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
-#connection-list { overflow-y: auto; min-width: 0; border-right: 1px solid var(--divider); }
-.rail-content { padding: 0 12px var(--footer-clearance) 0; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
+/* Slack-style: keep the rail clean — a slim scrollbar only fills in on hover. */
+#connection-list::-webkit-scrollbar { width: 8px; }
+#connection-list::-webkit-scrollbar-track { background: transparent; }
+#connection-list::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+#connection-list:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
+.rail-content { padding: 12px 12px var(--footer-clearance); }
 .conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
 #send-status, #context-status { flex: none; max-height: 16vh; overflow-y: auto; margin: 0; }
@@ -54,10 +61,10 @@ body .thread-button[aria-current='true'], body .thread-button[aria-current='true
 .thread-button .thread-text { display: contents; }
 .thread-name { grid-column: 1; grid-row: 1; }
 .thread-time { grid-column: 2; grid-row: 1; }
-.thread-preview { grid-column: 1 / -1; grid-row: 2; }
-.status-badge { grid-column: 1 / -1; grid-row: 4; }
-.row-avatar-wrap { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
-.row-avatar-wrap:not(:has(.unread-dot.on)) { display: none; }
+/* Always reserve the unread dot's slot so a row that gets acknowledged doesn't
+   reflow the preview (spatial consistency over reclaiming 12px). */
+.thread-preview { grid-column: 1 / -1; grid-row: 2; padding-right: 12px; }
+.status-badge { grid-column: 1 / -1; grid-row: 3; }
 body #invite { margin: 0; width: 100%; justify-content: start; }
 body .section-tag, body .list-intro { display: none; }
 @media (max-width: 520px) {
@@ -80,22 +87,35 @@ body .section-tag, body .list-intro { display: none; }
 #contact-identity { position: absolute; left: 0; top: 100%; width: min(340px, 100%); max-height: 55vh; overflow-y: auto; background: rgba(34, 34, 39, .96); backdrop-filter: blur(16px); border: 1px solid var(--divider); border-radius: 12px; padding: 12px; z-index: 5; box-shadow: 0 8px 24px #0004; }
 #contact-identity > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-top: 8px; }
 #contact-identity [role='status'] { grid-column: 1 / -1; margin: 0; }
-#contact-identity input { width: 100%; font-size: 12px; }
+.identity-id { min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #d0d0d6; overflow-wrap: anywhere; user-select: all; }
+.identity-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-copy:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.identity-copy:active:not(:disabled) { transform: scale(.92); filter: none; }
+.identity-copy.copy-success { color: var(--teal); }
 .copy-success { animation: copy-check .2s ease-out; }
 @keyframes copy-check { from { transform: scale(.8); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
 * { box-sizing: border-box; }
 body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
-body .row-avatar-wrap { width: auto; height: auto; flex: none; }
-body .unread-dot { display: none; position: static; width: auto; height: auto; border: 0; padding: 0; font-size: 11px; background: transparent; color: var(--lavender); }
-body .unread-dot.on { display: inline-block; }
-body .pending-row { flex-wrap: wrap; padding: 8px; }
+body .row-avatar-wrap { display: contents; }
+/* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
+body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #f0506b; font-size: 0; color: transparent; }
+body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
+body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
 body .pending-row .thread-text { min-width: 0; }
 body .thread-text { min-width: 0; flex-basis: 100%; }
 body .thread-name { white-space: normal; overflow: visible; }
 
-body #connections > li { padding: 0; }
-body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
+body #connections > li, body #pending-connections > li, body #legacy-connections > li { padding: 0; }
+body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+/* Legacy text stacks as a tight block (name, then an optional Fulcra User ID
+   label + monospace id) rather than spreading into the row grid. */
+body #legacy-connections .thread-text { display: block; min-width: 0; }
+.legacy-id-label { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+.legacy-convert { grid-column: 1; justify-self: start; }
+.legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
+.legacy-help { color: #6a6a71; font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
+body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
 #host-guidance::backdrop { background: #0009; }
 #end-contact-dialog, .app-dialog { width: min(440px, 90vw); box-sizing: border-box; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: white; }
@@ -106,8 +126,31 @@ body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
 .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .app-dialog .dialog-form { display: grid; gap: 12px; }
 .app-dialog .dialog-form p, .app-dialog > p { margin: 0 0 8px; }
+/* Friendly invite dialog: a warm header, plain intro, and themed inputs instead
+   of a clinical default-styled form. */
+.app-dialog { padding: 22px; box-shadow: 0 16px 48px #0008; }
+.app-dialog .dialog-head { margin-bottom: 10px; }
+.app-dialog .dialog-head h2 { margin: 0; font-size: 18px; }
+.app-dialog .dialog-intro { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog .dialog-form label { gap: 6px; font-size: 13px; color: #fff; font-weight: 500; }
+.app-dialog .dialog-form input[type=text] { min-height: 44px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 10px; background: var(--raised); color: #fff; font-weight: 400; }
+.app-dialog .dialog-form input[type=text]::placeholder { color: #6a6a71; }
+.app-dialog .dialog-form input[type=text]:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-color: transparent; }
+.app-dialog .field-help { font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.4; }
+.app-dialog .dialog-form .dialog-error { margin: 0; color: #ff8a80; font-size: 13px; line-height: 1.4; }
+.app-dialog .dialog-error:empty { display: none; }
+.app-dialog .dialog-ghost { background: transparent; }
+.app-dialog .dialog-ghost:hover:not(:disabled) { background: var(--raised); }
+.app-dialog .dialog-actions { margin-top: 6px; }
+.app-dialog .dialog-actions .dialog-ghost { margin-right: auto; }
+/* Secondary path: hand the invite to the agent in chat, set apart from Create. */
+.app-dialog .dialog-alt { border-top: 1px solid var(--divider); margin-top: 18px; padding-top: 16px; display: grid; gap: 10px; }
+.app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog .dialog-alt-action { justify-self: start; min-height: 0; padding: 7px 11px; font-size: 12px; }
+.app-dialog button:active:not(:disabled) { transform: scale(.98); }
 #invite-template { font-size: 13px; margin-bottom: 8px; }
-button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; }
+button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
+button.danger:hover:not(:disabled) { background: #ff8a802e; }
 #end-contact { align-self: flex-start; }
 [hidden] { display: none !important; }
 body { margin: 0; overflow-wrap: anywhere; }
@@ -137,8 +180,6 @@ p { margin: 12px 0; }
 /* Weight and spacing separate sections without another layer of badges. */
 .section-header { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
 .section-header h2 { margin: 0; font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--muted); }
-.section-count { font-size: 12px; color: rgba(138, 138, 142, .6); font-variant-numeric: tabular-nums; }
-.section-count:empty { display: none; }
 .section-rule { display: none; }
 .section-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: rgba(86, 214, 183, .7); }
 
@@ -214,7 +255,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 #connections > li, #pending-connections > li, #legacy-connections > li { padding: 10px 8px; }
 #connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
 /* Pending rows match legacy rows: text column, then a right-aligned action. */
-.pending-row { display: flex; align-items: center; gap: 12px; }
+.pending-row { display: flex; align-items: center; gap: 8px; }
 #pending-connections .pending-label { font-weight: 500; }
 .pending-assist { flex: none; }
 #connections-empty p { margin: 0 0 12px; font-size: 13px; }
@@ -303,7 +344,9 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
 .contact-headings { min-width: 0; flex: 1; }
 .contact-name { display: flex; align-items: center; gap: 4px; }
-.identity-info { flex: none; background: transparent; color: var(--muted); border: 0; padding: 4px; min-height: 28px; }
+.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-info:hover:not(:disabled), .identity-info[aria-expanded='true'] { background: var(--raised); color: #fff; }
+.identity-info:active:not(:disabled) { transform: scale(.92); filter: none; }
 .contact-headings h2 { margin: 0; }
 .contact-topic { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .contact-subtitle { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a71; overflow-wrap: anywhere; }
@@ -355,10 +398,17 @@ details { margin-block: 16px; }
 summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
 details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
-.invite-section { flex: none; margin: 8px 0 12px; }
-.invite-section > [role='status'] { margin: 4px 0 0; line-height: 1.4; max-height: 12vh; overflow-y: auto; }
-.check-status { display: flex; align-items: center; gap: 12px; }
-.check-status p { flex: 1; min-width: 0; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+/* Small bottom margin so the status card reads as part of the side panel below. */
+.invite-section { flex: none; margin: 8px 0 10px; }
+/* The app's single status strip: the agent check-status line plus a muted note
+   for host/handoff feedback. It collapses when it has nothing to say, so the card
+   sits snug against the side panel on the happy path. */
+.check-status { display: flex; align-items: center; gap: 12px; padding: 2px 2px 2px 0; background: transparent; }
+.check-status:not(:has(.check-status-text:not(:empty), .check-status-note:not(:empty))) { display: none; }
+.check-status-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.check-status-text { margin: 0; color: #fff; font-size: 13px; line-height: 1.4; }
+.check-status-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; max-height: 12vh; overflow-y: auto; }
+.check-status-text:empty, .check-status-note:empty { display: none; }
 .check-status button { flex: none; font-size: 12px; padding: 6px 10px; }
 .list-intro { font-size: 13px; }
 
@@ -378,7 +428,22 @@ details[open] > summary { color: var(--violet); }
 #message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
 #message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
 /* Loading label as a dark chip, matching the section-header badges. */
-.loading-label { padding: 5px 11px 4px; border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: .08em; }
+.loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
+/* Spinner shown inside a button while its request is in flight. */
+.btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
+/* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
+.toast.toast-shown { opacity: 1; transform: translateY(0); }
+.toast-body { flex: 1; min-width: 0; }
+.toast-title { margin: 0; font-weight: 600; font-size: 14px; }
+.toast-text { margin: 2px 0 0; color: #c4c4cc; font-size: 13px; line-height: 1.45; }
+.toast-action { flex: none; min-height: 0; padding: 6px 10px; font-size: 12px; font-weight: 500; border-radius: 8px; background: var(--teal-tint); color: var(--teal); }
+.toast-action:hover:not(:disabled) { background: var(--teal-tint-hover); }
+.toast-action:active:not(:disabled) { transform: scale(.97); }
+.toast-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease; }
+.toast-close:hover:not(:disabled) { background: var(--surface); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: opacity .2s ease; transform: none; } }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 
@@ -399,14 +464,37 @@ html { overflow-anchor: none; }
   .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
 }
 
-/* Inline launch has no floating host composer to clear until a panel opens. */
-.compact-threads { --footer-clearance: calc(16px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); }
+/* Use host mode, not viewport width, to choose spacing. Insets stay separate. */
+:root[data-display-mode='fullscreen'] { --composer-clearance: 24px; }
 .compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
 .compact-threads .invite-section > p:not([role='status']) { display: none; }
-.compact-threads #connections > li { padding: 10px 16px; }
+.compact-threads #connections > li { padding: 0; }
 .compact-threads #connection-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
 
   .section-header h2 { font-size: 11px; }
+}
+
+/* A quiet explanation, not a simulated conversation or another card. */
+.app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
+.welcome-content { max-width: 440px; margin-inline: auto; }
+.welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
+.welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
+#welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
+.welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
+.welcome-next { margin-bottom: 24px; }
+.welcome-content > p.welcome-note { font-size: 12px; margin-top: 12px; color: #6a6a71; }
+#invite-welcome { min-height: 44px; }
+@media (hover: hover) and (pointer: fine) {
+  #invite-welcome:active { transform: scale(.97); }
+}
+@media (prefers-reduced-motion: reduce) { #invite-welcome:active { transform: none; } }
+@media (max-width: 520px) {
+  body main { padding-top: calc(12px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); }
+  .app-intro { font-size: 12px; line-height: 1.4; }
+  #selection-empty { padding: 16px 4px; align-items: start; }
+  .welcome-illustration { width: 120px; margin-bottom: 12px; }
+  .welcome-content > p { font-size: 12px; }
 }

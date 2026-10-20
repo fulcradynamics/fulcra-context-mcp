@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.16.0 / contacts UI v60 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.1 / contacts UI v61 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v60.html`, `ui://fulcra/contacts/threads/v60.html` and
-`ui://fulcra/contacts/thread/v60.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v61.html`, `ui://fulcra/contacts/threads/v61.html` and
+`ui://fulcra/contacts/thread/v61.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -118,7 +118,9 @@ activity and an explicit Unread indicator, without avatars. Invite someone lives
 the sidebar. Empty states distinguish no contacts, no selection and no messages
 in the selected contact's loaded history window.
 
-Global and untargeted thread launches select the first discovered contact read-only.
+Global and untargeted thread launches show an instructional no-selection state, with
+a decorative DM illustration and an Invite someone button using the existing dialog.
+Polling does not choose a conversation or acknowledge messages on the user's behalf.
 Explicit launch IDs wait for their result and must match authorized discovery exactly;
 missing IDs never fall back to another contact. A user's selection wins over a delayed
 launch, and subsequent preview ordering does not change the selected contact. The
@@ -128,7 +130,8 @@ host mode change automatically. There is no Contacts back button.
 The bounded two-pane layout keeps the transparent contact header above an independently
 scrollable message area and pins the reply composer at the pane bottom even for empty
 history. The sidebar reaches the viewport bottom; its inner content reserves safe-bottom
-padding rather than shortening the rail. The conversation footer reserves 72px plus
+padding rather than shortening the rail. The conversation footer reserves 24px in
+host-reported fullscreen mode and 36px otherwise (inline, PiP or unknown mode), plus
 the larger of device and host bottom insets (not both). The pane observes resizing to
 keep the latest message above the composer while preserving older reader anchors.
 

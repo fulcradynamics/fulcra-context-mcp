@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.16.0'
+                assert initialized.serverInfo.version == '1.16.1'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -64,9 +64,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v60.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v60.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v60.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v61.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v61.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v61.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
@@ -74,7 +74,7 @@ async def main():
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="connection-presentation" content="{marker}"' in text
                     assert 'id="message-back"' not in text
-                    assert 'conversation-pane' in text and 'rail-content' in text and '72px' in text
+                    assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 24px' in text
                     for value in ('id="check-status"', 'fulcra_check_status', 'Start Checking', 'Check Now',
                                   'set-up-agent-contacts', 'check-messages skill'):
                         assert value in text, value
@@ -88,7 +88,7 @@ async def main():
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v60 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v61 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

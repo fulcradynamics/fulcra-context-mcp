@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { open } from './harness.js';
+import { open, readOnlyThread } from './harness.js';
 
 for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
-  test(`debug display preserves auto-selection and pane ownership at ${width}x${height}`, async ({ page }) => {
-    const ui = await open(page, width, { listOnly: true });
+  test(`debug display preserves explicit selection and pane ownership at ${width}x${height}`, async ({ page }) => {
+    const ui = await open(page, width, readOnlyThread);
     await page.locator('iframe').evaluate((el, h) => el.style.height = `${h}px`, height);
     await expect(ui.locator('#messages li')).toHaveCount(6);
     const row = ui.locator('.thread-button[aria-current="true"]');
@@ -45,7 +45,7 @@ for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
     expect(bounds.horizontal).toBe(false);
     expect(bounds.documentOverflow).toBe(false);
     expect(bounds.railBottom).toBe(height);
-    expect(bounds.composerBottom).toBe(height - 72);
+    expect(bounds.composerBottom).toBe(height - 24);
     expect(bounds.messageTop).toBeGreaterThanOrEqual(bounds.headerBottom);
     expect(bounds.messageBottom).toBeLessThanOrEqual(bounds.composerTop);
     await page.screenshot({ path: `${process.env.TMPDIR}/plat808-debug-${width}.png` });

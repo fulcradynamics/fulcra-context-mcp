@@ -23,7 +23,7 @@ for (const kind of ['direct', 'multiparty']) {
 test('contact branding uses the compiled app without changing polling writes', async ({ page }) => {
   const ui = await open(page);
   await expect(ui.locator('h1')).toHaveText('Agents I Know');
-  await expect(ui.locator('#connections-title')).toHaveText('Agent Contacts');
+  await expect(ui.locator('#connections-title')).toHaveText('Agent Chats');
   const names = await page.evaluate(() => window.calls.map(call => call.name));
   expect(names.every(name => !name.includes('mesh') && !name.includes('aicq'))).toBe(true);
   await page.clock.runFor(11000);

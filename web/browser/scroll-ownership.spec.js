@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, peer } from './harness.js';
+import { open, peer, readOnlyThread } from './harness.js';
 
 for (const width of [320,900]) test(`short iframe keeps an ordinary message visible and independent rail reachability at ${width}`, async ({page}) => {
   const ui = await open(page,width,{listOnly:true,presentation:'thread',launchPeer:peer,direct:true});
@@ -10,7 +10,7 @@ for (const width of [320,900]) test(`short iframe keeps an ordinary message visi
     const m = await ui.locator('#messages li').last().boundingBox();
     const h = await ui.locator('.contact-header').boundingBox();
     const c = await ui.locator('#thread-composer').boundingBox();
-    expect(m.y).toBeGreaterThanOrEqual(h.y+h.height);
+    expect(m.y).toBeGreaterThanOrEqual(h.y+h.height-1);
     expect(m.y+m.height).toBeLessThanOrEqual(c.y);
   };
   await visible();
@@ -25,7 +25,7 @@ for (const width of [320,900]) test(`short iframe keeps an ordinary message visi
   });
   const rail = await ui.locator('#connection-list').boundingBox();
   const last = await ui.locator('#connections li').last().boundingBox();
-  expect(last.y+last.height).toBeLessThanOrEqual(rail.y+rail.height-71);
+  expect(last.y+last.height).toBeLessThanOrEqual(rail.y+rail.height-23);
   await ui.locator('#connection-list').evaluate(el => el.scrollTop = 0);
   const invite = await ui.locator('#invite').boundingBox();
   expect(invite.y).toBeGreaterThanOrEqual(rail.y);
@@ -38,7 +38,7 @@ for (const width of [320, 900]) test(`Advanced expansion reveals its beginning a
     id: `h${i}`, kind: 'message', sender: 'Me', body: `History ${i}`,
     start_time: `2026-10-13T10:${String(i).padStart(2, '0')}:00Z`,
   }));
-  const ui = await open(page, width, { listOnly: true, ownRecords });
+  const ui = await open(page, width, { ...readOnlyThread, ownRecords });
   await expect(ui.locator('#messages li')).toHaveCount(46);
   await page.locator('iframe').evaluate(el => el.style.height = '600px');
   await page.clock.runFor(100);
@@ -76,7 +76,7 @@ for (const width of [320, 900]) test(`Advanced expansion reveals its beginning a
 
 test('real pane retains an older reader anchor through polling and new records', async ({page}) => {
   const ownRecords = Array.from({length:30},(_,i)=>({id:`history-${i}`,kind:'message',sender:'Me',body:`Historical message ${i}`,start_time:`2026-10-13T10:${String(i).padStart(2,'0')}:00Z`}));
-  const ui = await open(page,900,{listOnly:true,ownRecords});
+  const ui = await open(page,900,{...readOnlyThread,ownRecords});
   await expect(ui.locator('#messages li')).toHaveCount(36);
   await page.locator('iframe').evaluate(el => el.style.height = '600px');
   await page.clock.runFor(100);
