@@ -13,7 +13,7 @@ for (const presentation of ['global', 'threads']) test(`empty contacts offer an 
   await expect(ui.locator('#connections')).toBeHidden();
   await expect(ui.locator('body')).not.toContainText('conversation panel');
   await page.screenshot({path: `${process.env.TMPDIR ?? '../test-results'}/empty-state-${presentation}.png`});
-  const invite = ui.getByRole('button', {name: 'Invite a new contact'});
+  const invite = ui.locator('#invite');
   await expect(invite).toBeEnabled();
   await invite.click();
   await ui.getByRole('dialog', {name: 'Invite someone'}).getByRole('button', {name: /Continue in /}).click();

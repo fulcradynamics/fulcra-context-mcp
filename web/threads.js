@@ -98,6 +98,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   // In the two-pane (global) layout, open the top conversation once on first load
   // so the panel isn't empty — unless an entrypoint peer or the user already chose.
   function maybeAutoSelect() {
+    // Dev harness opt-out (set via the mock host) so the empty/welcome state is viewable.
+    if (doc.defaultView.__fulcraDevNoAutoSelect) return;
     if (autoSelected || userSelected || launchPending || entrypoint.presentation !== 'global' || rows.size === 0) return;
     const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
     if (!entry) return;
@@ -120,7 +122,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         // remount a selected conversation. A changed result requests a fresh read.
         void refreshInvitations();
         const discovery = pendingContacts(await discoverThreads(app));
-        if (matchingFailed) discovery.warnings.push('Invitation matching unavailable; unmatched contacts remain pending.');
         if (disposed) return true;
         const peers = new Set(discovery.threads.map(t => t.peer));
         for (const [peer, entry] of rows) if (!peers.has(peer)) { entry.row.remove(); rows.delete(peer); }
@@ -151,8 +152,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             textCol.append(name, id, preview, assessment);
             const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
             name.after(relationship);
-            const previewLabel = doc.createElement('span'); previewLabel.className = 'debug-preview-label';
-            previewLabel.textContent = 'Preview'; previewLabel.hidden = true; relationship.after(previewLabel);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -334,7 +333,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       renderBadge(entry.assessment, previewAssessment(entry.thread.assessment, overrides));
       entry.button.querySelector('.relationship-state').textContent = overrides.relationship === 'pending' ? 'Pending' : 'Connected';
       entry.button.querySelector('.relationship-state').hidden = !overrides.relationship;
-      entry.button.querySelector('.debug-preview-label').hidden = !Object.keys(overrides).length;
       entry.preview.replaceChildren();
       if (message) {
         // Only the user's own messages get a prefix ("You: "); incoming previews

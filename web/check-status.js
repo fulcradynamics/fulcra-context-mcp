@@ -1,10 +1,10 @@
 import { requestInChat } from './invite.js';
 import { showToast } from './toast.js';
+import { icon, Sparkles } from './icons.js';
 
 const REFRESH_MS = 60000;
 export const startPrompt = 'Please use the set-up-agent-contacts skill to start automatically checking my Fulcra messages. '
   + 'This is an explicit scheduling request: skip the invitation offer and ask whether I want checks only or checks with replies.';
-export const checkPrompt = 'Please use the check-messages skill to check my Fulcra messages now.';
 
 const call = async (app, args) => {
   const result = await app.callServerTool({ name: 'fulcra_check_status', arguments: args }, { timeout: 30000 });
@@ -22,42 +22,47 @@ export async function readCheckStatus(app) {
   return checked[0] ?? all[0];
 }
 
-export function describeCheckStatus(status) {
-  if (status.status === 'not_set_up') return { text: 'Your agent is not automatically checking for messages.', action: 'Start automatic checking', prompt: startPrompt };
-  if (status.status === 'never_checked') return { text: 'Your agent has not checked for messages yet.', action: 'Check for new messages', prompt: checkPrompt };
-  if (status.status === 'checked') {
-    const when = new Date(status.last_checked).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return { text: `Your agent last checked for messages ${when}.`, action: 'Check for new messages', prompt: checkPrompt };
-  }
-  return null;
+// Builds the onboarding card shown when no automatic-check schedule exists. The
+// same content renders in the empty-state welcome panel and as a sticky header in
+// the message view; `onSetup` hands the setup request to the chat.
+function fillCard(container, host, onSetup) {
+  const doc = container.ownerDocument;
+  container.replaceChildren();
+  const head = doc.createElement('div'); head.className = 'onboarding-head';
+  head.append(icon(Sparkles, 'onboarding-icon', 18));
+  const title = doc.createElement('p'); title.className = 'onboarding-title'; title.textContent = 'Let your agent keep up for you';
+  head.append(title);
+  const text = doc.createElement('p'); text.className = 'onboarding-text';
+  text.textContent = `Set up ${host} to automatically check for new messages and reply on your behalf. `
+    + 'New messages still show up here either way — this just lets your agent act on them without you asking.';
+  const button = doc.createElement('button'); button.type = 'button'; button.className = 'primary onboarding-action';
+  button.textContent = 'Set up automatic checking';
+  button.addEventListener('click', () => onSetup(button));
+  container.append(head, text, button);
 }
 
 export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue in the conversation.',
   notifySent = message => showToast(doc, { title: 'Request sent', description: message })) {
-  const row = doc.querySelector('#check-status');
-  const text = row.querySelector('.check-status-text');
-  const button = row.querySelector('button');
+  const cards = [...doc.querySelectorAll('.onboarding-card')];
   const feedback = doc.querySelector('#status');
-  let current = null, sending = false;
-  button.addEventListener('click', async () => {
-    if (!current || sending) return;
+  const host = app.getHostVersion()?.name || 'your agent';
+  let sending = false;
+  const onSetup = async button => {
+    if (sending) return;
     sending = true;
-    await requestInChat(app, feedback, current.prompt, sentMessage, { button, toast: notifySent });
+    await requestInChat(app, feedback, startPrompt, sentMessage, { button, toast: notifySent });
     sending = false;
-  });
+  };
+  // Only offer setup where the host can carry the request to chat.
+  for (const card of cards) fillCard(card, host, onSetup);
   async function refresh() {
     if (doc.visibilityState !== 'visible') return;
-    // Keep the card open with a loading line through the first fetch so it doesn't
-    // collapse (and jolt the side panel) between the connect message clearing and
-    // the status arriving. Later refreshes leave the existing line in place.
-    if (!text.textContent) text.textContent = 'Checking your agent’s status…';
-    try { current = describeCheckStatus(await readCheckStatus(app)); } catch { current = null; }
-    // The card collapses on its own (CSS :has) when both the status line and the
-    // feedback note are empty, so here we only fill or clear the status line.
-    if (!current) { text.textContent = ''; button.hidden = true; return; }
-    text.textContent = current.text;
-    button.textContent = current.action;
-    button.hidden = !canMessage;
+    let status;
+    try { status = await readCheckStatus(app); } catch { status = null; }
+    // Show the onboarding card only when no schedule exists; once one is set up,
+    // there is nothing to surface here.
+    const show = canMessage && status?.status === 'not_set_up';
+    for (const card of cards) card.hidden = !show;
   }
   refresh();
   const timer = setInterval(refresh, REFRESH_MS);
