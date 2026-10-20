@@ -59,7 +59,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(handoff, send);
   // Chat-only keeps the send/ack logic (acks still run on open) but shows no controls.
-  const instruction = CHAT_ONLY && chatInstruction(doc, hostName(app));
+  const instruction = CHAT_ONLY ? chatInstruction(doc, hostName(app)) : null;
   container.append(...(instruction ? [instruction] : [label, actions, hint]));
   // Delivery address (and any setup-session handoff) lives in the Advanced panel.
   const advanced = doc.querySelector('#advanced-panel');
