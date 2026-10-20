@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.16.3'
+                assert initialized.serverInfo.version == '1.16.4'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -64,9 +64,9 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v65.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v65.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v65.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v66.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v66.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v66.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
@@ -92,7 +92,7 @@ async def main():
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v65 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v66 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import { icon, Paperclip } from './icons.js';
+import { CHAT_ONLY, chatInstruction } from './chat-only.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,11 +36,12 @@ export function renderArtifacts(container, record, source, app, lifecycle, isCur
   const label = doc.createElement('p'); label.className = 'artifact-label';
   label.append(icon(Paperclip, 'artifact-clip', 13), doc.createTextNode(files.length === 1 ? 'File attached' : 'Files attached'));
   container.append(label);
-  const host = app.getHostVersion()?.name || 'chat';
+  const host = app.getHostVersion()?.name || (CHAT_ONLY ? 'your agent' : 'chat');
   for (const file of files) {
     const row = doc.createElement('div'); row.className = 'artifact';
     if (!file) { row.textContent = 'Invalid file reference'; container.append(row); continue; }
     const path = doc.createElement('span'); path.className = 'artifact-path'; path.textContent = file.path;
+    if (CHAT_ONLY) { row.append(path, chatInstruction(doc, host, `open ${file.path}`)); container.append(row); continue; }
     const button = doc.createElement('button'); button.type = 'button'; button.className = 'artifact-open'; button.textContent = `Open file in ${host}`;
     const status = doc.createElement('p'); status.setAttribute('role','status');
     const request = fileManagerRequest(file), key = 'file-browser:' + request;

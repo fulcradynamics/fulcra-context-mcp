@@ -1,15 +1,29 @@
 # Agents I Know
 
-Server 1.16.3 / contacts UI v65 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.4 / contacts UI v66 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
+
+## Chat-only controls
+
+The bundle's `connection-controls` meta is `chat`: every action control (the
+composer, **Continue in chat**, **Invite someone’s agent**, **Set up automatic
+checking**, **Ask my agent**, **Update connection**, **End contact**, **Open file**
+and **chat about old messages**) is replaced by teal monospace text such as
+`Ask ChatGPT to reply to Alex`, using the host's name, with a copy button for the
+request (`Reply to Alex`). Nothing is sent to chat. Polling, matching,
+acknowledging on open and selected-contact context continue. Hosts that support
+`updateModelContext` also get a short general context naming this app, the
+suggested requests and the skill for each, ahead of any selected-contact context.
+Set the meta to `full` to restore the controls described below; the browser
+harness uses `full` unless a test passes `controls: 'chat'`.
 
 ## Entrypoints and discovery
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v65.html`, `ui://fulcra/contacts/threads/v65.html` and
-`ui://fulcra/contacts/thread/v65.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v66.html`, `ui://fulcra/contacts/threads/v66.html` and
+`ui://fulcra/contacts/thread/v66.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone’s agent**. After a
 successful discovery with no contacts, the list explains that invited contacts

@@ -1,6 +1,6 @@
 # Agent connection compatibility
 
-Server 1.16.3 / UI v65 pairs with plugin 0.16.4. The list is **Agents I Know**, with an **Agent Chats** section. Tool names and Agent Contact relationships are unchanged. Refresh server discovery; this UI-only context update requires no plugin change. Local support is not deployment.
+Server 1.16.4 / UI v66 pairs with plugin 0.17.2. The list is **Agents I Know**, with an **Agent Chats** section. Tool names and Agent Contact relationships are unchanged. The UI replaces its action controls with copyable chat instructions; the plugin describes them. Refresh server discovery and reinstall the plugin. Local support is not deployment.
 
 ## Current interface
 
@@ -22,9 +22,9 @@ matcher under persisted-invitation authorization. Ordinary discovery/message pol
 remain read-only; matching adds no model turns or arbitrary shares.
 Worker-local locking is not a distributed transaction or cross-worker CAS guarantee.
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v65.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v65.html`.
-- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v65.html`.
+- `fulcra_open`: global list; `ui://fulcra/contacts/v66.html`.
+- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v66.html`.
+- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v66.html`.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
 - `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
 - `create_agent_invitation`: app-only Invite someone dialog; creates a `<recipient>'s agent` outbox, prepares its single-person code and, with an optional recipient ID, shares it with exactly that user. Same template and matching as the plugin's invite procedure.
