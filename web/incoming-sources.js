@@ -1,4 +1,5 @@
 // Reading selection only: it never establishes membership or changes shares.
+import { readable } from './contact-identity.js';
 export const sourceKey = source => JSON.stringify([source.fulcra_userid, source.id]);
 export function selectedSources(thread, excluded = []) {
   return { ...thread, sources: thread.sources.filter(s => s.direction !== 'Incoming' || !excluded.includes(sourceKey(s))),
@@ -24,7 +25,7 @@ export function incomingSelector(doc, onChange) {
       const checkbox = doc.createElement('input'); checkbox.type = 'checkbox';
       checkbox.checked = !excluded.includes(sourceKey(source));
       const text = doc.createElement('span');
-      text.textContent = `${source.name} — owner ${source.fulcra_userid} / ${source.id}`;
+      text.textContent = `${readable(thread.participants?.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — ${readable(source.name, 'Incoming channel')} (${sources.indexOf(source) + 1})`;
       checkbox.addEventListener('change', () => onChange(sourceKey(source), checkbox.checked));
       label.append(checkbox, text); choices.append(label);
     }

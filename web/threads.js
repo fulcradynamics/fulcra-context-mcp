@@ -1,4 +1,5 @@
 import { discoverThreads } from './connections-discovery.js';
+import { contactName, readable } from './contact-identity.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
@@ -6,6 +7,7 @@ import { readLatest } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { pendingContacts, matchInvitations } from './pending-contacts.js';
+import { createDebugPreview, previewAssessment } from './debug-preview.js';
 
 // Compact "time since last message" for contact rows: now / 5m / 3h / 2d, then a
 // short local date once it's a week old.
@@ -54,7 +56,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const connRetrySpinner = doc.querySelector('#connection-retry-spinner');
   status.textContent = '';
   const inlineList = entrypoint.presentation === 'threads';
-  const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation);
+  const debug = createDebugPreview();
+  const detail = setupMessages(app, doc, () => scheduler.request(), inlineList ? 'thread' : entrypoint.presentation, debug);
+  const stopDebug = debug.subscribe(peer => { const entry = rows.get(peer); if (entry) renderPreview(entry); });
   let displayPending = false, displayEpoch = 0, hostContext = app.getHostContext();
   async function choose(entry) {
     if (disposed || displayPending || rows.get(entry.thread.peer) !== entry) return;
@@ -90,6 +94,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     detail.select(entry.thread, entry.button, { acknowledge: true });
   }
   let requestedPeer, launchPending = false, userSelected = false;
+  let autoSelect = entrypoint.presentation === 'global';
   const launchStatus = doc.createElement('p');
   launchStatus.id = 'entrypoint-status'; launchStatus.setAttribute('role', 'status');
   if (entrypoint.presentation !== 'global') {
@@ -123,6 +128,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             button.className = 'thread-button';
             const avatarWrap = doc.createElement('span'); avatarWrap.className = 'row-avatar-wrap';
             const dot = doc.createElement('span'); dot.className = 'unread-dot';
+            dot.textContent = 'Unread';
             dot.setAttribute('aria-label', 'Unread');
             const avatar = doc.createElement('span'); avatar.className = 'row-avatar';
             avatar.setAttribute('aria-hidden', 'true');
@@ -130,9 +136,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name';
             const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
-                        const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
+            const preview = doc.createElement('p'); preview.className = 'thread-preview'; preview.hidden = true;
             const assessment = doc.createElement('p'); assessment.hidden = true;
             textCol.append(name, id, preview, assessment);
+            const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
+            name.after(relationship);
+            const previewLabel = doc.createElement('span'); previewLabel.className = 'debug-preview-label';
+            previewLabel.textContent = 'Preview'; previewLabel.hidden = true; relationship.after(previewLabel);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -143,13 +153,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             row.append(button); list.append(row); rows.set(thread.peer, entry);
           }
           entry.thread = thread;
-          const label = thread.identifier || (thread.participants ? 'Group conversation' : thread.peer) || 'Agent Contact';
+          const label = contactName(thread);
           entry.name.textContent = label;
           entry.avatar.textContent = [...String(label).trim()][0]?.toUpperCase() || '?';
           const idText = thread.participants ? '' : (thread.peer ?? '');
           entry.id.textContent = idText;
-          entry.id.hidden = !idText || idText === label;
-          renderBadge(entry.assessment, thread.assessment);
+          entry.id.hidden = true;
+          renderPreview(entry);
         }
         const pendingKeys = new Set();
         for (const source of discovery.pending) {
@@ -175,7 +185,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
               {lifecycle: detail.contextLifecycle, isCurrent: () => !disposed && row.isConnected && !listPanel.closest('[hidden]')});
           }
           entry.source = source;
-          entry.label.textContent = source.identifier || source.name;
+          entry.label.textContent = readable(source.identifier || source.name, 'Pending contact');
           entry.state.textContent = source.state || 'Not connected yet. Invitation sent';
           entry.help.textContent = app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text
             ? '' : 'Chat assistance is unavailable here. Ask your agent to review pending Fulcra contacts in chat; sharing needs your consent.';
@@ -195,7 +205,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             avatarWrap.append(avatar);
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name'; name.textContent = 'Legacy connection';
-            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer;
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
             textCol.append(name, id);
             const button = doc.createElement('button'); button.type = 'button'; button.className = 'legacy-convert'; button.textContent = 'Convert to Contact';
             inner.append(avatarWrap, textCol, button);
@@ -219,6 +229,12 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             detail.select(matches[0], rows.get(requestedPeer)?.button);
           } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
         }
+        if (autoSelect && !userSelected && discovery.threads.length) {
+          autoSelect = false;
+          launchStatus.textContent = '';
+          const thread = discovery.threads[0];
+          detail.select(thread, rows.get(thread.peer)?.button);
+        }
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
         listFailed = false; listWarnings = discovery.warnings.join(' '); renderConnectionStatus();
@@ -226,11 +242,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         // Reveal the contacts as soon as discovery returns — the per-thread reads
         // that inform unread state and timestamps fill in after, with a small
         // spinner in each time badge until they land, then an animated re-sort.
-        const wasFirst = firstLoad;
+
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; }
         list.hidden = rows.size === 0; empty.hidden = rows.size > 0;
-        if (!listPanel.hidden) { void refreshPreviews().then(sortRows); return true; }
-        if (wasFirst) void refreshPreviews().then(sortRows); // prime the hidden list behind the detail panel
+        void refreshPreviews().then(sortRows);
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
@@ -288,15 +303,26 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       if (disposed || rows.get(thread.peer) !== entry
         || JSON.stringify(entry.thread.sources) !== JSON.stringify(thread.sources)) return;
       if (failed) {
-        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
-        entry.preview.hidden = false;
-        entry.dot.classList.remove('on');
-        entry.time.textContent = '';
+        entry.summary = null; entry.previewFailed = true;
         entry.lastAt = NaN;
+        renderPreview(entry);
         return;
       }
       const summary = contactPreview(latest);
       const message = summary?.message;
+      entry.summary = summary ?? null; entry.previewFailed = false;
+      const at = message?.record?.start_time;
+      entry.lastAt = at ? Date.parse(at) : NaN;
+      renderPreview(entry);
+    }));
+  }
+  function renderPreview(entry) {
+      const overrides = debug.get(entry.thread.peer);
+      const summary = entry.summary, message = summary?.message;
+      renderBadge(entry.assessment, previewAssessment(entry.thread.assessment, overrides));
+      entry.button.querySelector('.relationship-state').textContent = overrides.relationship === 'pending' ? 'Pending' : 'Connected';
+      entry.button.querySelector('.relationship-state').hidden = !overrides.relationship;
+      entry.button.querySelector('.debug-preview-label').hidden = !Object.keys(overrides).length;
       entry.preview.replaceChildren();
       if (message) {
         const outgoing = message.direction === 'Outgoing';
@@ -305,13 +331,28 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         sender.textContent = `${outgoing ? 'You' : entry.name.textContent}: `;
         entry.preview.append(sender, doc.createTextNode(messageText(message.record)));
       }
-      entry.preview.hidden = !message;
-      entry.dot.classList.toggle('on', message?.direction === 'Incoming' && !summary.acknowledged);
-      const at = message?.record?.start_time;
-      entry.lastAt = at ? Date.parse(at) : NaN;
+      if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+      entry.preview.hidden = !message && !entry.previewFailed;
+      entry.dot.classList.toggle('on', overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged);
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
-      entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
-    }));
+      if (entry.summary !== undefined) entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
+      else {
+        const spinner = doc.createElement('span'); spinner.className = 'refresh-spinner';
+        spinner.setAttribute('aria-label', 'Loading preview'); entry.time.replaceChildren(spinner);
+      }
+      if (overrides.previewText) { entry.preview.textContent = overrides.previewText; entry.preview.hidden = false; }
+      if (overrides.time) entry.time.textContent = overrides.time;
+      if (overrides.preview === 'error') {
+        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+        entry.preview.hidden = false; entry.time.textContent = '';
+      }
+      if (['empty', 'loading'].includes(overrides.preview)) {
+        entry.preview.hidden = true; entry.time.replaceChildren();
+        if (overrides.preview === 'loading') {
+          const spinner = doc.createElement('span'); spinner.className = 'refresh-spinner';
+          spinner.setAttribute('aria-label', 'Loading preview'); entry.time.append(spinner);
+        }
+      }
   }
   // Order rows like a chat list: most recent activity first, threads without a
   // readable message last. Animates the reorder with a FLIP transform.
@@ -360,6 +401,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     if (disposed) return disposal;
     disposed = true;
     stopHost?.();
+    stopDebug();
     scheduler.dispose();
     disposal = detail.dispose();
     clearTimeout(connStatusTimer);
@@ -380,19 +422,23 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       ? 'The initial Agent Contacts list result failed. Refresh Agent Contacts to retry discovery.' : '';
     scheduler.request();
   });
-  else if (entrypoint.presentation === 'thread') entrypoint.consume(result => {
-    if (disposed || userSelected) return;
-    const data = result.structuredContent;
-    if (result.isError || data?.presentation !== 'thread'
-      || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
-      launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
-    } else {
-      requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
-      launchPending = requestedPeer != null;
-      launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : 'Choose an accessible Agent Contact.';
-    }
+  else if (entrypoint.presentation === 'thread') {
+    // Populate the rail while awaiting the opener, without choosing a substitute.
     scheduler.request();
-  });
-  else scheduler.request();
+    entrypoint.consume(result => {
+      if (disposed || userSelected) return;
+      const data = result.structuredContent;
+      if (result.isError || data?.presentation !== 'thread'
+        || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
+        launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
+      } else {
+        requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
+        launchPending = requestedPeer != null;
+        autoSelect = !launchPending;
+        launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : '';
+      }
+      scheduler.request();
+    });
+  } else scheduler.request();
   return dispose;
 }

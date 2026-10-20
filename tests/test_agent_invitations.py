@@ -270,3 +270,44 @@ async def test_public_tools_have_same_auth_and_narrow_results(api, monkeypatch):
         matched = (await client.call_tool('match_agent_invitations', {})).structured_content
         assert matched['results'][0]['status'] == 'matched'
         assert set(matched['results'][0]) == {'data_type', 'status', 'peer_userid', 'incoming_data_type'}
+
+
+NEW = 'Event/00000000-0000-4000-8000-000000000030'
+
+
+@pytest.fixture
+def creating(api):
+    create_state = api.create_data_type.side_effect
+    def create(base, body):
+        if body.get('name') == invitations.NAME:
+            return create_state(base, body)
+        api.catalog.append(dict(channel(NEW, OWN), name=body['name'], description=body['description']))
+        return dict(id=NEW)
+    api.create_data_type.side_effect = create
+    return api
+
+
+def test_create_labels_new_outbox_and_prepares_unshared_code(creating):
+    result = invitations.create(creating, 'Leif', 'Lucian')
+    assert result['data_type'] == NEW and result['identifier'] == "Lucian's agent"
+    assert result['topic'] == 'handshake ' + result['code'] and result['shared_with'] is None
+    entry = next(e for e in creating.catalog if e['id'] == NEW)
+    assert entry['name'] == 'Leif with Lucian'
+    assert entry['description'].startswith('connect-our-agents channel\n[mesh_identifier: ')
+    creating.create_datashare.assert_not_called()
+
+
+def test_known_recipient_is_shared_up_front_and_handshake_completes(creating):
+    result = invitations.create(creating, 'Leif', 'Lucian', PEER)
+    creating.create_datashare.assert_called_once()
+    assert creating.create_datashare.call_args.kwargs['allowed_user_ids'] == [PEER]
+    handshake(creating, result['code'])
+    matched = [r for r in invitations.match(creating)['results'] if r['data_type'] == NEW][0]
+    assert matched['status'] == 'matched' and creating.create_datashare.call_count == 1
+
+
+def test_create_rejects_bad_recipient_id_before_writing(creating):
+    for bad in ('not-a-uuid', OWN):
+        with pytest.raises(ValueError):
+            invitations.create(creating, 'Leif', 'Lucian', bad)
+    creating.create_data_type.assert_not_called()

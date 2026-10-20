@@ -8,7 +8,7 @@ test('preview sender follows incoming and outgoing messages without coloring the
   await expect(sender).toHaveText('Weekend: ');
   await expect(sender).toHaveCSS('color', 'rgb(86, 214, 183)');
   await expect(preview).toHaveText('Weekend: Broadcast message');
-  await expect(preview).toHaveCSS('color', 'rgb(122, 122, 130)');
+  await expect(preview).toHaveCSS('color', 'rgb(165, 165, 173)');
 
   await page.evaluate(() => {
     window.ownRecords = [{ id: 'outgoing', start_time: '2026-10-13T11:59:00Z', sender: 'me', kind: 'message', body: '<b>Literal text</b>' }];

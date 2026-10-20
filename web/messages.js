@@ -1,4 +1,5 @@
 import { createThreadComposer } from './thread-composer.js';
+import { contactName, readable, contactIdentity } from './contact-identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
@@ -9,18 +10,21 @@ import { getContextLifecycle } from './native-context.js';
 import { reconcilePosts } from './connection-send.js';
 import { unreadMessages } from './unread.js';
 import { legacyHandoff } from './legacy-handoff.js';
-import { icon, History, ArrowLeft, Settings } from './icons.js';
+import { endContact, confirmEndContact } from './end-contact.js';
+import { icon, History, Settings } from './icons.js';
+import { createDebugPreview, previewAssessment, previewMessages, acknowledgementPreview, setupDebugControls } from './debug-preview.js';
 export { parseRecords } from './records.js';
 const DAY = 86400000;
 
-export function setupMessages(app, doc, requestRefresh, presentation = 'global') {
+export function setupMessages(app, doc, requestRefresh, presentation = 'global', debug = createDebugPreview()) {
   const panel = doc.querySelector('#connection-detail');
   const listPanel = doc.querySelector('#connection-list');
   const title = doc.querySelector('#message-title');
   const headerAvatar = doc.querySelector('#contact-avatar');
   const contactSubtitle = doc.querySelector('#contact-subtitle');
   const contactTopic = doc.querySelector('#contact-topic');
-  const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; title.after(assessment);
+  const updateIdentity = contactIdentity(doc, doc.querySelector('.contact-name'));
+  const assessment = doc.createElement('p'); assessment.id = 'contact-assessment'; doc.querySelector('#advanced-panel').prepend(assessment);
   let acknowledgeOnOpen = false;
   const status = doc.querySelector('#message-status');
   const retry = doc.querySelector('#message-retry');
@@ -63,10 +67,29 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   advancedToggle.prepend(icon(Settings, 'btn-icon'));
   const contactMeta = doc.createElement('p'); contactMeta.className = 'meta';
   advanced.append(contactMeta, rosterWarning, incoming.element, readingOptions);
+  const endButton = doc.createElement('button'); endButton.type = 'button'; endButton.id = 'end-contact';
+  endButton.className = 'danger'; endButton.textContent = 'End contact';
+  advanced.append(endButton);
+  const onEnd = async () => {
+    const thread = selected, name = contactName(thread);
+    const choice = await confirmEndContact(doc, name, endButton);
+    if (!choice || thread !== selected) return;
+    endButton.disabled = true; status.textContent = `Ending contact with ${name}…`;
+    try {
+      await endContact(app, thread, choice.archive);
+      if (thread !== selected) return;
+      onBack();
+      doc.querySelector('#status').textContent = `Ended contact with ${name}.`;
+    } catch (error) {
+      if (thread === selected) status.textContent = `Could not end contact with ${name}: ${error.message}`;
+    } finally { endButton.disabled = false; requestRefresh(); }
+  };
+  endButton.addEventListener('click', onEnd);
   const onAdvanced = () => {
     const expand = advanced.hidden;
     advanced.hidden = !expand;
     advancedToggle.setAttribute('aria-expanded', String(expand));
+    if (expand) messageList.reveal(advanced);
   };
   advancedToggle.addEventListener('click', onAdvanced);
   let activeViewer = 'chatgpt';
@@ -79,12 +102,21 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
   // The spinner sits to the right of the button; toggling visibility (not
   // display) keeps its space reserved so the button never shifts.
   const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
-  const back = doc.querySelector('#message-back');
-  back.prepend(icon(ArrowLeft, 'btn-icon'));
+
   const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'));
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
+  const syncDebug = setupDebugControls(doc, debug, () => selected?.peer);
+  const ackPreview = doc.createElement('p'); ackPreview.id = 'debug-ack-status'; ackPreview.className = 'meta'; ackPreview.hidden = true;
+  status.after(ackPreview);
+  let visibleMessages = [], liveTopic = '';
+  const stopDebug = debug.subscribe(peer => {
+    if (peer !== selected?.peer) return;
+    syncDebug();
+    renderAssessment(assessment, previewAssessment(selected.assessment, debug.get(peer)));
+    renderDisplay();
+  });
   const converted = doc.createElement('p'); converted.hidden = true;
   const convertedLabel = doc.createElement('span'); convertedLabel.textContent = 'Converted from legacy connection';
   const oldMessages = doc.createElement('button'); oldMessages.type = 'button'; oldMessages.textContent = 'chat about old messages';
@@ -118,7 +150,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         // Display-only tick. The scheduler alone owns retry requests/deadlines.
         statusTimer = setTimeout(renderStatus, 1000);
       } else text += 'Automatic retries are paused.';
-    } else if (displayed && !displayed.messages.length) text = 'No messages yet.';
+    } else if (displayed && !displayed.messages.length) text = `No messages with ${contactName(selected)} in this history window. Send a message below to start a conversation, or load more history.`;
+    const overrides = debug.get(selected.peer);
+    if (!unavailable && !loadFailed) {
+      if (overrides.messages === 'empty') text = 'No messages in this history window. (Debug preview)';
+      if (overrides.messages === 'error') text = 'Could not load messages. (Debug preview; live retries unchanged)';
+    }
+    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt || !!displayed;
+    messages.hidden = overrides.messages === 'loading';
+    ackPreview.hidden = !overrides.ack;
+    ackPreview.textContent = overrides.ack ? `Debug preview: ${acknowledgementPreview[overrides.ack]}` : '';
     if (status.textContent !== text) messageList.preservePosition(() => { status.textContent = text; });
   }
   const messageList = createMessageList(messages,
@@ -160,7 +201,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       // Under the date: the sending agent name, when it differs from the contact.
       const showSender = incoming && typeof record.sender === 'string' && record.sender.trim()
         && record.sender !== (selected?.identifier || selected?.peer);
-      sender.textContent = showSender ? record.sender : '';
+      sender.textContent = showSender ? readable(record.sender, 'Contact') : '';
       sender.hidden = !showSender;
       const addressing = messageAddressing(record, activeViewer);
       item.classList.toggle('addressed-to-viewer', addressing === 'addressed');
@@ -169,13 +210,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       let recipients = item.querySelector('.message-recipients');
       if (!recipients) { recipients = doc.createElement('span'); recipients.className = 'message-recipients'; meta.append(recipients); }
       recipients.hidden = !selected?.participants || !Array.isArray(record.recipients);
-      const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
+      const recipientsText = Array.isArray(record.recipients) ? `To: ${record.recipients.filter(r => typeof r === 'string').map(r => readable(r, 'Contact')).join(', ')}${addressing === 'addressed' ? ' — addressed to viewing agent' : ''}` : 'Unrecognized recipients';
       if (recipients.textContent !== recipientsText) recipients.textContent = recipientsText;
       // Channel provenance (multiparty participants view only).
       let provenance = item.querySelector('.message-source');
       if (!provenance) { provenance = doc.createElement('span'); provenance.className = 'message-source'; meta.append(provenance); }
       provenance.hidden = !selected?.participants;
-      provenance.textContent = selected?.participants ? `${source.fulcra_userid} / ${source.id}${source.association ? ' — association unverified' : ''}` : '';
+      provenance.textContent = selected?.participants ? `${readable(selected.participants.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — association unverified` : '';
       // Optimistic send state for outgoing posts.
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
@@ -195,32 +236,31 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         () => renderedGeneration === generation && !unavailable && selected?.sources.some(s => s.id === source.id && s.fulcra_userid === source.fulcra_userid));
     });
   const setTitle = thread => {
-    // Clean header: just the contact's name + avatar. The exact ID / account go
-    // to the Advanced panel, and the assessment shows only when it needs attention.
-    const name = thread.participants ? (thread.identifier || 'Group conversation')
-      : (thread.identifier || thread.peer || 'Agent Contact');
+    // Display labels are not identity: exact IDs are disclosed on explicit click.
+    const name = contactName(thread);
+    updateIdentity(thread);
     title.textContent = name;
     headerAvatar.textContent = [...String(name).trim()][0]?.toUpperCase() || '?';
-    // Peer ID as a subtle monospace subtitle; hidden for multiparty or when it
-    // would just repeat the title (contact with no readable identifier).
-    contactSubtitle.textContent = thread.participants ? '' : (thread.peer ?? '');
+    // Do not expose a routing identifier as a subtitle or unnamed fallback.
+    contactSubtitle.textContent = '';
     contactSubtitle.hidden = !contactSubtitle.textContent || contactSubtitle.textContent === name;
-    renderAssessment(assessment, thread.assessment);
-    assessment.hidden = thread.assessment?.attention !== true;
+    renderAssessment(assessment, previewAssessment(thread.assessment, debug.get(thread.peer)));
+    syncDebug();
+    assessment.hidden = false;
     const account = thread.accountName && thread.accountName !== thread.identifier ? thread.accountName : '';
     contactMeta.textContent = thread.participants
-      ? `Participants: ${thread.participants.map(p => p.id).join(', ')}`
-      : (account ? `Account: ${account}` : '');
+      ? `Participants: ${thread.participants.map(p => readable(p.name, 'Contact')).join(', ')}`
+      : (account ? `Account: ${readable(account)}` : '');
     contactMeta.hidden = !contactMeta.textContent;
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
+    endButton.hidden = Boolean(thread.participants) || !thread.sources.some(s => s.direction === 'Outgoing');
     refreshLegacyHandoff();
   };
   // The thread's current topic (latest meaningful one), shown under the name.
-  const setThreadTopic = messages => {
-    const topic = messages.map(m => m.record.topic)
-      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) ?? '';
+  const setThreadTopic = () => {
+    const topic = debug.get(selected?.peer).topic || liveTopic;
     contactTopic.textContent = topic;
     contactTopic.hidden = !topic;
   };
@@ -232,7 +272,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === 'chatgpt' ? ' (assumption; change here)' : ''}`;
     if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
     const confirmed = reconcilePosts(draft, result.messages).at(-1);
-    if (confirmed) doc.querySelector('#send-status').textContent = `Peer ${selected.peer}, message ${confirmed.envelope.id}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
+    if (confirmed) doc.querySelector('#send-status').textContent = `${contactName(selected)}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
     const posts = unavailable ? [] : (draft.posts ?? [])
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));
@@ -245,15 +285,24 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
         if (!Number.isFinite(bt)) return -1;
         return at - bt;
       }) };
-    const visible = result.messages.filter(({ record }) => record.kind !== 'ack'
+    liveTopic = result.messages.map(m => m.record.topic)
+      .filter(t => typeof t === 'string' && t.trim() && t !== 'chat').at(-1) || '';
+    visibleMessages = result.messages.filter(({ record }) => record.kind !== 'ack'
       || (record.body != null && (typeof record.body !== 'string'
         || (record.body.trim() && record.body.trim().toLowerCase() !== 'ack'))));
-    messageList.update(visible, () => {
+    renderDisplay(() => {
       setTitle(selected);
-      setThreadTopic(result.messages);
       renderStatus();
       placeMore();
       updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
+    });
+  }
+
+  function renderDisplay(afterRender = () => {}) {
+    messageList.update(previewMessages(visibleMessages, debug.get(selected?.peer)), () => {
+      setThreadTopic();
+      renderStatus();
+      afterRender();
     });
   }
 
@@ -275,7 +324,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
 
   async function read(discovery) {
     if (!selected) return true;
-    loading.hidden = !firstAttempt;
+    renderStatus();
     const requestGeneration = generation, requestSourceGeneration = sourceGeneration;
     const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
     try {
@@ -333,7 +382,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
       if (current()) failed(error, /no longer available/.test(error.message));
       return false;
     } finally {
-      if (current()) { firstAttempt = false; loading.hidden = true; more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
+      if (current()) { firstAttempt = false; renderStatus(); more.disabled = Boolean(requestedStart); loadingMore = false; updateMore(); }
     }
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
@@ -363,13 +412,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
+    doc.querySelector('#selection-empty').hidden = false;
+    returnFocus?.removeAttribute('aria-current');
     (returnFocus?.isConnected ? returnFocus : doc.querySelector('#connections .thread-button'))?.focus();
   };
   const onRetry = () => requestRefresh();
   more.addEventListener('click', onMore);
   retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
-  back.addEventListener('click', onBack);
+
   function select(thread, button, { acknowledge = false } = {}) {
     acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
@@ -378,8 +429,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
     clearTimeout(statusTimer); loading.hidden = false;
+    returnFocus?.removeAttribute('aria-current');
     returnFocus = button;
+    button?.setAttribute('aria-current', 'true');
     messageList.clear();
+    visibleMessages = []; liveTopic = '';
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
@@ -389,20 +443,25 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global')
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     contactTopic.hidden = true; contactTopic.textContent = '';
-    panel.hidden = false; listPanel.hidden = true; back.focus();
+    panel.hidden = false; listPanel.hidden = false;
+    doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
+    renderDisplay();
     requestRefresh();
   }
   return { select, back: onBack, refresh: read, failed, contextLifecycle,
     refreshState(state) { refreshState = state; renderStatus(); },
     dispose() {
     generation++; selected = undefined;
+    messageList.dispose();
+    stopDebug();
     clearTimeout(statusTimer); loading.hidden = true;
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);
+    endButton.removeEventListener('click', onEnd);
     viewer.removeEventListener('input', onViewer);
-    back.removeEventListener('click', onBack);
+
     return contextLifecycle.dispose();
   } };
 }

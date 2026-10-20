@@ -7,9 +7,9 @@ from fastmcp import FastMCP
 from fulcra_mcp import server_info
 
 app_mcp = FastMCP("Agents I Know UI")
-UI_URI = "ui://fulcra/contacts/v54.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v54.html"
-THREADS_UI_URI = "ui://fulcra/contacts/threads/v54.html"
+UI_URI = "ui://fulcra/contacts/v61.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v61.html"
+THREADS_UI_URI = "ui://fulcra/contacts/threads/v61.html"
 CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
 
 
@@ -20,11 +20,8 @@ CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def agent_contacts_open() -> dict[str, str]:
-    """Show clickable Agents I Know in chat. Select a peer to request a conversation panel.
-
-    Does not write account data or send messages.
-    Use for a bare Fulcra mention or a submitted Agents I Know mention unless the
-    user asks for another task.
+    """Show clickable Agents I Know and Invite someone; select a peer to open a panel.
+    Read-only: no account writes or messages.
     """
     return {"presentation": "threads"}
 
@@ -58,11 +55,10 @@ def contacts_html() -> str:
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def agent_contact_open(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
-    """Open an Agent Contact with an exact peer ID or discovered multiparty thread_id.
+    """Open an Agent Contact; omit IDs to choose. Read-only; names are not IDs.
 
-    Omit both IDs to choose an Agent Contact. Accessible audiences are discovered by the app;
-    names are not identifiers. Does not write account data or send messages.
-    Use for a submitted Open Agent Contact: mention after resolving its exact peer ID.
+    For Open Agent Contact: mentions, resolve contacts://threads/id- and pass its
+    exact peer_fulcra_userid. Alternatively use one discovered multiparty thread_id.
     """
     if peer_fulcra_userid is not None and not peer_fulcra_userid.strip():
         raise ValueError("Provide a nonblank exact peer user ID or omit it.")

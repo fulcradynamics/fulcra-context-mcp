@@ -39,7 +39,7 @@ export function renderStatus(element, status) {
     + (status?.assessed_at ? ` Oldest assessed channel: ${status.assessed_at}` : '');
 }
 
-// Contact-list badge: a two-part pill, "Status" then the agent's short reason.
+// Quiet saved assessment; the accessible label distinguishes it from unread.
 // Hidden until every own channel has a known assessment (or one needs attention).
 export function renderBadge(element, status) {
   const known = status && status.attention !== null && status.reason;

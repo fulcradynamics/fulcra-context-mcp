@@ -3,6 +3,14 @@ import { open } from './harness.js';
 
 const writes = page => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').map(c => c.arguments));
 const choose = ui => ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
+const leave = async (page, ui) => {
+  await page.evaluate(() => { window.navigationContact = true; });
+  await page.clock.runFor(11000);
+  await ui.locator('.thread-button').filter({ hasText: 'Quiet contact' }).click();
+  await expect(ui.locator('#message-title')).toHaveText('Quiet contact');
+  await expect(ui.locator('.composer-input')).toHaveValue('');
+  await expect(ui.locator('#ack-status')).toHaveText('');
+};
 
 test('Send auto-acks retain uncertain writes without overwriting send status or newer drafts', async ({ page }) => {
   const ui = await open(page, 900, { acceptAck: true });
@@ -27,7 +35,7 @@ test('Send auto-acks retain uncertain writes without overwriting send status or 
   await ui.locator('.composer-input').fill('New draft');
   const first = await writes(page);
   expect(new Set(first.map(a => a.mid)).size).toBe(first.length);
-  await ui.locator('#message-back').click();
+  await leave(page, ui);
   await choose(ui);
   await expect(ui.locator('#ack-status')).toContainText('unconfirmed');
   await page.clock.runFor(11000);
@@ -43,6 +51,8 @@ test('Send auto-acks retain uncertain writes without overwriting send status or 
 for (const outcome of ['uncertain', 'lost', 'rejected']) {
   test(`opening acknowledgement: ${outcome} retains identity without duplicate writes`, async ({ page }) => {
     const ui = await open(page, 900, { listOnly: true });
+    await expect(ui.locator('#messages .message-row')).toHaveCount(6);
+    expect(await writes(page)).toEqual([]); // Startup selection is read-only.
     await page.evaluate(outcome => {
       window.pendingAcks = [];
       window.sendResult = (request, reply) => {
@@ -64,7 +74,7 @@ for (const outcome of ['uncertain', 'lost', 'rejected']) {
     await expect(ui.locator('#send-status')).not.toContainText('Reopen');
     const first = await writes(page);
     await ui.locator('.composer-input').fill('Keep my draft');
-    await ui.locator('#message-back').click();
+    await leave(page, ui);
     await choose(ui);
     await expect(ui.locator('#messages .message-row')).toHaveCount(6);
     await expect(status).toContainText(outcome === 'rejected' ? 'rejected' : 'unconfirmed');
@@ -76,7 +86,7 @@ for (const outcome of ['uncertain', 'lost', 'rejected']) {
       await page.clock.runFor(11000);
       await expect(status).toHaveText('');
       await expect(ui.locator('.composer-input')).toHaveValue('Keep my draft');
-      await ui.locator('#message-back').click();
+      await leave(page, ui);
       await choose(ui);
       await expect(ui.locator('#messages .message-row')).toHaveCount(6);
       await expect(status).toHaveText('');

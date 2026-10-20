@@ -42,13 +42,13 @@ for (const outgoing of [false, true]) test(`incoming assistance remains availabl
 });
 
 test('outgoing-only stays pending, matched result still needs independently discovered two-way grants', async ({page}) => {
-  const ui = await open(page, 900, {listOnly:true});
+  const ui = await open(page, 900, {listOnly:true, presentation:'threads'});
   await page.evaluate(out => { window.excludeIncoming = true; window.invitationMatches = [{data_type:out,status:'matched'}]; }, out);
   await page.clock.runFor(11000);
   await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
   await expect(ui.locator('#pending-connections')).toContainText('Outgoing — awaiting connection');
   await page.evaluate(() => { window.excludeIncoming = false; });
-  await page.clock.runFor(11000);
+  await page.clock.runFor(21000);
   await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
   await expect(ui.locator('#pending-connections > li')).toHaveCount(0);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
@@ -78,7 +78,7 @@ test('uncertain pending handoff locks the exact source without automatic retry',
 });
 
 test('invitation completion does not veto later reciprocal multiparty grants', async ({page}) => {
-  const ui = await open(page, 900, {listOnly:true});
+  const ui = await open(page, 900, {listOnly:true, presentation:'threads'});
   await page.evaluate(({out, peer}) => {
     window.audience = [peer];
     window.invitationMatches = [{data_type:out,status:'matched'}];
@@ -88,7 +88,7 @@ test('invitation completion does not veto later reciprocal multiparty grants', a
   await page.evaluate(({peer, other}) => { window.audience = [peer, other]; }, {peer, other});
   for (const status of ['matched', 'pending', null]) {
     await page.evaluate(({out, status}) => { window.invitationMatches = status ? [{data_type:out,status}] : []; }, {out, status});
-    await page.clock.runFor(11000);
+    await page.clock.runFor(21000);
     await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
     await expect(ui.locator('#pending-connections > li')).toHaveCount(0);
   }

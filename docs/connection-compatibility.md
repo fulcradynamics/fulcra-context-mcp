@@ -1,14 +1,34 @@
 # Agent connection compatibility
 
-Server 1.11.0 / UI v46 pairs with plugin 0.14.0. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
+Server 1.16.0 / UI v61 pairs with plugin 0.16.4. The list is **Agents I Know** and threads are **Agent Contacts**. Refresh server discovery and reinstall together; local support is not deployment.
 
 ## Current interface
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v46.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v46.html`.
-- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v46.html`.
+Open invitations require `prepare_agent_invitation(data_type, open_invitation=true)`
+and `match_agent_invitations()`. The returned first-message topic uses the distinct
+`open_invitation <code>` prefix. Existing single-person invitations retain
+`handshake <code>` (missing stored prefix means an existing individual invitation).
+The private persisted code and prefix select the correct invitation before any
+outbox is chosen. Open templates are never shared: the server copies their schema
+and description into a dedicated individual outbox per authenticated responding owner.
+Bindings survive checks; uncertain creation/share attempts are not automatically
+retried. Completed responders are not re-shared after revocation, while the open
+template remains available to new owners. Ambiguous same-owner channels stay pending.
+Sender is display-only, with `<sender> via <open invitation identifier>` as the
+fallback label, bounded by the existing 80-character identifier limit. Invalid or
+missing sender uses `Agent`; a missing template label uses its exact type ID.
+UI load/refresh and authorized manual/scheduled checks use the same deterministic
+matcher under persisted-invitation authorization. Ordinary discovery/message polls
+remain read-only; matching adds no model turns or arbitrary shares.
+Worker-local locking is not a distributed transaction or cross-worker CAS guarantee.
+
+- `fulcra_open`: global list; `ui://fulcra/contacts/v61.html`.
+- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v61.html`.
+- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v61.html`.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
 - `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
+- `create_agent_invitation`: app-only Invite someone dialog; creates a `<recipient>'s agent` outbox, prepares its single-person code and, with an optional recipient ID, shares it with exactly that user. Same template and matching as the plugin's invite procedure.
+- `end_agent_contact`: app-only End contact; deletes our covering shares for one single-peer channel, verifies none remain and optionally archives it, as the plugin's Ending connections step does.
 - `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: settings/check status.
 - Existing model-visible `open_file_manager`, file and sharing tools support the plugin's new files/send entry skills; no additional file server or upload mechanism.
 

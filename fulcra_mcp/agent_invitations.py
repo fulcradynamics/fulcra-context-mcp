@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from threading import RLock
 from urllib.error import HTTPError
 
+from fulcra_api import connections
+
 from .connection import UUID_PATTERN, _uuid, channel_entry, _authorize
 from .connection_compatibility import SHARE_NAME_PREFIX
 from .contact_preferences import _check_private
@@ -96,6 +98,7 @@ def _state(api):
     if document.get('version') != 1 or not isinstance(document.get('invitations'), dict):
         raise ValueError('Invalid invitation storage.')
     codes = []
+    outboxes = set(document['invitations'])
     for channel, invite in document['invitations'].items():
         if (not re.fullmatch('Event/' + UUID_PATTERN, channel) or not isinstance(invite, dict)
                 or not isinstance(invite.get('code'), str) or not CODE.fullmatch(invite['code'])
@@ -104,6 +107,22 @@ def _state(api):
         if invite['state'] != 'prepared' and (not _uuid(invite.get('peer_userid'))
                 or not re.fullmatch('Event/' + UUID_PATTERN, invite.get('incoming_data_type', ''))):
             raise ValueError('Invalid invitation binding.')
+        prefix = invite.get('prefix', 'handshake')
+        if prefix not in ('handshake', 'open_invitation'):
+            raise ValueError('Invalid invitation prefix.')
+        if prefix == 'open_invitation':
+            if invite['state'] != 'prepared' or not isinstance(invite.get('responses'), dict):
+                raise ValueError('Invalid open invitation.')
+            for peer, binding in invite['responses'].items():
+                if (not _uuid(peer) or not isinstance(binding, dict)
+                        or binding.get('state') not in ('creating', 'prepared', 'consumed', 'completed')
+                        or not re.fullmatch('Event/' + UUID_PATTERN, binding.get('incoming_data_type', ''))):
+                    raise ValueError('Invalid open invitation binding.')
+                if binding['state'] != 'creating':
+                    outbox = binding.get('data_type', '')
+                    if not re.fullmatch('Event/' + UUID_PATTERN, outbox) or outbox in outboxes:
+                        raise ValueError('Invalid individual outbox.')
+                    outboxes.add(outbox)
         codes.append(invite['code'])
     if len(set(codes)) != len(codes):
         raise ValueError('Duplicate invitation codes.')
@@ -138,27 +157,36 @@ def _covering(api, channel):
     return covering
 
 
-def prepare(api, data_type):
+def prepare(api, data_type, open_invitation=False):
     with LOCK:
         own, entry, document = _state(api)
+        if any(binding.get('data_type') == data_type
+               for invitation in document['invitations'].values()
+               for binding in invitation.get('responses', {}).values()):
+            raise ValueError('Individual outbox already bound to an open invitation.')
         _channel(api, own, data_type, own=True)
         if _covering(api, data_type):
             raise ValueError('Prepare an unshared channel; no audience changes are authorized.')
         invite = document['invitations'].get(data_type)
+        prefix = 'open_invitation' if open_invitation else 'handshake'
+        if invite and invite.get('prefix', 'handshake') != prefix:
+            raise ValueError('Invitation mode cannot change.')
         if invite and invite['state'] != 'prepared':
             raise ValueError('Invitation already consumed. Do not reuse it.')
         if not invite:
             code = secrets.token_hex(16)
             if code in {i['code'] for i in document['invitations'].values()}:
                 raise ValueError('Code collision; prepare again.')
-            invite = {'code': code, 'state': 'prepared'}
+            invite: dict = {'code': code, 'state': 'prepared', 'prefix': prefix}
+            if open_invitation:
+                invite['responses'] = {}
             document['invitations'][data_type] = invite
             _save(api, own, entry, document)
         return dict(status='prepared', data_type=data_type, own_userid=own,
-                    code=invite['code'], topic='handshake ' + invite['code'])
+                    code=invite['code'], topic=prefix + ' ' + invite['code'])
 
 
-def _evidence(api, own):
+def _evidence(api, own, prefix='handshake'):
     with _checking('incoming_grants'):
         grants = api.get_shared_datasets()
         if not isinstance(grants, list):
@@ -199,9 +227,105 @@ def _evidence(api, own):
         if len(first) != 1 or first[0].get('kind') != 'message':
             continue
         topic = first[0].get('topic', '')
-        if isinstance(topic, str) and topic.startswith('handshake ') and CODE.fullmatch(topic[10:]):
-            evidence.setdefault(topic[10:], []).append((owner, channel))
-    return {code: peers[0] for code, peers in evidence.items() if len(peers) == 1}
+        marker = prefix + ' '
+        if isinstance(topic, str) and topic.startswith(marker) and CODE.fullmatch(topic[len(marker):]):
+            evidence.setdefault(topic[len(marker):], []).append((owner, channel, first[0].get('sender')))
+    if prefix == 'open_invitation':
+        return evidence
+    return {code: peers[0][:2] for code, peers in evidence.items() if len(peers) == 1}
+
+
+def _open_peer(api, own, code, peer):
+    rows = [r for r in _evidence(api, own, 'open_invitation').get(code, []) if r[0] == peer]
+    return rows[0][:2] if len(rows) == 1 else None
+
+
+def _match_open(api, own, document, template, invite):
+    from fulcra_api import data_type_management
+    from .contact_identifier import parse_contact_identifier, write_contact_identifier, validate_identifier
+    from .tools import _user_defined_fields
+
+    results = []
+    rows = _evidence(api, own, 'open_invitation').get(invite['code'], [])
+    for peer, incoming, sender in rows:
+        binding = invite['responses'].get(peer)
+        if binding and binding['state'] == 'completed':
+            continue
+        result: dict = dict(template_data_type=template, peer_userid=peer,
+                      incoming_data_type=incoming, status='pending')
+        results.append(result)
+        try:
+            pair = (peer, incoming)
+            def verify():
+                current_own, entry, current = _state(api)
+                if (current_own != own or current != document
+                        or _open_peer(api, own, invite['code'], peer) != pair
+                        or _covering(api, template)):
+                    raise ValueError('Open invitation evidence changed.')
+                return entry
+
+            entry = verify()
+            source = _channel(api, own, template, own=True)
+            if binding and binding['incoming_data_type'] != incoming:
+                raise ValueError('Responder already bound to another source.')
+            if not binding:
+                # Persist intent BEFORE creation: an uncertain create must not duplicate.
+                label = parse_contact_identifier(source.get('description')) or template
+                try:
+                    sender = validate_identifier(sender[:80].strip())
+                except (ValueError, TypeError):
+                    sender = 'Agent'
+                identifier = sender[:max(1, 75 - len(label))] + ' via ' + label[:74]
+                identifier = identifier[:80].strip()
+                fields, required = _user_defined_fields(api.v1_catalog_schema(template, 'v1', fulcra_userid=own))
+                description = write_contact_identifier(source.get('description'), identifier)
+                entry = verify()
+                binding = dict(state='creating', incoming_data_type=incoming, identifier=identifier)
+                invite['responses'][peer] = binding
+                _save(api, own, entry, document)
+                created = data_type_management.create_data_type(api, {'id': 'Event', 'api_version': 'v1'},
+                    source.get('name') or 'Agent connection',
+                    description=description,
+                    fields_schema={'properties': fields, 'required': required})
+                data_type = created['id']
+                if data_type == template or data_type in document['invitations']:
+                    raise ValueError('New individual outbox required.')
+                _channel(api, own, data_type, own=True)
+                if _covering(api, data_type):
+                    raise ValueError('New outbox already shared.')
+                entry = verify()
+                binding.update(data_type=data_type, state='prepared')
+                _save(api, own, entry, document)
+            if binding['state'] == 'creating':
+                raise ValueError('Prior creation not verified; no automatic retry.')
+            data_type = binding['data_type']
+            result.update(data_type=data_type, identifier=binding['identifier'])
+            _channel(api, own, data_type, own=True)
+            covering = _covering(api, data_type)
+            if covering:
+                _authorize(api, own, peer, data_type)
+            elif binding['state'] == 'consumed':
+                raise ValueError('Prior share not verified; no automatic retry.')
+            if binding['state'] == 'prepared':
+                entry = verify()
+                binding['state'] = 'consumed'
+                _save(api, own, entry, document)
+                verify()
+                if _covering(api, data_type):
+                    _authorize(api, own, peer, data_type)
+                else:
+                    api.create_datashare(datashare_name='connect-our-agents invitation',
+                        fulcra_data_types=[data_type], allowed_user_ids=[peer], share_all_data=False,
+                        allowed_group_ids=None, time_start=None, time_end=None)
+            _authorize(api, own, peer, data_type)
+            entry = verify()
+            binding['state'] = 'completed'
+            _save(api, own, entry, document)
+            result['status'] = 'matched'
+        except Exception as exc:
+            result['reason'] = 'Match not verified. No automatic write retry.'
+            result['diagnostic'] = _diagnostic(exc, 'open_match_verification')
+    return results
 
 
 def match(api):
@@ -213,6 +337,9 @@ def match(api):
                 return {'results': []}
             evidence = _evidence(api, own)
             for data_type, invite in document['invitations'].items():
+                if invite.get('prefix') == 'open_invitation':
+                    results.extend(_match_open(api, own, document, data_type, invite))
+                    continue
                 if invite['state'] == 'completed':
                     continue  # Discovery owns the connection's subsequent grant lifecycle.
                 result: dict = dict(data_type=data_type, status='pending')
@@ -274,3 +401,32 @@ def match(api):
                     'reason': 'Invitation evidence unavailable; nothing shared.',
                     'diagnostic': diagnostic}
     return {'results': results}
+
+
+def create(api, inviter_name, recipient_name, recipient_userid=None):
+    """Create a labeled single-person invitation outbox, as the invite skill does,
+    then prepare its code. A known recipient ID shares the outbox up front; their
+    handshake still completes the match."""
+    from fulcra_api import data_type_management
+    from .contact_identifier import write_contact_identifier, validate_identifier
+
+    inviter, recipient = validate_identifier(inviter_name.strip()), validate_identifier(recipient_name.strip())
+    identifier = validate_identifier(f"{recipient}'s agent")
+    with LOCK:
+        own = api.get_fulcra_userid()
+        if recipient_userid is not None and (not _uuid(recipient_userid) or recipient_userid == own):
+            raise ValueError("Use the other person's exact Fulcra user ID, or leave it blank.")
+        created = data_type_management.create_data_type(
+            api, {'id': 'Event', 'api_version': 'v1'}, f'{inviter} with {recipient}',
+            description=write_contact_identifier(f'{SHARE_NAME_PREFIX[-1]} channel', identifier),
+            fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
+                           'required': connections.CHANNEL_FIELDS['required']})
+        data_type = created['id']
+        _channel(api, own, data_type, own=True)
+        prepared = prepare(api, data_type)
+        if recipient_userid:
+            api.create_datashare(datashare_name=f'{SHARE_NAME_PREFIX[-1]}: {identifier}',
+                fulcra_data_types=[data_type], allowed_user_ids=[recipient_userid], share_all_data=False,
+                allowed_group_ids=None, time_start=None, time_end=None)
+            _authorize(api, own, recipient_userid, data_type)
+        return {**prepared, 'identifier': identifier, 'shared_with': recipient_userid}

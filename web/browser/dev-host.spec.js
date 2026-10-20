@@ -22,10 +22,13 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   });
   await page.goto('http://dev.test/');
   const ui = page.frameLocator('#app');
+  await expect(ui.locator('#messages .message-row').first()).toBeVisible();
+  expect(await page.evaluate(() => window.sends)).toEqual([]);
   await ui.locator('.thread-button').filter({ hasText: 'Bob' }).click();
   await expect(ui.locator('#messages')).toContainText('Yes, received.');
   await expect(ui.locator('#send-status')).toHaveText('');
-  await ui.locator('#message-back').click();
+  await ui.locator('.thread-button').filter({ hasText: 'Alice' }).click();
+  await expect(ui.locator('#message-title')).toHaveText('Alice');
   await page.clock.runFor(11000);
   await expect(ui.locator('.thread-row').filter({ hasText: 'Bob' }).locator('.unread-dot')).toBeHidden();
   await ui.locator('.thread-button').filter({ hasText: 'Bob' }).click();
@@ -36,6 +39,7 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   await expect(ui.locator('#send-status')).toContainText('Posted to your outbox');
   await page.clock.runFor(11000);
   await expect(ui.locator('#messages')).toContainText('Synthetic reply');
-  await ui.locator('#message-back').click();
+  await ui.locator('.thread-button').filter({ hasText: 'Alice' }).click();
+  await expect(ui.locator('#message-title')).toHaveText('Alice');
   await expect(ui.locator('.thread-row').filter({ hasText: 'Bob' }).locator('.unread-dot')).toBeHidden();
 });

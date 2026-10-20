@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.12.3'
+                assert initialized.serverInfo.version == '1.16.0'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -34,6 +34,7 @@ async def main():
                     assert tools[name].meta['ui']['visibility'] == ['app', 'model']
                     assert tools[name].annotations.readOnlyHint is False
                 assert tools['prepare_agent_invitation'].inputSchema['required'] == ['data_type']
+                assert tools['prepare_agent_invitation'].inputSchema['properties']['open_invitation']['default'] is False
                 assert tools['match_agent_invitations'].inputSchema['properties'] == {}
                 assert tools['fulcra_settings_update'].annotations.readOnlyHint is False
                 assert tools['fulcra_settings_read'].meta['ui']['visibility'] == ['app', 'model']
@@ -46,6 +47,11 @@ async def main():
                 assert 'target_peer_userid' in tools['send_agent_message'].inputSchema['properties']
                 assert 'expected_peer_userids' in tools['get_contact_preferences'].inputSchema['properties']
                 assert 'send_agent_message' in tools
+                end_contact = tools['end_agent_contact']
+                assert end_contact.meta['ui']['visibility'] == ['app']
+                assert end_contact.annotations.readOnlyHint is False
+                assert end_contact.annotations.destructiveHint is True
+                assert end_contact.inputSchema['properties']['archive']['default'] is False
                 assert 'fulcra_userid' in tools['open_file_manager'].inputSchema['properties']
                 files_uri = tools['open_file_manager'].meta['ui']['resourceUri']
                 assert files_uri == 'ui://fulcra/file-manager/v3.html'
@@ -58,24 +64,34 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v54.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v54.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v54.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v61.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v61.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v61.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="connection-presentation" content="{marker}"' in text
-                    for value in ('use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Convert to Contact', 'chat about old messages',
+                    assert 'id="message-back"' not in text
+                    assert 'conversation-pane' in text and 'rail-content' in text and '72px' in text
+                    for value in ('id="check-status"', 'fulcra_check_status', 'Start Checking', 'Check Now',
+                                  'set-up-agent-contacts', 'check-messages skill'):
+                        assert value in text, value
+                    for value in ('ack-status', 'Read acknowledgement unconfirmed',
+                                  'Read acknowledgement rejected', 'no duplicate acknowledgement'):
+                        assert value in text, value
+                    for value in ('open_invitation=true', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Convert to Contact', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
                                   'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
+                                  'end-contact-dialog', 'End contact', 'Also archive your messages',
+                                  'debug-preview', 'Reset to live', 'Debug preview active',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v54 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v61 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':

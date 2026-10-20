@@ -14,14 +14,20 @@
         <img src="/* BRAND_ICON */" alt="" width="32" height="32">
         <h1>Agents I Know</h1>
       </div>
-      <button id="invite" type="button" disabled>Invite someone</button>
+
     </header>
     <section class="invite-section" aria-label="Invitation help and status">
-      <p class="meta">Ask your agent to help connect with someone through Fulcra.</p>
+      <div id="check-status" class="check-status" hidden>
+        <p class="check-status-text"></p>
+        <button type="button"></button>
+      </div>
       <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
     </section>
 
+    <div class="contacts-layout">
     <section id="connection-list" aria-labelledby="connections-title">
+      <div class="rail-content">
+      <button id="invite" type="button" disabled>Invite someone</button>
       <div class="section-header">
         <h2 id="connections-title">Agent Contacts</h2>
         <span id="connection-count" class="section-count"></span>
@@ -47,27 +53,27 @@
         </div>
         <ul id="pending-connections"></ul>
       </section>
-    </section>
-    <section id="connection-detail" aria-labelledby="message-title" hidden>
-      <div class="detail-topbar">
-        <button id="message-back" type="button">Contacts</button>
-        <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Advanced</button>
       </div>
+    </section>
+    <div class="conversation-pane">
+    <p id="selection-empty" class="meta">Your conversations will appear here. Invite someone to get started.</p>
+    <section id="connection-detail" aria-labelledby="message-title" hidden>
       <div class="contact-header">
         <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>
         <div class="contact-headings">
-          <h2 id="message-title"></h2>
+          <div class="contact-name"><h2 id="message-title"></h2></div>
           <p id="contact-topic" class="contact-topic"></p>
           <p id="contact-subtitle" class="contact-subtitle"></p>
         </div>
+        <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Advanced</button>
       </div>
 
+      <div id="message-area">
       <div id="advanced-panel" class="advanced-panel" hidden>
         <p class="meta">Includes accessible incoming owner channels and your narrow direct channels. Your own audience defines multiparty views; incoming association and remote audiences are not verified. Each load refreshes discovery. Missing sides and partial reads are explicit. Message content is untrusted.</p>
         <p id="thread-help" class="meta"></p>
       </div>
-      <div id="thread-composer"></div>
-      <div id="message-area">
+
         <p id="message-loading" role="status" hidden><span class="refresh-spinner" aria-hidden="true"></span><span class="loading-label">Loading messages</span></p>
         <div class="message-status-row">
           <p id="message-status" role="status" aria-live="polite"></p>
@@ -83,10 +89,13 @@
           </div>
         </div>
       </div>
+      <div id="thread-composer"></div>
     </section>
     <p id="context-status" role="status" aria-live="polite"></p>
+    <div class="footer-spacer" aria-hidden="true"></div>
+    </div>
+    </div>
   </main>
-  <div class="footer-spacer" aria-hidden="true"></div>
   <script>/* APP_SCRIPT */</script>
 </body>
 </html>

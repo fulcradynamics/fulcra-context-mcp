@@ -7,11 +7,10 @@ for (const kind of ['direct', 'multiparty']) {
     if (kind === 'direct') {
       await page.evaluate(() => { window.direct = true; });
       await page.clock.runFor(11000);
-      await ui.getByRole('button', { name: 'Contacts', exact: true }).click();
-      await ui.locator('.thread-button').filter({ hasText: peer }).filter({ hasNotText: 'Weekend' }).click();
+      await ui.locator('.thread-button').filter({ hasText: 'Alex' }).click();
       await expect(ui.locator('#messages .message-row')).toHaveCount(3);
     }
-    await expect(ui.locator('#message-title')).toHaveText(kind === 'direct' ? peer : 'Weekend');
+    await expect(ui.locator('#message-title')).toHaveText(kind === 'direct' ? 'Alex' : 'Weekend');
     await expect(ui.getByRole('button', {
       name: 'Discuss in synthetic', exact: true,
     })).toBeEnabled();
