@@ -405,15 +405,16 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; color: var(--muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .thread-time:empty { display: none; }
 /* Saved assessment shown as a pill badge, set apart from the row's name/preview.
-   Purple tint for informational states (no action identified / partially assessed),
-   amber for states that need attention. */
+   Informational states (no action identified / partially assessed) read as quiet
+   tertiary monospace text, like the legacy user ID; only "needs attention" gets the
+   amber pill, since it calls for action. */
 .status-badge { align-self: flex-start; max-width: 100%; margin: 6px 0 0; display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 9px; border-radius: 999px; background: rgba(123, 97, 255, .18); font-size: 11px; font-weight: 500; line-height: 1.4; }
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.4; color: #6a6a71; }
 .status-badge[hidden] { display: none; }
 .status-kind { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.status-reason { min-width: 0; color: var(--lavender); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-badge.attention { background: rgba(224, 178, 109, .14); }
-.status-badge.attention .status-reason { color: #e0b26d; }
+.status-reason { min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge.attention { padding: 3px 9px; border-radius: 999px; background: rgba(224, 178, 109, .14);
+  font-family: inherit; font-weight: 500; color: #e0b26d; }
 .status-badge.attention .status-kind { color: #c79448; }
 .thread-time .refresh-spinner { width: 10px; height: 10px; --spinner-thickness: 1.5px; }
 
