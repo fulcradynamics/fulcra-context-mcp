@@ -64,23 +64,32 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   (advanced ?? container).append(address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   let source, sourceIdentity, selectionVersion = 0, sending = false;
-  draft.posts ??= []; draft.acks ??= new Set();
-  // Acknowledge each target once; a failure returns it to unread for another try.
-  async function ack(targets) {
-    const audience = view().thread?.expectedPeerUserids, outboxId = source?.id, sender = view().viewingAgent;
-    if (!outboxId || !sender.trim()) return false;
-    targets = targets.filter(m => !draft.acks.has(m.record.id));
-    targets.forEach(m => draft.acks.add(m.record.id)); changed();
-    let failed = 0;
-    for (const m of targets) {
-      try {
-        const { response, result } = await postRecord(app, { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body: 'ack',
-          mid: messageId(), kind: 'ack', in_reply_to: m.record.id, ...(audience ? { expected_peer_userids: audience } : {}) });
-        if (response.isError || result.status !== 'posted') throw new Error('Not posted');
-      } catch { draft.acks.delete(m.record.id); failed++; }
-    }
-    if (failed && isCurrent()) notify('Couldn’t mark as read', `Reopen ${contactName(view().thread)} to try again.`);
+  draft.posts ??= []; draft.acks ??= new Map();
+  // Peer-owned attempts survive remounts. Never allocate a second ID for a target,
+  // including after a lost response or rejection; polling only reconciles reads.
+  const ackAddress = () => ({ audience: view().thread?.expectedPeerUserids, outboxId: source?.id, sender: view().viewingAgent });
+  async function ack(targets, { audience, outboxId, sender } = ackAddress()) {
+    if (!outboxId || !sender?.trim()) return false;
+    const attempts = targets.filter(m => !draft.acks.has(m.record.id)).map(m => {
+      const attempt = { state: 'sending', args: { peer_userid: m.source.fulcra_userid, outbox: outboxId, sender, body: 'ack',
+        mid: messageId(), kind: 'ack', in_reply_to: m.record.id, ...(audience ? { expected_peer_userids: audience } : {}) } };
+      draft.acks.set(m.record.id, attempt);
+      return attempt;
+    });
     changed();
+    for (const attempt of attempts) {
+      try {
+        const { response, result } = await postRecord(app, attempt.args);
+        if (attempt.state === 'posted') continue; // Readback can beat the response.
+        attempt.state = !response.isError && result.mid === attempt.args.mid && result.outbox === outboxId
+          && ['posted', 'rejected'].includes(result.status) ? result.status : 'uncertain';
+      } catch { if (attempt.state !== 'posted') attempt.state = 'uncertain'; }
+      changed();
+    }
+    // Marking-read runs quietly in the background; only surface a failure, and only
+    // once, as a transient toast rather than a persistent status line.
+    if (isCurrent() && attempts.some(a => a.state === 'rejected' || a.state === 'uncertain'))
+      notify('Couldn’t confirm messages read', 'The read state is kept and no duplicate will be sent.');
     return true;
   }
   const update = () => {
@@ -139,12 +148,13 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     // Sending answers the newest unread message and acknowledges the rest.
     // Answers name the target's sender; the server finds targets on their channel.
     const audience = view().thread?.expectedPeerUserids;
+    const acknowledgementAddress = ackAddress();
     const unread = unreadMessages(view().result?.messages ?? [], draft.acks), target = unread.at(-1);
     const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: view().viewingAgent, kind: target ? 'reply' : 'message', priority: 'P2',
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };
     // Progress and success show as the message's own badge (sending… → sent).
-    const posted = () => { ack(unread.slice(0, -1)); };
+    const posted = () => { ack(unread.slice(0, -1), acknowledgementAddress); };
     const { identifier: _identifier, setupSession: _setupSession, assessment: _assessment, direction: _direction, ...provenance } = source;
     const post = { source: provenance, direction: 'Outgoing', envelope, state: 'sending', version: draft.version,
       record: { ...envelope, start_time: new Date().toISOString() } };

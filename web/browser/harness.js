@@ -48,6 +48,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    const discovery=['get_data_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
    if(name==='agent_connection_send'){
+    if(window.sendResult) { window.sendResult(r, reply); return; }
     if(acceptAck && a.kind === 'ack') {
      window.ownRecords.push({id:a.mid,kind:a.kind,body:a.body,sender:a.sender,in_reply_to:a.in_reply_to,start_time:'2026-10-13T12:00:00Z'});
      reply(r.id,{structuredContent:{status:'posted',mid:a.mid,outbox:a.outbox}});
@@ -56,15 +57,20 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    }
    let text;
    if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
+    ...(window.navigationContact ? [
+     {id:'Event/navigation-out',name:'Quiet contact',description:'connect-agents-with-anyone channel',...schema},
+     {id:'Event/navigation-in',name:'Quiet contact',fulcra_userid:'navigation-peer',description:'connect-agents-with-anyone channel',...schema},
+    ] : []),
     ...(window.direct ? [{id:out.slice(0,-1)+'9',name:'Direct',description:'connect-agents-with-anyone channel',...schema}] : []),
     ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(status?'[contact_status: '+JSON.stringify(status)+']\n':'')+'[mesh_identifier: "'+(window.unnamed ? peer : 'Weekend')+'"]',...schema})),
     ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
    if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
+    ...(window.navigationContact ? [{share_all_data:false,data_types:['Event/navigation-out'],with_user_ids:['navigation-peer'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
     ...(window.direct ? [{share_all_data:false,data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
-    ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))});
+    ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
    if(name==='get_records') {
     if(window.failReads) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
-    const records = window.emptyRecords ? [] : a.fulcra_userid?[
+    const records = window.emptyRecords || a.data_type.startsWith('Event/navigation-') ? [] : a.fulcra_userid?[
     {id:a.fulcra_userid+'-1',start_time:'2026-10-13T11:00:00Z',sender:'SharedName',kind:'message',body:'Addressed message',recipients:['chatgpt']},
     {id:a.fulcra_userid+'-2',start_time:'2026-10-13T11:01:00Z',sender:'SharedName',kind:'message',body:'Other agent message',recipients:['ChatGPT','<script>bad</script>']},
     {id:a.fulcra_userid+'-3',start_time:'2026-10-13T11:02:00Z',sender:'SharedName',kind:'message',body:'Broadcast message',recipients:['all']}
