@@ -174,7 +174,10 @@ export async function discoverThreads(app) {
     thread.convertedFrom = thread.sources.flatMap(s => s.convertedFrom ?? []);
     const converted = new Set(thread.sources.filter(s => s.direction === 'Outgoing')
       .flatMap(s => s.convertedFrom ?? []).map(r => JSON.stringify([r.fulcra_userid,r.id])));
-    if (old && old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id])))) legacy.delete(thread.peer);
+    // Hide the legacy row once it is converted or a two-way contact with this peer exists.
+    const complete = thread.sources.some(s => s.direction === 'Outgoing')
+      && thread.sources.some(s => s.direction === 'Incoming' && s.fulcra_userid === thread.peer);
+    if (old && (complete || old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id]))))) legacy.delete(thread.peer);
   }
   return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
 }
