@@ -551,10 +551,10 @@ details[open] > summary { color: var(--violet); }
 /* Spinner shown inside a button while its request is in flight. */
 .btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
 /* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
-/* Lift toasts well clear of the host's bottom chrome (which can span multiple rows);
-   fixed so it no longer tracks the conversation's half-screen scroll padding. */
-.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: 288px; z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
+/* Anchor toasts to the top: the host's bottom chrome height is unreliable, but the
+   top edge (plus any reported top inset) is predictable. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); top: calc(16px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(-14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
 .toast.toast-shown { opacity: 1; transform: translateY(0); }
 .toast-body { flex: 1; min-width: 0; }
 .toast-title { margin: 0; font-weight: 600; font-size: 14px; }
