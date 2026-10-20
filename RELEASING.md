@@ -4,6 +4,20 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.17.0 release notes
+
+- Add [owned Event/Metric metadata updates](docs/data-type-metadata.md) with
+  independent readback, raw exact-catalog metadata and private-store safeguards.
+- Keep contact operations and native settings app-only; retain canonical
+  `send_agent_message` for models. Requires skill-first plugin procedures.
+- Consolidate contact launch on `agent_contact_open`, with optional exact
+  peer/thread or a full unselected list. Preserve app-only global navigation,
+  native mentions and the separate file manager; remove the compact launch.
+- Ship contacts UI v63 with fullscreen-only OpenAI metadata. Generic bridge
+  capabilities are separate; display-mode changes preserve selection and drafts.
+- No user-data or existing-schedule migration. Refresh discovery and update the
+  compatible plugin; hosted/native acceptance remains separate from local tests.
+
 ## Version bump
 
     uv run python scripts/release.py bump 1.1.1

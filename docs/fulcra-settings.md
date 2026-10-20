@@ -2,6 +2,10 @@
 
 The server advertises native `openai/settings`; values are configuration, not
 instructions. No settings action sends messages, changes checkpoints or schedules.
+All tools described here are app-only, including the native settings read/update
+handlers. Skills use generic exact catalog reads and `update_data_type_metadata`
+to maintain the same private description document; they must preserve unrelated
+values, validate the document and independently verify privacy and readback.
 
 - `fulcra_settings_read` returns `{schema, values, checking_preferences, layout}`.
   Defaults: acknowledge/share status on, autonomous replies not paused; attention

@@ -3,9 +3,9 @@
 // hostContext.toolInfo is optional and is not an initial tool result.
 export function receiveEntrypoint(app, doc) {
   const marker = doc.querySelector('meta[name="connection-presentation"]')?.content;
-  const presentation = ['thread', 'threads'].includes(marker) ? marker : 'global';
+  const presentation = marker === 'thread' ? marker : 'global';
   // Server-owned direct-resource variant, not a host capability or timeout guess.
-  const directResource = presentation === 'threads'
+  const directResource = presentation === 'thread'
     && doc.querySelector('meta[name="connection-startup"]')?.content === 'resource';
   let deliver, first, received = false;
   app.ontoolresult = result => {
@@ -15,18 +15,12 @@ export function receiveEntrypoint(app, doc) {
     deliver?.(result);
   };
   app.ontoolcancelled = () => app.ontoolresult({ isError: true });
-  let hostChanges = {}, hostListener;
-  const onHost = context => {
-    hostChanges = { ...hostChanges, ...context };
-    hostListener?.(context);
-  };
-  app.addEventListener('hostcontextchanged', onHost);
-  return { presentation, directResource, observeHost(callback) {
-    hostListener = callback;
-    callback({ ...app.getHostContext(), ...hostChanges });
-    return () => { hostListener = undefined; app.removeEventListener('hostcontextchanged', onHost); };
-  }, consume(callback) {
+  return { presentation, directResource, consume(callback) {
     deliver = callback;
     if (received) callback(first);
+  }, dispose() {
+    received = true;
+    first = undefined;
+    deliver = undefined;
   } };
 }

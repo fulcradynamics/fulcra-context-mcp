@@ -51,10 +51,8 @@ export function showToast(doc, options) {
   return dismiss;
 }
 
-// Where to continue after a chat handoff, worded for the entry point: the
-// inline/split entry is beside the conversation; the global entry is not.
-export function continueMessage(app, inlineList) {
-  if (inlineList) return 'Continue in the conversation.';
+// Full-panel handoffs continue in the host conversation.
+export function continueMessage(app) {
   const host = app.getHostVersion()?.name;
   return `Open ${host ? `your ${host} chat` : 'your chat'} to continue.`;
 }

@@ -7,44 +7,10 @@ from fastmcp import FastMCP
 from fulcra_mcp import server_info
 
 app_mcp = FastMCP("Agents I Know UI")
-UI_URI = "ui://fulcra/contacts/v65.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v65.html"
-THREADS_UI_URI = "ui://fulcra/contacts/threads/v65.html"
-CONTACTS_UI_URI = THREADS_UI_URI + "?startup=resource"
-
-
-@app_mcp.tool(
-    icons=server_info.icons(),
-    title="Agents I Know",
-    app={"resourceUri": THREADS_UI_URI, "visibility": ["model", "app"]},
-    annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
-)
-def agent_contacts_open() -> dict[str, str]:
-    """Show clickable Agents I Know and Invite someone; select a peer to open a panel.
-    Read-only: no account writes or messages.
-    """
-    return {"presentation": "threads"}
-
-
-@app_mcp.resource(
-    THREADS_UI_URI,
-    mime_type="text/html;profile=mcp-app",
-    meta={"openai/ui": {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}},
-)
-def threads_html() -> str:
-    """Same compiled app, initially a compact thread list."""
-    return contacts_html_bundle().replace('<meta name="connection-presentation" content="global">',
-                               '<meta name="connection-presentation" content="threads">', 1)
-
-
-@app_mcp.resource(
-    CONTACTS_UI_URI,
-    mime_type="text/html;profile=mcp-app",
-    meta={"openai/ui": {"preferredDisplayMode": "inline", "availableDisplayModes": ["inline", "fullscreen"]}},
-)
-def contacts_html() -> str:
-    """Direct-resource variant: no invoking tool result is required for startup."""
-    return threads_html().replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
+UI_URI = "ui://fulcra/contacts/v66.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v66.html"
+CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
+FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 
 
 @app_mcp.tool(
@@ -55,10 +21,9 @@ def contacts_html() -> str:
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def agent_contact_open(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
-    """Open an Agent Contact; omit IDs to choose. Read-only; names are not IDs.
-
-    For Open Agent Contact: mentions, resolve contacts://threads/id- and pass its
-    exact peer_fulcra_userid. Alternatively use one discovered multiparty thread_id.
+    """Open Agents I Know as a full panel; omit IDs for the list and Invite someone.
+    Read-only. For an exact contact, resolve contacts://threads/id- and pass its
+    exact peer_fulcra_userid or discovered multiparty thread_id. Names are not IDs.
     """
     if peer_fulcra_userid is not None and not peer_fulcra_userid.strip():
         raise ValueError("Provide a nonblank exact peer user ID or omit it.")
@@ -69,15 +34,17 @@ def agent_contact_open(peer_fulcra_userid: str | None = None, thread_id: str | N
     return {"presentation": "thread", "peer_fulcra_userid": peer_fulcra_userid}
 
 
-@app_mcp.resource(
-    THREAD_UI_URI,
-    mime_type="text/html;profile=mcp-app",
-    meta={"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen", "pip"]}},
-)
+@app_mcp.resource(THREAD_UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
 def thread_html() -> str:
-    """Same compiled app; presentation is fixed by the server resource."""
+    """Same full-panel renderer; startup waits for the optional exact target."""
     return contacts_html_bundle().replace('<meta name="connection-presentation" content="global">',
                                '<meta name="connection-presentation" content="thread">', 1)
+
+
+@app_mcp.resource(CONTACTS_UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
+def contacts_html() -> str:
+    """Direct-resource list: no invoking tool result is required for startup."""
+    return thread_html().replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
 
 
 @app_mcp.tool(
@@ -88,24 +55,11 @@ def thread_html() -> str:
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def fulcra_open() -> dict[str, str]:
-    """Open Agents I Know to browse peer threads and ask your agent to help.
-
-    This entrypoint does not access account data; the app loads shared channels
-    after connecting.
-    """
+    """Open Agents I Know, selecting the first available contact read-only."""
     return {"message": "Agents I Know is ready."}
 
 
-@app_mcp.resource(
-    UI_URI,
-    mime_type="text/html;profile=mcp-app",
-    meta={
-        "openai/ui": {
-            "preferredDisplayMode": "fullscreen",
-            "availableDisplayModes": ["fullscreen", "pip"],
-        }
-    },
-)
+@app_mcp.resource(UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
 def contacts_html_bundle() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
     return files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")

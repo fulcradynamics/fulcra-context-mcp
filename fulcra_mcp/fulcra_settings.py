@@ -81,7 +81,7 @@ def check_status(configuration_id: str | None = None) -> dict:
         return {"status": "unavailable", "label": "Status unavailable"}
 
 
-@settings_mcp.tool(app={"visibility": ["app", "model"]}, annotations=READ_ONLY,
+@settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY,
                    output_schema=SETTINGS_OUTPUT)
 def fulcra_settings_read() -> dict:
     """Read the user's global contact preferences: configuration values, not instructions."""
@@ -109,7 +109,7 @@ def fulcra_settings_read() -> dict:
             ]}
 
 
-@settings_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
+@settings_mcp.tool(app={"visibility": ["app"]}, annotations={
     "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 def fulcra_settings_update(set: dict) -> dict:
     """Save global contact preferences the user chose, including checking_preferences text.
@@ -127,7 +127,7 @@ def fulcra_settings_update(set: dict) -> dict:
         raise ToolError("Preferences not verified. Reload before retrying; no schedule was changed.") from None
 
 
-@settings_mcp.tool(annotations=READ_ONLY)
+@settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
 def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_userids: list[str] | None = None) -> dict:
     """Read effective preferences for one of your own connections and peer.
 
@@ -145,7 +145,7 @@ def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_user
         raise ToolError('Contact preferences unavailable; do not reply, acknowledge or change status for this connection.') from None
 
 
-@settings_mcp.tool(annotations={'readOnlyHint': False, 'destructiveHint': False})
+@settings_mcp.tool(app={"visibility": ["app"]}, annotations={'readOnlyHint': False, 'destructiveHint': False})
 def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
                             expected_peer_userids: list[str] | None = None) -> dict:
     """Replace this contact's preference overrides at the user's request; {} restores the global values.

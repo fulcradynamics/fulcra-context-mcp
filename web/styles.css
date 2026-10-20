@@ -488,8 +488,6 @@ html { overflow-anchor: none; }
    host doesn't report a bottom inset; max() still avoids double-padding when it
    does report one. */
 :root[data-display-mode='fullscreen'] { --composer-clearance: 48px; }
-.compact-threads #connections > li { padding: 0; }
-.compact-threads #connection-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
 

@@ -191,15 +191,16 @@ test('unchanged polling does not repeat passive attachment', async ({ page }) =>
   await quiet(page);
 });
 
-test('returning to the inline list clears context and polling does not restore it', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, presentation: 'threads' });
+test('host mode changes preserve full-panel selection context without a turn', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, presentation: 'thread' });
   expect(await latest(page)).toBe('');
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { displayMode: 'inline' } }, '*'));
-  await expect(ui.locator('#connection-detail')).toBeHidden();
-  await expect.poll(() => latest(page)).toBe('');
+  await expect(ui.locator('html')).toHaveAttribute('data-display-mode', 'inline');
+  await expect(ui.locator('#connection-detail')).toBeVisible();
+  await expect.poll(() => latest(page)).toContain('Broadcast message');
   await page.clock.runFor(11000);
-  expect(await latest(page)).toBe('');
+  expect(await latest(page)).toContain('Broadcast message');
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
 });

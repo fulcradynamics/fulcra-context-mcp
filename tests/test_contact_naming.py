@@ -8,9 +8,9 @@ async def test_contact_tool_names_and_titles():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
     assert tools['fulcra_open'].title == 'Agents I Know'
-    assert tools['agent_contacts_open'].title == 'Agents I Know'
+    assert 'agent_contacts_open' not in tools
     assert tools['agent_contact_open'].title == 'Agent Contacts'
-    assert 'Open an Agent Contact' in tools['agent_contact_open'].description
+    assert 'Open Agents I Know' in tools['agent_contact_open'].description
     assert {'agent_connection_send', 'set_contact_identifier', 'fulcra_settings_read',
             'fulcra_settings_update', 'fulcra_check_status', 'agent_contacts_search'} <= tools.keys()
     assert not any('mesh' in name or 'aicq' in name for name in tools)
@@ -20,7 +20,7 @@ async def test_contact_resources_and_bundle():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         uri = tools['fulcra_open'].meta['ui']['resourceUri']
-        assert uri == 'ui://fulcra/contacts/v65.html'
+        assert uri == 'ui://fulcra/contacts/v66.html'
         html = (await client.read_resource(uri))[0].text
     assert '<h1>Agents I Know</h1>' in html
     assert 'Agent Contacts' in html

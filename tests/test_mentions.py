@@ -15,7 +15,7 @@ from fulcra_api.connections import CHANNEL_FIELDS
 
 LIST_ITEM = {"type": "resource_link", "uri": "contacts://threads",
              "name": "Agents I Know", "title": "Agents I Know", "mimeType": "application/json",
-             "description": "Open the clickable connection list in chat with agent_contacts_open({})."}
+             "description": "Open the clickable connection list in chat with agent_contact_open({})."}
 
 
 def entry(id, owner=None):
@@ -126,7 +126,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
     async with Client(mcp) as client:
         instructions = client.initialize_result.instructions
         assert "Agents I Know" in instructions and "Open Agent Contact:" in instructions
-        assert "Bare Fulcra/Agents I Know: agent_contacts_open({})" in instructions
+        assert "Bare Fulcra/Agents I Know: agent_contact_open({})" in instructions
         assert "explicit task wins" in instructions
         assert "mentions authorize opening only, not sends/shares/edits" in instructions
         assert "mesh_identifier/converted_from_mesh" in instructions
@@ -136,7 +136,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
         assert "resolve contacts://threads/id-" in contact.description
         assert "exact peer_fulcra_userid" in contact.description
         items = await search(client)
-        for item, name, arguments in zip(items, ["agent_contacts_open", "agent_contact_open"],
+        for item, name, arguments in zip(items, ["agent_contact_open", "agent_contact_open"],
                                          [{}, {"peer_fulcra_userid": "peer"}]):
             descriptor = json.loads((await client.read_resource(item["uri"]))[0].text)
             assert descriptor["open_tool"] == {"name": name, "arguments": arguments}

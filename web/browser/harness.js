@@ -6,12 +6,12 @@ export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-400
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
 // Explicit read-only opener for layout tests; untargeted launches stay unselected.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, sampling = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, direct = false, checkStatus = null, second = false } = {}) {
+export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, sampling = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,direct,checkStatus,second})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second})=>{
   window.direct = direct;
   window.second = second;
   window.holdReads = holdReads; window.checkStatus = checkStatus;
@@ -69,9 +69,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(status?'[contact_status: '+JSON.stringify(status)+']\n':'')+'[mesh_identifier: "'+(window.unnamed ? peer : 'Weekend')+'"]',...schema})),
     ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
    if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
-    ...(window.navigationContact ? [{share_all_data:false,data_types:['Event/navigation-out'],with_user_ids:['navigation-peer'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
-    ...(window.direct ? [{share_all_data:false,data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
-    ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
+    ...(window.navigationContact ? [{share_all_data:false,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:['Event/navigation-out'],with_user_ids:['navigation-peer'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
+    ...(window.direct ? [{share_all_data:false,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
+    ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({share_all_data:false,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',selectors_complete:true,file_paths:[],file_history_paths:[],data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
    if(name==='get_records') {
     if(window.failReads) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
     const records = window.emptyRecords || a.data_type.startsWith('Event/navigation-') ? [] : a.fulcra_userid?[
@@ -87,8 +87,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
      || window.holdReads === (a.fulcra_userid ? 'incoming' : 'outgoing')
      || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
-  }); frame.srcdoc=bundle.replace('name="connection-presentation" content="global"', `name="connection-presentation" content="${presentation}"`);
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,direct,checkStatus,second});
+  }); frame.srcdoc=bundle.replace('name="connection-presentation" content="global"', `name="connection-presentation" content="${presentation}"`)
+    .replace('</head>', resourceStartup ? '<meta name="connection-startup" content="resource"></head>' : '</head>');
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
