@@ -54,7 +54,7 @@ test('message, loading and acknowledgement previews never enter sends or host co
   await expect(ui.locator('#message-status')).toContainText('No messages');
   await ui.getByLabel('Messages', { exact: true }).selectOption('outgoing');
   await expect(ui.locator('#messages .bubble-body')).toHaveText('PREVIEW ONLY <script>');
-  await ui.getByRole('button', { name: 'Discuss in synthetic', exact: true }).click();
+  await ui.getByRole('button', { name: 'Continue in synthetic', exact: true }).click();
   await expect.poll(() => page.evaluate(() => contexts.length)).toBeGreaterThan(0);
   const attached = await page.evaluate(() => JSON.stringify(contexts));
   expect(attached).toContain('Broadcast message');

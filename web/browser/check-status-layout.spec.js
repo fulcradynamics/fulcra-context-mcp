@@ -21,8 +21,8 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
     expect(m.overflow).toBe(false);
     expect(m.horizontal).toBe(false);
     expect(m.railBottom).toBe(height);
-    // Fullscreen fallback clearance keeps the composer above the host's bottom chrome.
-    expect(m.composerBottom).toBe(height - 48);
+    // The composer scrolls with the conversation; at the bottom it rests in its half-screen gap.
+    expect(m.composerBottom).toBe(height / 2);
     expect(m.areaHeight).toBeGreaterThan(100);
     expect(m.lastTop).toBeGreaterThanOrEqual(m.headerBottom);
     expect(m.lastBottom).toBeLessThanOrEqual(m.composerTop);

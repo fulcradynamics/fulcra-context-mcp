@@ -27,7 +27,7 @@ test('incoming selection remains selectable across polling and context includes 
  await expect(boxes.first()).not.toBeChecked();
  await boxes.first().check(); await page.clock.runFor(11000);
  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
- await ui.getByRole('button',{name:'Discuss in synthetic',exact:true}).click();
+ await ui.getByRole('button',{name:'Continue in synthetic',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>JSON.stringify(window.contexts))).toContain('remote audiences are unverified');
  const context=await page.evaluate(()=>JSON.stringify(window.contexts));
  expect(context).toContain('remote audiences are unverified');
@@ -53,7 +53,7 @@ test('send carries full expected audience; widening invalidates context and pres
  const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').arguments);
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
- await ui.getByRole('button',{name:'Discuss in synthetic',exact:true}).click();
+ await ui.getByRole('button',{name:'Continue in synthetic',exact:true}).click();
  await ui.getByRole('button',{name:'OK',exact:true}).click();
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Keep old draft');
  await page.evaluate(()=>window.audience.push('00000000-0000-4000-8000-000000000009'));

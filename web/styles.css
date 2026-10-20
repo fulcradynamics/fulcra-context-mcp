@@ -39,22 +39,30 @@
   --composer-clearance: 36px;
   --footer-clearance: max(var(--composer-clearance), env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
+  /* Bottom scroll room below the conversation: half the viewport so the message
+     input can be scrolled up to about the middle of the screen when wanted. */
+  --message-scroll-clearance: 50dvh;
 }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
-.contacts-layout { display: grid; grid-template-columns: minmax(120px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
+.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
 #connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
-/* Slack-style: keep the rail clean — a slim scrollbar only fills in on hover. */
-#connection-list::-webkit-scrollbar { width: 8px; }
-#connection-list::-webkit-scrollbar-track { background: transparent; }
-#connection-list::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
-#connection-list:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
+/* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
+#connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
+#connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
+#connection-list::-webkit-scrollbar-thumb, #message-area::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+#connection-list:hover::-webkit-scrollbar-thumb, #message-area:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
 .rail-content { padding: 12px 12px var(--footer-clearance); }
 .conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-#message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
+/* The composer scrolls with the conversation (it's the last child here), so the
+   bottom padding gives generous room to scroll it clear of the host's bottom chrome
+   (doubled to survive an extra host-chrome row). No horizontal padding on the
+   scroll container itself, so the scrollbar sits flush with the edge (the small
+   side gap lives on the content instead). */
+#message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 var(--message-scroll-clearance); }
+#message-area > * { margin-inline: 4px; }
 body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
 body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
-body #thread-composer { flex: none; }
 body .thread-button { padding: 12px 8px; gap: 4px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--violet-tint); }
 .thread-button .thread-text { display: contents; }
@@ -163,8 +171,6 @@ main {
     calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
     calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
 }
-/* Only the conversation footer clears the host input; the rail stays full-height. */
-.footer-spacer { height: var(--footer-clearance); flex: none; }
 .brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
@@ -392,7 +398,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 /* The flex footer is always pinned, including short and empty histories. */
-#thread-composer:not(:empty) { background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */
@@ -436,7 +442,9 @@ details[open] > summary { color: var(--violet); }
 /* Spinner shown inside a button while its request is in flight. */
 .btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
 /* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
-.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+/* Lift toasts well clear of the host's bottom chrome (which can span multiple rows);
+   fixed so it no longer tracks the conversation's half-screen scroll padding. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: 288px; z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
 .toast.toast-shown { opacity: 1; transform: translateY(0); }
 .toast-body { flex: 1; min-width: 0; }

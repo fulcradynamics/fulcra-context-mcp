@@ -33,7 +33,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   // Reinforces that this input replies to the contact (not ChatGPT's composer).
   const hint = doc.createElement('p'); hint.className = 'composer-hint';
   const handoff = doc.createElement('button'); handoff.type = 'button'; handoff.className = 'btn-secondary';
-  handoff.textContent = `Discuss in ${app.getHostVersion()?.name || 'chat'}`;
+  handoff.textContent = `Continue in ${app.getHostVersion()?.name || 'chat'}`;
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
   const transfer = doc.createElement('details'); transfer.hidden = true; transfer.className = 'composer-advanced';
@@ -99,8 +99,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = app.getHostVersion()?.name;
     const hintText = supported
-      ? `Send replies to ${name}; Discuss requests help in ${host || 'chat'}.`
-      : `Send replies to ${name} directly. Discuss in chat isn’t available on this host.`;
+      ? `Send replies to ${name}; Continue in ${host || 'chat'} to work on it there.`
+      : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
     const identity = JSON.stringify(outgoing);
@@ -129,7 +129,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (!session) { transferHelp.remove(); transfer.remove(); }
     original.disabled = lifecycle.pending || !isCurrent();
     // Leave the label (and its spinner) alone while a handoff is in flight.
-    if (!sending) handoff.textContent = session ? 'Ask in current chat' : `Discuss in ${host || 'chat'}`;
+    if (!sending) handoff.textContent = session ? 'Ask in current chat' : `Continue in ${host || 'chat'}`;
     const copy = session && context() ? sessionHandoff(draft.value, context(), session) : '';
     if (transferText.value !== copy) transferText.value = copy;
     outboxId.textContent = source?.name ? source.id : '';

@@ -44,11 +44,3 @@ test('untargeted launch stays instructional through polls and invites without fo
   await ui.locator('#invite-welcome').click();
   await expect(ui.getByRole('dialog')).toBeVisible();
 });
-
-test('composer clearance follows host mode separately from safe area', async ({ page }) => {
-  const ui = await open(page);
-  const gap = () => ui.locator('.footer-spacer').evaluate(el => el.getBoundingClientRect().height);
-  expect(await gap()).toBe(24);
-  await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { displayMode: 'inline', safeAreaInsets: { top: 0, right: 0, bottom: 10, left: 0 } } }, '*'));
-  await expect.poll(gap).toBe(46);
-});

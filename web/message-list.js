@@ -17,14 +17,15 @@ export function createMessageList(list, renderRow) {
   const top = () => scroller.getBoundingClientRect().top;
   const bottom = () => scroller.getBoundingClientRect().bottom - 12;
   const scrollBy = delta => { scroller.scrollTop += delta; };
+  // The composer scrolls at the end of the content (after the messages), so
+  // "latest" means scrolled to the bottom — that keeps the composer in its padded
+  // gap with the last message just above it, both clear of the host chrome.
   function atLatest() {
-    const edge = list.lastElementChild?.getBoundingClientRect();
-    const resizeDelta = paneHeight - scroller.clientHeight;
-    return !edge || edge.bottom <= bottom() + resizeDelta + 40;
+    const resizeDelta = Math.max(0, paneHeight - scroller.clientHeight);
+    return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 40 + resizeDelta;
   }
   function follow() {
-    const edge = list.lastElementChild?.getBoundingClientRect();
-    if (edge) scrollBy(edge.bottom - bottom());
+    scroller.scrollTop = scroller.scrollHeight;
   }
   let paneHeight = scroller.clientHeight;
   const onScroll = () => {

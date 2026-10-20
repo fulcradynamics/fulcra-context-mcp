@@ -10,7 +10,7 @@ for (const presentation of ['global', 'thread', 'threads']) {
       await expect(ui.locator('#suggestion-status, #reply-suggestions')).toHaveCount(0);
       await ui.locator('.composer-input').fill('A manual reply');
       await expect(ui.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
-      await ui.getByRole('button', { name: 'Discuss in synthetic', exact: true }).click();
+      await ui.getByRole('button', { name: 'Continue in synthetic', exact: true }).click();
       await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
       await page.clock.runFor(11000);
       expect(await page.evaluate(() => window.samplingCalls ?? 0)).toBe(0);

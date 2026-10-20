@@ -12,7 +12,7 @@ for (const kind of ['direct', 'multiparty']) {
     }
     await expect(ui.locator('#message-title')).toHaveText(kind === 'direct' ? 'Alex' : 'Weekend');
     await expect(ui.getByRole('button', {
-      name: 'Discuss in synthetic', exact: true,
+      name: 'Continue in synthetic', exact: true,
     })).toBeEnabled();
     const writes = await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'));
     expect(writes).toHaveLength(kind === 'direct' ? 2 : 1);
