@@ -12,6 +12,8 @@ for (const width of [390, 1100]) test(`pending incoming and unshared channels ha
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
   expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'agent_connection_send'].includes(c.name)))).toBe(false);
   await page.screenshot({path:`${process.env.TMPDIR ?? '../test-results'}/invitation-pending-${width}.png`,fullPage:true});
+  // Inspect the explicit assistance, not prior passive contact snapshots.
+  await page.evaluate(() => { window.contexts = []; });
   await ui.locator('.pending-assist').last().click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   const sent = await page.evaluate(() => ({messages:window.hostMessages,contexts:window.contexts}));

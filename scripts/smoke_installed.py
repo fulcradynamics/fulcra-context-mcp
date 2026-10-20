@@ -64,34 +64,35 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['model']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v64.html', 'global'),
-                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v64.html', 'threads'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v64.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v65.html', 'global'),
+                    ('agent_contacts_open', 'ui://fulcra/contacts/threads/v65.html', 'threads'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v65.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     text = (await client.read_resource(uri)).contents[0].text
                     assert f'name="connection-presentation" content="{marker}"' in text
+                    assert 'selected_contact' in text and 'Messages loading; displayed history is not yet available.' in text
                     assert 'id="message-back"' not in text
-                    assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 24px' in text
-                    for value in ('id="check-status"', 'fulcra_check_status', 'Start automatic checking', 'Check for new messages',
-                                  'set-up-agent-contacts', 'check-messages skill'):
+                    assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 48px' in text
+                    for value in ('id="onboarding-thread"', 'id="onboarding-advanced"', 'fulcra_check_status',
+                                  'Set up automatic checking', 'set-up-agent-contacts'):
                         assert value in text, value
-                    for value in ('ack-status', 'Read acknowledgement unconfirmed',
-                                  'Read acknowledgement rejected', 'no duplicate acknowledgement'):
+                    for value in ('ack-status', r'Couldn\u2019t confirm messages read',
+                                  'The read state is kept and no duplicate will be sent.'):
                         assert value in text, value
                     for value in ('open_invitation=true', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
-                                  'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
+                                  'Load more history', 'Showing messages through', 'thread-preview', '--message-scroll-clearance: 50dvh',
                                   'end-contact-dialog', 'End contact', 'Also archive your messages',
                                   'debug-preview', 'Reset to live', 'Debug preview active',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v64 entrypoints/resources verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and all three v65 entrypoints/resources verified.')
 
 
 if __name__ == '__main__':
