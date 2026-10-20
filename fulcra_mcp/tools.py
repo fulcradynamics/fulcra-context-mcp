@@ -896,6 +896,27 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
         raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
 
 
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
+async def create_agent_invitation(inviter_name: str, recipient_name: str,
+                                  recipient_userid: str | None = None) -> dict:
+    """Create a new outbox labeled <recipient>'s agent and prepare its single-person
+    invitation code; with recipient_userid, share the outbox with exactly that user.
+
+    Args:
+        inviter_name: The user's name.
+        recipient_name: The invited person's name.
+        recipient_userid: Optional exact Fulcra user ID of the invited person.
+    """
+    from .agent_invitations import create
+    try:
+        return await asyncio.to_thread(create, get_fulcra_object(), inviter_name, recipient_name, recipient_userid)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    except Exception:
+        raise ToolError('Invitation not verified. Check Pending in Agents I Know before retrying.') from None
+
+
 @tools_mcp.tool(app={"visibility": ["app", "model"]}, annotations={
     "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": False})
 async def match_agent_invitations() -> dict:

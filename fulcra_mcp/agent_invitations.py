@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from threading import RLock
 from urllib.error import HTTPError
 
+from fulcra_api import connections
+
 from .connection import UUID_PATTERN, _uuid, channel_entry, _authorize
 from .connection_compatibility import SHARE_NAME_PREFIX
 from .contact_preferences import _check_private
@@ -399,3 +401,32 @@ def match(api):
                     'reason': 'Invitation evidence unavailable; nothing shared.',
                     'diagnostic': diagnostic}
     return {'results': results}
+
+
+def create(api, inviter_name, recipient_name, recipient_userid=None):
+    """Create a labeled single-person invitation outbox, as the invite skill does,
+    then prepare its code. A known recipient ID shares the outbox up front; their
+    handshake still completes the match."""
+    from fulcra_api import data_type_management
+    from .contact_identifier import write_contact_identifier, validate_identifier
+
+    inviter, recipient = validate_identifier(inviter_name.strip()), validate_identifier(recipient_name.strip())
+    identifier = validate_identifier(f"{recipient}'s agent")
+    with LOCK:
+        own = api.get_fulcra_userid()
+        if recipient_userid is not None and (not _uuid(recipient_userid) or recipient_userid == own):
+            raise ValueError("Use the other person's exact Fulcra user ID, or leave it blank.")
+        created = data_type_management.create_data_type(
+            api, {'id': 'Event', 'api_version': 'v1'}, f'{inviter} with {recipient}',
+            description=write_contact_identifier(f'{SHARE_NAME_PREFIX[-1]} channel', identifier),
+            fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
+                           'required': connections.CHANNEL_FIELDS['required']})
+        data_type = created['id']
+        _channel(api, own, data_type, own=True)
+        prepared = prepare(api, data_type)
+        if recipient_userid:
+            api.create_datashare(datashare_name=f'{SHARE_NAME_PREFIX[-1]}: {identifier}',
+                fulcra_data_types=[data_type], allowed_user_ids=[recipient_userid], share_all_data=False,
+                allowed_group_ids=None, time_start=None, time_end=None)
+            _authorize(api, own, recipient_userid, data_type)
+        return {**prepared, 'identifier': identifier, 'shared_with': recipient_userid}
