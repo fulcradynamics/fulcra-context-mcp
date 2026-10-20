@@ -43,8 +43,13 @@
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
 .contacts-layout { display: grid; grid-template-columns: minmax(120px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
-#connection-list { overflow-y: auto; min-width: 0; border-right: 1px solid var(--divider); }
-.rail-content { padding: 0 12px var(--footer-clearance) 0; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
+/* Slack-style: keep the rail clean — a slim scrollbar only fills in on hover. */
+#connection-list::-webkit-scrollbar { width: 8px; }
+#connection-list::-webkit-scrollbar-track { background: transparent; }
+#connection-list::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+#connection-list:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
+.rail-content { padding: 12px 12px var(--footer-clearance); }
 .conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 #message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
 #send-status, #context-status { flex: none; max-height: 16vh; overflow-y: auto; margin: 0; }
@@ -102,7 +107,7 @@ body .thread-name { white-space: normal; overflow: visible; }
 body #connections > li, body #pending-connections > li, body #legacy-connections > li { padding: 0; }
 body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .legacy-convert { grid-column: 1; justify-self: start; }
-.legacy-convert, .pending-assist { font-size: 12px; padding: 8px 6px; overflow-wrap: normal; }
+.legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
 .legacy-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
 body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
