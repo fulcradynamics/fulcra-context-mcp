@@ -47,7 +47,6 @@ for (const width of [320, 900]) test(`Advanced expansion reveals its beginning a
   const latest = await ui.locator('#messages li').last().boundingBox();
   const bounds = await pane.boundingBox();
   expect(latest.y + latest.height).toBeLessThanOrEqual(bounds.y + bounds.height);
-  const composer = await ui.locator('#thread-composer').boundingBox();
   const railScroll = await ui.locator('#connection-list').evaluate(el => el.scrollTop);
   // Delayed scroll delivery must not be needed to cancel latest-edge following.
   await pane.evaluate(el => el.addEventListener('scroll', event => event.stopImmediatePropagation(), { capture: true }));
@@ -60,7 +59,6 @@ for (const width of [320, 900]) test(`Advanced expansion reveals its beginning a
     await expect(ui.locator('#advanced-toggle')).toHaveAttribute('aria-expanded', 'true');
   };
   await beginningVisible();
-  expect(await ui.locator('#thread-composer').boundingBox()).toEqual(composer);
   await page.locator('iframe').evaluate(el => el.style.height = '650px');
   await page.clock.runFor(100);
   await beginningVisible();

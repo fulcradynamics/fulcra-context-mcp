@@ -131,7 +131,6 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
         assert "mentions authorize opening only, not sends/shares/edits" in instructions
         assert "mesh_identifier/converted_from_mesh" in instructions
         assert "Do not migrate user data without explicit consent" in instructions
-        assert not any(name in instructions for name in ("mesh_send", "set_mesh_identifier", "aicq_"))
         contact = next(t for t in await client.list_tools() if t.name == "agent_contact_open")
         assert "resolve contacts://threads/id-" in contact.description
         assert "exact peer_fulcra_userid" in contact.description

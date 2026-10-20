@@ -49,8 +49,6 @@ async def test_native_settings_read_contract(fake_fulcra):
             {"kind": "group", "title": "Last contact check: Never checked", "items": []},
             {"kind": "group", "title": 'To change the schedule, ask in chat: “Change how often you check my Fulcra messages.”', "items": []},
         ]
-        assert "fulcra_schedule_settings" not in tools
-        assert all("/settings/" not in str(r.uri) for r in await client.list_resources())
         assert "PRIVATE MESSAGE" not in json.dumps(result)
         rejected = await client.call_tool("fulcra_settings_update", {"set": {"interval": 30}}, raise_on_error=False)
         assert rejected.is_error

@@ -36,10 +36,8 @@ One version covers the package, registry, Server Card and running server.
 Release checks require matching versions, a valid registry schema/listing and a
 version increase for changes to `server.json` (published versions are immutable).
 
-For contact UI changes, follow [the app verification steps](docs/contacts-app.md#verification)
-and [compatibility boundaries](docs/connection-compatibility.md). Refresh server
-and plugin discovery as needed; installation never updates existing scheduled tasks.
-Current [preferences](docs/fulcra-settings.md) require no internal-settings migration.
+For contact UI changes, follow [the app's development and tests](docs/contacts-app.md#development-and-tests)
+and keep the paired plugin in step ([interface](docs/connection-compatibility.md)).
 
 ## Automated publication
 

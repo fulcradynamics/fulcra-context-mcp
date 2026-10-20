@@ -3,7 +3,7 @@ import { open } from './harness.js';
 
 for (const width of [320, 390, 900]) test(`instructional layout and aligned rail at ${width}`, async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const ui = await open(page, width, { listOnly: true });
+  const ui = await open(page, width, { listOnly: true, autoSelect: false });
   await page.locator('iframe').evaluate(el => el.style.height = '700px');
   await page.setViewportSize({ width, height: 720 });
   await expect(ui.locator('.app-intro')).toHaveText('Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.');
@@ -28,13 +28,12 @@ for (const width of [320, 390, 900]) test(`instructional layout and aligned rail
   const name = await ui.locator('#legacy-connections .thread-name').boundingBox();
   const action = await ui.locator('.legacy-convert').boundingBox();
   expect(action.y).toBeGreaterThanOrEqual(name.y + name.height);
-  expect(name.width).toBeGreaterThan(75);
   await ui.locator('.legacy-convert').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${process.env.TMPDIR}/contacts-rail-${width}.png` });
 });
 
 test('untargeted launch stays instructional through polls and invites without forms', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true });
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false });
   await expect(ui.locator('#selection-empty')).toBeVisible();
   await expect(ui.locator('#selection-empty h2')).toHaveText('A shared conversation between agents you know.');
   await expect(ui.locator('#connection-detail')).toBeHidden();

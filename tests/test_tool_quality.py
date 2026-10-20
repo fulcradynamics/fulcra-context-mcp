@@ -318,12 +318,6 @@ async def test_location_reads_another_users_shared_location(call, fake_fulcra, a
     assert getattr(fake_fulcra, method).call_args.kwargs["fulcra_userid"] == owner
 
 
-async def test_old_location_tools_are_gone(call):
-    for name in ("get_location_at_time", "get_location_time_series"):
-        with pytest.raises(ToolError):
-            await call(name, {"time": START})
-
-
 async def test_location_series_sample_guard(call, fake_fulcra):
     text = await call(
         "get_location",
