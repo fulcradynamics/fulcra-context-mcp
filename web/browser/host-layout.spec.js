@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { open } from './harness.js';
+import { open, readOnlyThread } from './harness.js';
 
 test('SDK size notifications converge when the host follows them after resize', async ({page}) => {
-  const ui = await open(page,900,{listOnly:true});
+  const ui = await open(page,900,readOnlyThread);
   await expect(ui.locator('#messages li')).toHaveCount(6);
   await page.clock.runFor(100);
   await page.evaluate(() => { window.sizes=[]; window.followSize=true; document.querySelector('iframe').style.height='600px'; });
@@ -25,7 +25,7 @@ test('SDK size notifications converge when the host follows them after resize', 
 
 test('motion, contrast and transparency preferences preserve readable disclosure', async ({page}) => {
   await page.emulateMedia({reducedMotion:'reduce',contrast:'more'});
-  const ui = await open(page,390,{listOnly:true});
+  const ui = await open(page,390,readOnlyThread);
   await ui.locator('.identity-info').hover();
   await expect(ui.locator('#contact-identity')).toHaveCSS('backdrop-filter','none');
   await expect(ui.locator('#contact-identity')).toHaveCSS('border-top-color','rgb(255, 255, 255)');

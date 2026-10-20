@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { open, peer } from './harness.js';
 
-test('global launch selects the first contact read-only and polling keeps selection', async ({page}) => {
+test('global launch stays unselected through polling', async ({page}) => {
   const ui = await open(page, 900, {listOnly:true});
-  await expect(ui.locator('#message-title')).toHaveText('Weekend');
-  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
+  await expect(ui.locator('#selection-empty')).toBeVisible();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
   await expect(ui.locator('#message-back')).toHaveCount(0);
   await page.clock.runFor(11000);
-  await expect(ui.locator('.thread-button[aria-current="true"]')).toContainText('Weekend');
+  await expect(ui.locator('.thread-button[aria-current="true"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
 });
@@ -30,9 +30,9 @@ test('missing explicit launch identity never falls back to the first contact', a
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
 });
 
-test('thread launch without a peer selects the first contact without redundant instructions', async ({page}) => {
+test('thread launch without a peer shows the instructional picker', async ({page}) => {
   const ui = await open(page,900,{listOnly:true,presentation:'thread'});
-  await expect(ui.locator('#message-title')).toHaveText('Weekend');
+  await expect(ui.locator('#selection-empty')).toBeVisible();
   await expect(ui.locator('#entrypoint-status')).toHaveText('');
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
 });

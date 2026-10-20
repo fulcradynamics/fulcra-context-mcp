@@ -23,7 +23,7 @@ test('request in chat sends one user message and reports rejection', async () =>
   assert.equal(await requestInChat(host({ sendMessage: async m => { calls.push(m); return {}; } }), s, 'hi', 'Request sent'), true);
   assert.deepEqual(calls, [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }]);
   assert.equal(await requestInChat(host({ sendMessage: async () => ({ isError: true }) }), s, 'hi', 'sent'), false);
-  assert.match(s.textContent, /Could not send/);
+  assert.match(s.textContent, /Couldn’t send your request/);
 });
 
 for (const denied of [false, true]) test(`chat request requires confirmed clearing of prior context (${denied})`, async () => {

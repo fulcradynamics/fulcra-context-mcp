@@ -22,7 +22,8 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   });
   await page.goto('http://dev.test/');
   const ui = page.frameLocator('#app');
-  await expect(ui.locator('#messages .message-row').first()).toBeVisible();
+  await expect(ui.locator('#selection-empty')).toBeVisible();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
   expect(await page.evaluate(() => window.sends)).toEqual([]);
   await ui.locator('.thread-button').filter({ hasText: 'Bob' }).click();
   await expect(ui.locator('#messages')).toContainText('Yes, received.');

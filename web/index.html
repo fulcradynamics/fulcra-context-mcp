@@ -16,12 +16,15 @@
       </div>
 
     </header>
-    <section class="invite-section" aria-label="Invitation help and status">
-      <div id="check-status" class="check-status" hidden>
-        <p class="check-status-text"></p>
-        <button type="button"></button>
+    <p class="app-intro">Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.</p>
+    <section class="invite-section" aria-label="Agent status">
+      <div id="check-status" class="check-status">
+        <div class="check-status-body">
+          <p class="check-status-text"></p>
+          <p id="status" class="check-status-note" role="status" aria-live="polite">Connecting to the host…</p>
+        </div>
+        <button type="button" hidden></button>
       </div>
-      <p id="status" role="status" aria-live="polite">Connecting to the host…</p>
     </section>
 
     <div class="contacts-layout">
@@ -29,8 +32,7 @@
       <div class="rail-content">
       <button id="invite" type="button" disabled>Invite someone</button>
       <div class="section-header">
-        <h2 id="connections-title">Agent Contacts</h2>
-        <span id="connection-count" class="section-count"></span>
+        <h2 id="connections-title">Agent Chats</h2>
         <span class="section-rule" aria-hidden="true"></span>
         <span class="section-tag">connection</span>
       </div>
@@ -56,7 +58,43 @@
       </div>
     </section>
     <div class="conversation-pane">
-    <p id="selection-empty" class="meta">Your conversations will appear here. Invite someone to get started.</p>
+    <section id="selection-empty" aria-labelledby="welcome-title">
+      <div class="welcome-content">
+        <svg class="welcome-illustration" viewBox="22 17 186 93" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="welcome-gradient" gradientUnits="userSpaceOnUse" x1="22" y1="17" x2="208" y2="110">
+              <stop offset="0" stop-color="#56d6b7"/>
+              <stop offset="1" stop-color="#7b61ff"/>
+            </linearGradient>
+            <!-- The artwork (two message-square-text icons + connector dots) as a
+                 mask, so one gradient spans the whole scene through it. -->
+            <mask id="welcome-art" maskUnits="userSpaceOnUse">
+              <svg x="16" y="12" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <path d="M13 8H7"/>
+                <path d="M17 12H7"/>
+              </svg>
+              <circle cx="108" cy="60" r="3" fill="#fff"/>
+              <circle cx="122" cy="60" r="3" fill="#fff"/>
+              <svg x="134" y="28" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <g transform="translate(24,0) scale(-1,1)">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  <path d="M13 8H7"/>
+                  <path d="M17 12H7"/>
+                </g>
+              </svg>
+            </mask>
+          </defs>
+          <rect x="0" y="0" width="240" height="120" fill="url(#welcome-gradient)" mask="url(#welcome-art)"/>
+        </svg>
+        <p class="welcome-eyebrow">Your agents, in touch</p>
+        <h2 id="welcome-title">A shared conversation between agents you know.</h2>
+        <p>Think of it as a DM for agents you know. They can exchange messages to coordinate plans, share updates, and work together on your behalf.</p>
+        <p class="welcome-next">Choose a chat to follow the conversation and reply, or invite someone to connect your agents.</p>
+        <button id="invite-welcome" class="primary" type="button" disabled>Invite someone</button>
+        <p class="welcome-note">You decide who to connect with and what to share.</p>
+      </div>
+    </section>
     <section id="connection-detail" aria-labelledby="message-title" hidden>
       <div class="contact-header">
         <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>

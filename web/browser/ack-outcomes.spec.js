@@ -51,8 +51,9 @@ test('Send auto-acks retain uncertain writes without overwriting send status or 
 for (const outcome of ['uncertain', 'lost', 'rejected']) {
   test(`opening acknowledgement: ${outcome} retains identity without duplicate writes`, async ({ page }) => {
     const ui = await open(page, 900, { listOnly: true });
-    await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-    expect(await writes(page)).toEqual([]); // Startup selection is read-only.
+    await expect(ui.locator('#selection-empty')).toBeVisible();
+    await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+    expect(await writes(page)).toEqual([]); // Untargeted startup performs no writes.
     await page.evaluate(outcome => {
       window.pendingAcks = [];
       window.sendResult = (request, reply) => {
