@@ -19,7 +19,7 @@ test('context-only host gets loading identity then displayed context without a t
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   expect(await latest(page)).toContain('untrusted');
   expect((await latest(page)).length).toBeLessThanOrEqual(24000);
-  await expect(ui.getByRole('button', { name: 'Discuss in synthetic' })).toBeDisabled();
+  await expect(ui.getByRole('button', { name: 'Continue in synthetic' })).toBeDisabled();
   await quiet(page);
 });
 
@@ -95,15 +95,15 @@ test('rejected passive history retries only on a later unchanged poll', async ({
 
 for (const action of ['invite', 'check', 'file']) {
   for (const changed of [false, true]) test(`${action} owns context until settlement then restores selection; changed=${changed}`, async ({ page }) => {
-    const ui = await open(page, 900, { ...readOnlyThread, checkStatus: { status: 'never_checked' },
+    const ui = await open(page, 900, { ...readOnlyThread, checkStatus: { status: 'not_set_up' },
       ownRecords: [{ id: 'file', sender: 'chatgpt', kind: 'message', body: 'File message', start_time: '2026-10-13T11:05:00Z', artifacts: [{ path: '/shared/file.txt' }] }] });
     await expect.poll(() => latest(page)).toContain('Broadcast message');
     await page.evaluate(() => { window.holdMessages = true; });
     if (action === 'invite') {
-      await ui.getByRole('button', { name: 'Invite someone', exact: true }).click();
+      await ui.locator('#invite').click();
       // The baseline dialog has an unrelated viewport/actionability defect.
-      await ui.getByRole('button', { name: 'Continue in synthetic', exact: true }).dispatchEvent('click');
-    } else if (action === 'check') await ui.locator('#check-status button').click();
+      await ui.locator('#invite-dialog').getByRole('button', { name: 'Continue in synthetic', exact: true }).dispatchEvent('click');
+    } else if (action === 'check') await ui.locator('#onboarding-thread').getByRole('button', { name: 'Set up automatic checking' }).click();
     else await ui.getByRole('button', { name: 'Open file in synthetic' }).click();
     await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
     expect(await latest(page)).toBe('');
@@ -119,10 +119,11 @@ for (const action of ['invite', 'check', 'file']) {
 }
 
 test('initial source removal stays filtered when temporary ownership ends before reads settle', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, presentation: 'thread' });
+  const ui = await open(page, 900, { listOnly: true, presentation: 'thread', second: true });
   const remaining = out.slice(0, -1) + '8';
-  await page.evaluate(() => { window.second = true; });
-  await page.clock.runFor(10000);
+  // Drain initial previews before revoking a source; only the selection's fresh
+  // reads belong in the assertions below, not a detached older preview request.
+  await expect(ui.locator('#connections .thread-time .refresh-spinner')).toHaveCount(0);
   await page.evaluate(() => { window.excludeOut = true; window.holdReads = true; window.holdMessages = true; window.calls = []; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
@@ -136,8 +137,8 @@ test('initial source removal stays filtered when temporary ownership ends before
   expect(initial).toContain(remaining);
   await expect(ui.locator('#messages .message-row')).toHaveCount(0);
 
-  await ui.getByRole('button', { name: 'Invite someone', exact: true }).click();
-  await ui.getByRole('button', { name: 'Continue in synthetic', exact: true }).dispatchEvent('click');
+  await ui.locator('#invite').click();
+  await ui.locator('#invite-dialog').getByRole('button', { name: 'Continue in synthetic', exact: true }).dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   expect(await latest(page)).toBe('');
   await page.evaluate(() => { window.holdMessages = false; window.releaseMessage(); });

@@ -39,22 +39,30 @@
   --composer-clearance: 36px;
   --footer-clearance: max(var(--composer-clearance), env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px));
   scroll-padding-bottom: var(--footer-clearance);
+  /* Bottom scroll room below the conversation: half the viewport so the message
+     input can be scrolled up to about the middle of the screen when wanted. */
+  --message-scroll-clearance: 50dvh;
 }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
-.contacts-layout { display: grid; grid-template-columns: minmax(120px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
+.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
 #connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
-/* Slack-style: keep the rail clean — a slim scrollbar only fills in on hover. */
-#connection-list::-webkit-scrollbar { width: 8px; }
-#connection-list::-webkit-scrollbar-track { background: transparent; }
-#connection-list::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
-#connection-list:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
+/* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
+#connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
+#connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
+#connection-list::-webkit-scrollbar-thumb, #message-area::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+#connection-list:hover::-webkit-scrollbar-thumb, #message-area:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
 .rail-content { padding: 12px 12px var(--footer-clearance); }
 .conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-#message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 12px; }
+/* The composer scrolls with the conversation (it's the last child here), so the
+   bottom padding gives generous room to scroll it clear of the host's bottom chrome
+   (doubled to survive an extra host-chrome row). No horizontal padding on the
+   scroll container itself, so the scrollbar sits flush with the edge (the small
+   side gap lives on the content instead). */
+#message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 var(--message-scroll-clearance); }
+#message-area > * { margin-inline: 4px; }
 body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
 body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
-body #thread-composer { flex: none; }
 body .thread-button { padding: 12px 8px; gap: 4px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--violet-tint); }
 .thread-button .thread-text { display: contents; }
@@ -163,8 +171,6 @@ main {
     calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
     calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
 }
-/* Only the conversation footer clears the host input; the rail stays full-height. */
-.footer-spacer { height: var(--footer-clearance); flex: none; }
 .brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
@@ -217,8 +223,8 @@ select { width: fit-content; }
 .debug-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px 12px; margin-bottom: 12px; }
 .debug-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .debug-fields input, .debug-fields select { width: 100%; box-sizing: border-box; padding: 6px 8px; }
-#debug-preview-active, .debug-preview-label { color: var(--lavender); font-size: 12px; }
-.relationship-state, .debug-preview-label { grid-column: 1 / -1; justify-self: start; }
+#debug-preview-active { color: var(--lavender); font-size: 12px; }
+.relationship-state { grid-column: 1 / -1; justify-self: start; }
 input { width: 100%; min-height: 42px; }
 textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 /* Compact, rounded reply input (native-chat feel); grows with content (JS-capped). */
@@ -296,12 +302,17 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* A quiet timestamp, without pill chrome. */
 .thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; color: var(--muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .thread-time:empty { display: none; }
-/* Saved assessment remains distinct from unread, without a badge stack. */
-.status-badge { align-self: flex-start; max-width: 100%; margin: 6px 0 0; display: inline-flex; gap: 6px; font-size: 11px; font-weight: 400; line-height: 1.4; }
+/* Saved assessment shown as a pill badge, set apart from the row's name/preview.
+   Informational states (no action identified / partially assessed) read as quiet
+   tertiary monospace text, like the legacy user ID; only "needs attention" gets the
+   amber pill, since it calls for action. */
+.status-badge { align-self: flex-start; max-width: 100%; margin: 6px 0 0; display: inline-flex; align-items: center; gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.4; color: #6a6a71; }
 .status-badge[hidden] { display: none; }
 .status-kind { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.status-reason { min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-badge.attention .status-reason { color: #e0b26d; }
+.status-reason { min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge.attention { padding: 3px 9px; border-radius: 999px; background: rgba(224, 178, 109, .14);
+  font-family: inherit; font-weight: 500; color: #e0b26d; }
 .status-badge.attention .status-kind { color: #c79448; }
 .thread-time .refresh-spinner { width: 10px; height: 10px; --spinner-thickness: 1.5px; }
 
@@ -388,7 +399,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 /* The flex footer is always pinned, including short and empty histories. */
-#thread-composer:not(:empty) { background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */
@@ -397,18 +408,25 @@ details { margin-block: 16px; }
 summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
 details[open] > summary { color: var(--violet); }
 #thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
-/* Small bottom margin so the status card reads as part of the side panel below. */
-.invite-section { flex: none; margin: 8px 0 10px; }
-/* The app's single status strip: the agent check-status line plus a muted note
-   for host/handoff feedback. It collapses when it has nothing to say, so the card
-   sits snug against the side panel on the happy path. */
-.check-status { display: flex; align-items: center; gap: 12px; padding: 2px 2px 2px 0; background: transparent; }
-.check-status:not(:has(.check-status-text:not(:empty), .check-status-note:not(:empty))) { display: none; }
-.check-status-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.check-status-text { margin: 0; color: #fff; font-size: 13px; line-height: 1.4; }
-.check-status-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; max-height: 12vh; overflow-y: auto; }
-.check-status-text:empty, .check-status-note:empty { display: none; }
-.check-status button { flex: none; font-size: 12px; padding: 6px 10px; }
+/* Standalone app status line (host connect / handoff feedback). Collapses when
+   empty via the shared [role=status]:empty rule, so it adds no persistent chrome. */
+.app-status { flex: none; margin: 8px 0 10px; max-height: 12vh; overflow-y: auto; }
+/* Onboarding card: the dismissible nudge atop the message view when no
+   automatic-check schedule exists. */
+.onboarding-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px;
+  background: var(--raised); text-align: left; }
+.onboarding-head { display: flex; align-items: center; gap: 8px; }
+.onboarding-icon { color: var(--teal); flex: none; }
+.onboarding-title { margin: 0; color: #fff; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.onboarding-dismiss { flex: none; margin-left: auto; width: 24px; height: 24px; min-height: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: transparent; color: var(--muted); }
+.onboarding-dismiss:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.onboarding-text { margin: 0; color: #c4c4cc; font-size: 13px; line-height: 1.5; }
+.onboarding-action { align-self: flex-start; margin-top: 2px; font-size: 13px; }
+.onboarding-card--sticky { position: sticky; top: 0; z-index: 2; margin: 0 4px 10px; }
+/* Quiet re-entry point in the Advanced panel once the card is dismissed. */
+#onboarding-advanced { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.onboarding-advanced-action { align-self: flex-start; font-size: 13px; }
 .list-intro { font-size: 13px; }
 
 /* A tapered "comet" ring: a conic gradient fading from transparent to teal,
@@ -431,8 +449,10 @@ details[open] > summary { color: var(--violet); }
 /* Spinner shown inside a button while its request is in flight. */
 .btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
 /* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
-.toaster { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
+/* Anchor toasts to the top: the host's bottom chrome height is unreliable, but the
+   top edge (plus any reported top inset) is predictable. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); top: calc(16px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(-14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
 .toast.toast-shown { opacity: 1; transform: translateY(0); }
 .toast-body { flex: 1; min-width: 0; }
 .toast-title { margin: 0; font-weight: 600; font-size: 14px; }
@@ -463,10 +483,11 @@ html { overflow-anchor: none; }
   .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
 }
 
-/* Use host mode, not viewport width, to choose spacing. Insets stay separate. */
-:root[data-display-mode='fullscreen'] { --composer-clearance: 24px; }
-.compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
-.compact-threads .invite-section > p:not([role='status']) { display: none; }
+/* Use host mode, not viewport width, to choose spacing. Insets stay separate.
+   The fullscreen fallback must clear the host's bottom chrome on its own when the
+   host doesn't report a bottom inset; max() still avoids double-padding when it
+   does report one. */
+:root[data-display-mode='fullscreen'] { --composer-clearance: 48px; }
 .compact-threads #connections > li { padding: 0; }
 .compact-threads #connection-list > p.meta { margin-block: 6px; }
 

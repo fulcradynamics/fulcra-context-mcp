@@ -45,7 +45,7 @@ for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
     expect(bounds.horizontal).toBe(false);
     expect(bounds.documentOverflow).toBe(false);
     expect(bounds.railBottom).toBe(height);
-    expect(bounds.composerBottom).toBe(height - 24);
+    expect(bounds.composerBottom).toBe(height / 2);
     expect(bounds.messageTop).toBeGreaterThanOrEqual(bounds.headerBottom);
     expect(bounds.messageBottom).toBeLessThanOrEqual(bounds.composerTop);
     await page.screenshot({ path: `${process.env.TMPDIR}/plat808-debug-${width}.png` });

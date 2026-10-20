@@ -17,14 +17,21 @@ export function createMessageList(list, renderRow) {
   const top = () => scroller.getBoundingClientRect().top;
   const bottom = () => scroller.getBoundingClientRect().bottom - 12;
   const scrollBy = delta => { scroller.scrollTop += delta; };
+  // The composer is the scroller's last child; "latest" means it's visible near the
+  // bottom. Scrolled up into history it drops below the fold.
   function atLatest() {
-    const edge = list.lastElementChild?.getBoundingClientRect();
-    const resizeDelta = paneHeight - scroller.clientHeight;
-    return !edge || edge.bottom <= bottom() + resizeDelta + 40;
+    const last = scroller.lastElementChild;
+    if (!last) return true;
+    const resizeDelta = Math.max(0, paneHeight - scroller.clientHeight);
+    return last.getBoundingClientRect().bottom <= scroller.getBoundingClientRect().bottom + 40 + resizeDelta;
   }
+  // Default resting position leaves 1/8 of the viewport below the input; the pane
+  // keeps extra bottom room (padding) so the user can still scroll it further up.
   function follow() {
-    const edge = list.lastElementChild?.getBoundingClientRect();
-    if (edge) scrollBy(edge.bottom - bottom());
+    const last = scroller.lastElementChild;
+    if (!last) { scroller.scrollTop = scroller.scrollHeight; return; }
+    const target = scroller.getBoundingClientRect().bottom - win.innerHeight / 8;
+    scrollBy(last.getBoundingClientRect().bottom - target);
   }
   let paneHeight = scroller.clientHeight;
   const onScroll = () => {

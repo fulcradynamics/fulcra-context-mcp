@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { open, peer, other } from './harness.js';
-const handoff = ui => ui.getByRole('button', {name:'Discuss in synthetic',exact:true});
+const handoff = ui => ui.getByRole('button', {name:'Continue in synthetic',exact:true});
 async function deselect(page, ui) {
  await ui.locator('#advanced-toggle').click();
  await ui.locator('.incoming-sources summary').click();
@@ -42,7 +42,7 @@ test('deselection clears attached context and retains safe context on discovery 
  const ui = await open(page);
  await handoff(ui).click();
  await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
- await ui.getByRole('button', {name:'OK',exact:true}).click();
+ await expect(ui.locator('.toast').filter({ hasText: 'Request sent to synthetic' })).toBeVisible();
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Retained draft');
  await page.evaluate(() => { window.contexts=[]; window.hostMessages=[]; window.failDiscovery=true; });
  await deselect(page, ui);
