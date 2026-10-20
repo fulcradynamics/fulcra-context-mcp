@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.17.1'
+                assert initialized.serverInfo.version == '1.17.2'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -80,7 +80,11 @@ async def main():
                     ('fulcra_open', 'ui://fulcra/contacts/v67.html', 'global'),
                     ('agent_contact_open', 'ui://fulcra/contacts/thread/v67.html', 'thread'),
                 ):
-                    assert tools[name].icons == icons
+                    assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
+                        {'src': f'https://mcp.fulcradynamics.com/menu-{theme}.svg',
+                         'mimeType': 'image/svg+xml', 'sizes': ['any'], 'theme': theme}
+                        for theme in ('light', 'dark')
+                    ]
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     resource = (await client.read_resource(uri)).contents[0]

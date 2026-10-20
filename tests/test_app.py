@@ -10,7 +10,12 @@ async def test_app_tools_advertise_navigation_icons():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         for name in ("fulcra_open", "agent_contact_open"):
-            assert tools[name].icons == server_info.icons()
+            assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
+                {"src": f"https://mcp.fulcradynamics.com/menu-{theme}.svg",
+                 "mimeType": "image/svg+xml", "sizes": ["any"], "theme": theme}
+                for theme in ("light", "dark")
+            ]
+            assert tools[name].icons != server_info.icons()
 
 
 async def test_direct_contacts_resource_contract():
