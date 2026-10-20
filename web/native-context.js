@@ -7,9 +7,10 @@ export function getContextLifecycle(app, status) {
 }
 
 // One queue for the app, not one per peer: an old attach must settle before its
-// empty replacement, and before a new peer can attach. No poll reattaches data.
+// empty replacement, and before a new peer can attach.
 export function createContextLifecycle(app, status) {
   let tail = Promise.resolve(), epoch = 0, dirty = false, clearing, disposed = false;
+  let pending = false, desired, queued;
   const report = text => { if (!disposed) status.textContent = text; };
   const enqueue = task => {
     const result = tail.then(task);
@@ -34,16 +35,38 @@ export function createContextLifecycle(app, status) {
     });
     return clearing;
   }
-  return {
-    pending: false,
+  function reconcile() {
+    if (disposed || pending || !desired?.isCurrent()) return;
+    const { text, identity } = desired;
+    if (!text || (queued?.identity === identity && queued.epoch === epoch)) return;
+    const token = epoch;
+    queued = { identity, epoch: token };
+    lifecycle.attach(text, token, true).catch(() => {
+      // Mark delivery dirty, but wait for an ordinary refresh to retry.
+      if (desired?.isCurrent() && lifecycle.current(token)) invalidate();
+    });
+  }
+  const lifecycle = {
+    get pending() { return pending; },
+    set pending(value) {
+      pending = value;
+      // Explicit actions own the slot until their awaited operation settles.
+      if (value) queued = undefined;
+      else reconcile();
+    },
     handoffLocks: new Set(),
     isClear: () => !dirty,
     onChange: () => {},
     token: () => epoch,
     current: token => !disposed && epoch === token,
-    attach(text, token) {
+    sync(text, isCurrent, identity = text) {
+      if (desired?.identity !== identity && !pending) invalidate();
+      desired = { text, isCurrent, identity };
+      reconcile();
+    },
+    attach(text, token, passive = false) {
       return enqueue(async () => {
-        if (disposed || epoch !== token) return false;
+        if (disposed || epoch !== token || (passive && (pending || !desired?.isCurrent()))) return false;
         dirty = true; // Even a timeout is not proof of nondelivery.
         const result = await app.updateModelContext({ content: [{ type: 'text', text }] }, options);
         if (result?.isError) throw new Error('Context attach rejected');
@@ -51,6 +74,7 @@ export function createContextLifecycle(app, status) {
       });
     },
     invalidate,
-    dispose() { const done = invalidate(); disposed = true; return done; },
+    dispose() { const done = invalidate(); disposed = true; desired = undefined; return done; },
   };
+  return lifecycle;
 }

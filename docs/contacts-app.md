@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.16.1 / contacts UI v62 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.2 / contacts UI v63 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v62.html`, `ui://fulcra/contacts/threads/v62.html` and
-`ui://fulcra/contacts/thread/v62.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v63.html`, `ui://fulcra/contacts/threads/v63.html` and
+`ui://fulcra/contacts/thread/v63.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -102,6 +102,19 @@ pauses while hidden and backs off failures. Optimistic reconciliation matches `m
 Uncertain sends do not invent a new ID. Sampling suggestions remain disabled on every host.
 
 ### Sidebar and host chat
+
+Hosts advertising `updateModelContext.text` receive the selected contact's identity
+while history loads, then bounded displayed context after loads and changed refreshes.
+This does not require `message.text`, send `ui/message`, sample, or start a model turn.
+The pinned MCP Apps SDK 1.7.5 specifies replacement context for future turns, normally
+the next native user message; actual ChatGPT ingestion still needs native acceptance.
+Labels and records are untrusted references, not write authority. Exact owner/type
+provenance, applied range and stale/partial warnings remain in the 24,000-character
+snapshot. Navigation, source deselection, revocation and disposal use the same serialized
+clear/replace lifecycle as explicit handoffs; late responses cannot restore old context.
+Unsupported hosts continue displaying contacts without automatic bridge calls.
+Discuss, Send and invitation actions remain explicit; existing authorized acknowledgements
+are unchanged. A disconnected or rejecting host cannot guarantee successful cleanup.
 
 Advanced → Debug opens display-only, per-contact previews: unread/read, assessment
 and reason, connected/pending label, list loading/empty/error and preview text/time,

@@ -11,7 +11,7 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   summary.textContent = 'Context attached to chat';
   const preview = doc.createElement('pre'); preview.id = 'thread-context';
   details.append(summary, preview);
-  let context, identity, peerId, usable = false;
+  let context, peerId, usable = false;
   container.replaceChildren();
   const currentContext = () => usable ? context : undefined;
   const update = setupThreadActions(app, lifecycle, currentContext, container, isCurrent, draft, () => peerId, view, changed, presentation);
@@ -28,22 +28,26 @@ export function createThreadComposer(app, container, isCurrent, lifecycle, prese
   const updater = (peer, range, result, ready, loaded) => {
     peerId = peer;
     usable = loaded;
-    // Refresh timestamps alone do not invalidate a snapshot. No automatic attach.
+    const thread = view().thread;
+    result = { ...result, selectedContact: { label: thread?.identifier, account_name: thread?.accountName },
+      sources: thread?.sources, participants: thread?.participants };
+    // Refresh timestamps alone do not invalidate a snapshot.
     const nextIdentity = JSON.stringify({ peer, range, warnings: result.warnings, assessment: result.assessment,
+      selectedContact: result.selectedContact,
       participants: result.participants, viewingAgent: result.viewingAgent,
-      sources: result.participants ? result.sources : undefined,
+      sources: result.sources,
       messages: result.messages.map(({ last_success_at, ...message }) => message) });
-    if (!ready || (identity !== undefined && identity !== nextIdentity)) lifecycle.invalidate();
-    identity = nextIdentity;
     context = undefined;
     try {
       const next = buildThreadContext(peer, range, result);
       preview.textContent = next.text;
       if (ready) context = next.text;
+      lifecycle.sync(thread?.sources.length && app.getHostCapabilities()?.updateModelContext?.text
+        ? next.text : undefined, isCurrent, nextIdentity);
       help.textContent = 'Send posts your exact message directly to your own peer-shared outbox, without an agent turn. The secondary button attaches displayed untrusted context and sends your optional composition to your host chat, not the peer. Drafts remain per peer until you close the app. ' + next.notice;
     } catch {
       preview.textContent = '';
-      lifecycle.invalidate();
+      lifecycle.sync(undefined, isCurrent);
       help.textContent = 'Thread metadata is too large to attach safely. Chat handoff is unavailable for this load.';
     }
     update();
