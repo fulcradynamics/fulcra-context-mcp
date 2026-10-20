@@ -246,12 +246,14 @@ function applyStyles(context) {
 // A tool's result: its structured content, or the JSON in its text.
 async function callTool(name, args) {
   const result = await request("tools/call", { name, arguments: args });
-  const text = (result.content || []).map((c) => c.text || "").join("\n");
-  if (result.isError) throw new Error(text || `${name} failed`);
+  const blocks = (result.content || []).filter((c) => c.type === "text");
+  if (result.isError) throw new Error(blocks.map((c) => c.text).join("\n") || `${name} failed`);
   const structured = result.structuredContent;
   // A tool returning plain text comes wrapped as {"result": "<text>"}.
   const wrapped = structured && Object.keys(structured).length === 1 && typeof structured.result === "string";
   if (structured && !wrapped) return structured;
+  // Later content blocks are supplementary, not part of the JSON payload.
+  const text = wrapped ? structured.result : (blocks[0]?.text || "");
   const start = text.search(/[\[{]/);
   if (start < 0) throw new Error(text);
   return JSON.parse(text.slice(start));
