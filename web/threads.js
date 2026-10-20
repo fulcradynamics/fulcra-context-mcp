@@ -94,7 +94,16 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     if (inlineList) doc.documentElement.classList.remove('compact-threads');
     detail.select(entry.thread, entry.button, { acknowledge: true });
   }
-  let requestedPeer, launchPending = false, userSelected = false;
+  let requestedPeer, launchPending = false, userSelected = false, autoSelected = false;
+  // In the two-pane (global) layout, open the top conversation once on first load
+  // so the panel isn't empty — unless an entrypoint peer or the user already chose.
+  function maybeAutoSelect() {
+    if (autoSelected || userSelected || launchPending || entrypoint.presentation !== 'global' || rows.size === 0) return;
+    const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
+    if (!entry) return;
+    autoSelected = true;
+    detail.select(entry.thread, entry.button);
+  }
 
   const launchStatus = doc.createElement('p');
   launchStatus.id = 'entrypoint-status'; launchStatus.setAttribute('role', 'status');
@@ -248,7 +257,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
 
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; }
         list.hidden = rows.size === 0; empty.hidden = rows.size > 0;
-        void refreshPreviews().then(sortRows);
+        void refreshPreviews().then(() => { sortRows(); maybeAutoSelect(); });
         return await detail.refresh(discovery);
       } catch (error) {
         if (disposed) return false;
@@ -328,11 +337,14 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       entry.button.querySelector('.debug-preview-label').hidden = !Object.keys(overrides).length;
       entry.preview.replaceChildren();
       if (message) {
-        const outgoing = message.direction === 'Outgoing';
-        const sender = doc.createElement('span');
-        sender.className = `preview-sender${outgoing ? ' outgoing' : ''}`;
-        sender.textContent = `${outgoing ? 'You' : entry.name.textContent}: `;
-        entry.preview.append(sender, doc.createTextNode(messageText(message.record)));
+        // Only the user's own messages get a prefix ("You: "); incoming previews
+        // lead with the message text, not the sender's name.
+        if (message.direction === 'Outgoing') {
+          const sender = doc.createElement('span');
+          sender.className = 'preview-sender'; sender.textContent = 'You: ';
+          entry.preview.append(sender);
+        }
+        entry.preview.append(doc.createTextNode(messageText(message.record)));
       }
       if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
       entry.preview.hidden = !message && !entry.previewFailed;

@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { open, peer } from './harness.js';
 
-test('global launch stays unselected through polling', async ({page}) => {
+test('global launch auto-selects the first contact without acknowledging or sending', async ({page}) => {
   const ui = await open(page, 900, {listOnly:true});
-  await expect(ui.locator('#selection-empty')).toBeVisible();
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
-  await expect(ui.locator('#message-back')).toHaveCount(0);
   await page.clock.runFor(11000);
-  await expect(ui.locator('.thread-button[aria-current="true"]')).toHaveCount(0);
+  // The top contact opens on its own so the two-pane layout is never empty.
+  await expect(ui.locator('.thread-button[aria-current="true"]')).toHaveCount(1);
+  await expect(ui.locator('#selection-empty')).toBeHidden();
+  await expect(ui.locator('#connection-detail')).toBeVisible();
+  // Auto-selection only views; it must not acknowledge messages or hand off to chat.
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
 });

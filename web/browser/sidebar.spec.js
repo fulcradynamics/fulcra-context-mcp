@@ -14,16 +14,13 @@ test('IDs are private until the keyboard-accessible identity popover opens', asy
   await expect(popover).toBeHidden();
 });
 
-test('handoff guidance is conditional and suppression survives navigation without storage', async ({ page }) => {
+test('a successful handoff shows a host-named toast', async ({ page }) => {
   const ui = await open(page);
   await ui.getByRole('button', { name: 'Discuss in synthetic' }).click();
-  const guidance = ui.getByRole('dialog', { name: 'Continue in host chat' });
-  await expect(guidance.locator('p')).toHaveText('Your request was sent to synthetic. Expand its input to see the conversation and check for a response.');
-  await guidance.getByRole('button', { name: "Don't show again" }).click();
-  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
-  await ui.getByRole('button', { name: 'Discuss in synthetic' }).click();
-  await expect(guidance).toBeHidden();
-  await expect(ui.locator('#send-status')).toContainText('Request accepted');
+  await expect(ui.locator('.toast')).toContainText('Request sent to synthetic');
+  // The composer footer status lines were removed entirely.
+  await expect(ui.locator('#send-status')).toHaveCount(0);
+  await expect(ui.locator('#context-status')).toHaveCount(0);
 });
 
 test('sidebar uses explicit unread badges without avatars on narrow screens', async ({ page }) => {
@@ -94,7 +91,6 @@ test('long rail keeps Invite and first contact reachable at document bottom', as
   await ui.locator('#connections').evaluate(el => {
     // DOM-only long-rail stress, not discovery coverage.
     for (let i = 0; i < 8; i++) el.append(el.firstElementChild.cloneNode(true));
-    el.ownerDocument.querySelector('#context-status').textContent = 'Context updated';
     el.ownerDocument.defaultView.scrollTo(0, el.ownerDocument.documentElement.scrollHeight);
   });
   await ui.locator('#connection-list').evaluate(el => el.scrollTop = 0);
@@ -118,11 +114,10 @@ test('uncertain host delivery is not retried across navigation', async ({ page }
   await ui.getByRole('button', {name:'Discuss in synthetic'}).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
   await page.clock.runFor(16000);
-  await expect(ui.locator('#send-status')).toContainText('Could not confirm delivery');
+  await expect(ui.locator('.toast')).toContainText('Couldn’t confirm your request');
   await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeDisabled();
   await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
   await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeDisabled();
-  await expect(ui.locator('#host-guidance')).toHaveCount(0);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
 });
 
@@ -185,35 +180,17 @@ test('repeat copy clears success while pending, on failure, and fences reopened 
   await expect(copy).toHaveAttribute('aria-label','Copied');
 });
 
-test('rejected handoffs and direct sends do not show host guidance', async ({ page }) => {
+test('a rejected direct send and a rejected handoff each surface an error toast', async ({ page }) => {
   const ui = await open(page);
   await ui.locator('.composer-input').fill('Direct message');
   await ui.getByRole('button', {name:'Send',exact:true}).click();
-  await expect(ui.locator('#send-status')).toContainText('Message not posted');
-  await expect(ui.locator('#host-guidance')).toHaveCount(0);
+  await expect(ui.locator('.toast')).toContainText('Couldn’t send');
+  // The draft returns to the composer so it can be retried.
+  await expect(ui.locator('.composer-input')).toHaveValue('Direct message');
   await page.evaluate(() => { window.rejectMessages = true; });
   await ui.getByRole('button', {name:'Discuss in synthetic'}).click();
-  await expect(ui.locator('#send-status')).toContainText('Host rejected');
-  await expect(ui.locator('.composer-input')).toHaveValue('Direct message');
-  await expect(ui.locator('#host-guidance')).toHaveCount(0);
+  await expect(ui.locator('.toast')).toContainText('Couldn’t reach synthetic');
   await expect(ui.getByRole('button', {name:'Discuss in synthetic'})).toBeEnabled();
-});
-
-test('guidance stores only a preference when storage is available; OK does not suppress', async ({ page }) => {
-  const ui = await open(page);
-  await ui.locator('body').evaluate(el => {
-    const data = new Map(); const win = el.ownerDocument.defaultView;
-    win.preferenceWrites = [];
-    Object.defineProperty(win, 'localStorage', {value:{getItem: key => data.get(key), setItem: (key,value) => { data.set(key,value); win.preferenceWrites.push([key,value]); }}});
-  });
-  const discuss = ui.getByRole('button', {name:'Discuss in synthetic'});
-  await discuss.click();
-  await ui.getByRole('button', {name:'OK',exact:true}).click();
-  await discuss.click();
-  await ui.getByRole('button', {name:"Don't show again"}).click();
-  expect(await ui.locator('body').evaluate(el => el.ownerDocument.defaultView.preferenceWrites)).toEqual([['fulcra.contacts.hide-host-guidance','1']]);
-  await discuss.click();
-  await expect(ui.locator('#host-guidance')).toHaveCount(0);
 });
 
 test('user IDs in generated recipient headings remain private', async ({ page }) => {

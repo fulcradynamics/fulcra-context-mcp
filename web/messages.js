@@ -103,7 +103,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   // display) keeps its space reserved so the button never shifts.
   const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
 
-  const contextLifecycle = getContextLifecycle(app, doc.querySelector('#context-status'));
+  // Context-lifecycle plumbing runs, but its progress is no longer surfaced to the
+  // user (it was too technical); writes go to a detached, never-shown element.
+  const contextLifecycle = getContextLifecycle(app, doc.createElement('p'));
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
@@ -220,7 +222,21 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       // Optimistic send state for outgoing posts.
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
-      if (badge) { badge.textContent = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'unconfirmed' : 'posted'; badge.hidden = !state; }
+      if (badge) {
+        const label = state === 'sending' ? 'sending…' : state === 'uncertain' ? 'not confirmed' : 'sent';
+        badge.hidden = !state;
+        // Rebuild only when the label changes, so the sending spinner's animation
+        // isn't restarted on every steady refresh.
+        if (badge.dataset.label !== label) {
+          badge.dataset.label = label;
+          badge.replaceChildren();
+          if (state === 'sending') {
+            const spinner = doc.createElement('span'); spinner.className = 'refresh-spinner send-spinner'; spinner.setAttribute('aria-hidden', 'true');
+            badge.append(spinner);
+          }
+          badge.append(doc.createTextNode(label));
+        }
+      }
 
       const rawTime = record.recorded_at ?? record.start_time;
       const timestamp = typeof rawTime === 'string' ? new Date(rawTime) : null;
@@ -271,8 +287,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     activeViewer = viewingAgent(result.messages, draft.viewingAgent);
     readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === 'chatgpt' ? ' (assumption; change here)' : ''}`;
     if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
-    const confirmed = reconcilePosts(draft, result.messages).at(-1);
-    if (confirmed) doc.querySelector('#send-status').textContent = `${contactName(selected)}: Posted to your outbox (verified by polling); not confirmed delivered or read by the peer.`;
+    // The per-message "sent" badge reflects confirmation; no separate status line.
+    reconcilePosts(draft, result.messages);
     const posts = unavailable ? [] : (draft.posts ?? [])
       .filter(p => selected.sources.some(s => s.id === p.source.id && s.fulcra_userid === p.source.fulcra_userid))
       .map(({ source, record, direction, state }) => ({ source, record, direction, state }));

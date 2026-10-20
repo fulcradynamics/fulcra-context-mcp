@@ -24,7 +24,7 @@ const notifySent = description => {
   const host = app.getHostVersion()?.name;
   return showToast(document, {
     title: host ? `Request sent to ${host}` : 'Request sent',
-    description, duration: inlineList ? undefined : 0,
+    description,
   });
 };
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
