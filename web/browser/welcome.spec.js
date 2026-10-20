@@ -23,7 +23,7 @@ for (const width of [320, 390, 900]) test(`instructional layout and aligned rail
   // Exercise the legacy row's production CSS at the same real rail width.
   await ui.locator('#legacy-connections').evaluate(el => {
     el.parentElement.hidden = false;
-    el.innerHTML = '<li class="thread-row"><div class="thread-button"><div class="thread-text"><span class="thread-name">Legacy connection</span></div><button class="legacy-convert">Convert to Contact</button></div></li>';
+    el.innerHTML = '<li class="thread-row"><div class="thread-button"><div class="thread-text"><span class="thread-name">Legacy connection</span></div><button class="legacy-convert">Update connection</button></div></li>';
   });
   const name = await ui.locator('#legacy-connections .thread-name').boundingBox();
   const action = await ui.locator('.legacy-convert').boundingBox();

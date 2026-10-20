@@ -108,7 +108,7 @@ body #connections > li, body #pending-connections > li, body #legacy-connections
 body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .legacy-convert { grid-column: 1; justify-self: start; }
 .legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
-.legacy-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
+.legacy-help { color: #6a6a71; font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
 body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
 #host-guidance::backdrop { background: #0009; }
@@ -227,7 +227,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 #connections > li, #pending-connections > li, #legacy-connections > li { padding: 10px 8px; }
 #connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
 /* Pending rows match legacy rows: text column, then a right-aligned action. */
-.pending-row { display: flex; align-items: center; gap: 12px; }
+.pending-row { display: flex; align-items: center; gap: 8px; }
 #pending-connections .pending-label { font-weight: 500; }
 .pending-assist { flex: none; }
 #connections-empty p { margin: 0 0 12px; font-size: 13px; }
