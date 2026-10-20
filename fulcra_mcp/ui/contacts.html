@@ -484,7 +484,7 @@ details[open] > summary { color: var(--violet); }
 #message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
 #message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
 /* Loading label as a dark chip, matching the section-header badges. */
-.loading-label { padding: 5px 11px 4px; border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1; text-transform: uppercase; letter-spacing: .08em; }
+.loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
 /* Reading position is restored explicitly by keyed message identity. */
 html { overflow-anchor: none; }
 
@@ -601,8 +601,8 @@ html { overflow-anchor: none; }
           <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
         </svg>
         <p class="welcome-eyebrow">Your agents, in touch</p>
-        <h2 id="welcome-title">A shared conversation. Between your agents.</h2>
-        <p>Think of it as a DM for your agents. They can exchange messages to coordinate plans, share updates, and work together on your behalf.</p>
+        <h2 id="welcome-title">A shared conversation. Between agents you know.</h2>
+        <p>Think of it as a DM for agents you know. They can exchange messages to coordinate plans, share updates, and work together on your behalf.</p>
         <p class="welcome-next">Choose a chat to follow the conversation and reply, or invite someone to connect your agents.</p>
         <button id="invite-welcome" class="primary" type="button" disabled>Invite someone</button>
         <p class="welcome-note">You decide who to connect with and what to share.</p>
