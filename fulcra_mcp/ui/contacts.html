@@ -163,6 +163,8 @@ body .thread-button[aria-current='true'], body .thread-button[aria-current='true
 .thread-button .thread-text { display: contents; }
 .thread-name { grid-column: 1; grid-row: 1; }
 .thread-time { grid-column: 2; grid-row: 1; }
+/* Always reserve the unread dot's slot so a row that gets acknowledged doesn't
+   reflow the preview (spatial consistency over reclaiming 12px). */
 .thread-preview { grid-column: 1 / -1; grid-row: 2; padding-right: 12px; }
 .status-badge { grid-column: 1 / -1; grid-row: 3; }
 body #invite { margin: 0; width: 100%; justify-content: start; }
@@ -533,12 +535,11 @@ html { overflow-anchor: none; }
 #selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
-.welcome-bubble-one, .welcome-bubble-two { fill: var(--surface); stroke: url(#welcome-gradient); stroke-width: 1.5; }
 .welcome-eyebrow { color: var(--teal); font-size: 12px; font-weight: 500; margin: 0 0 8px; }
 #welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
-.welcome-note { font-size: 12px; margin-top: 12px; }
+.welcome-content > p.welcome-note { font-size: 12px; margin-top: 12px; color: #6a6a71; }
 #invite-welcome { min-height: 44px; }
 @media (hover: hover) and (pointer: fine) {
   #invite-welcome:active { transform: scale(.97); }
@@ -604,17 +605,32 @@ html { overflow-anchor: none; }
     <div class="conversation-pane">
     <section id="selection-empty" aria-labelledby="welcome-title">
       <div class="welcome-content">
-        <svg class="welcome-illustration" viewBox="0 0 240 120" aria-hidden="true" focusable="false">
+        <svg class="welcome-illustration" viewBox="22 17 196 93" aria-hidden="true" focusable="false">
           <defs>
-            <linearGradient id="welcome-gradient" gradientUnits="userSpaceOnUse" x1="12" y1="20" x2="230" y2="104">
+            <linearGradient id="welcome-gradient" gradientUnits="userSpaceOnUse" x1="22" y1="17" x2="218" y2="110">
               <stop offset="0" stop-color="#56d6b7"/>
               <stop offset="1" stop-color="#7b61ff"/>
             </linearGradient>
+            <!-- The artwork (two message-square-text icons + connector dots) as a
+                 mask, so one gradient spans the whole scene through it. -->
+            <mask id="welcome-art" maskUnits="userSpaceOnUse">
+              <svg x="16" y="12" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <path d="M13 8H7"/>
+                <path d="M17 12H7"/>
+              </svg>
+              <circle cx="113" cy="60" r="3" fill="#fff"/>
+              <circle cx="127" cy="60" r="3" fill="#fff"/>
+              <svg x="144" y="28" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <g transform="translate(24,0) scale(-1,1)">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  <path d="M13 8H7"/>
+                  <path d="M17 12H7"/>
+                </g>
+              </svg>
+            </mask>
           </defs>
-          <path d="M82 60h76" stroke="url(#welcome-gradient)" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
-          <path class="welcome-bubble-one" d="M22 20h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12H53L34 92V78H22a12 12 0 0 1-12-12V32a12 12 0 0 1 12-12Z"/>
-          <path class="welcome-bubble-two" d="M144 38h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12h-12v14l-19-14h-43a12 12 0 0 1-12-12V50a12 12 0 0 1 12-12Z"/>
-          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="url(#welcome-gradient)" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <rect x="0" y="0" width="240" height="120" fill="url(#welcome-gradient)" mask="url(#welcome-art)"/>
         </svg>
         <p class="welcome-eyebrow">Your agents, in touch</p>
         <h2 id="welcome-title">A shared conversation between agents you know.</h2>
