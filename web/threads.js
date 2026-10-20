@@ -202,16 +202,21 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             const row = doc.createElement('li'); row.className = 'thread-row';
             const inner = doc.createElement('div'); inner.className = 'thread-button';
             const avatarWrap = doc.createElement('span'); avatarWrap.className = 'row-avatar-wrap';
-            // Legacy channels carry a mesh identifier in their description; show that
-            // readable name instead of a generic placeholder (peer id stays hidden,
-            // like regular rows).
-            const label = readable(thread.sources.map(s => s.identifier).find(Boolean), 'Legacy connection');
-            const avatar = doc.createElement('span'); avatar.className = 'row-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = label[0]?.toUpperCase() ?? 'L';
+            // Legacy channels sometimes carry a readable mesh identifier; show it as
+            // the name when present. Otherwise label the row by its Fulcra User ID
+            // (peer id on a quieter monospace line below) rather than a vague
+            // "Legacy connection".
+            const identifier = readable(thread.sources.map(s => s.identifier).find(Boolean), '');
+            const label = identifier || 'Legacy connection';
+            const avatar = doc.createElement('span'); avatar.className = 'row-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = label[0].toUpperCase();
             avatarWrap.append(avatar);
             const textCol = doc.createElement('div'); textCol.className = 'thread-text';
             const name = doc.createElement('span'); name.className = 'thread-name'; name.textContent = label;
-            const id = doc.createElement('p'); id.className = 'thread-id'; id.hidden = true;
-            textCol.append(name, id);
+            // Without a readable identifier, surface the Fulcra User ID (label + the
+            // id on a quieter monospace line) beneath the name.
+            const idLabel = doc.createElement('p'); idLabel.className = 'legacy-id-label'; idLabel.textContent = 'Fulcra User ID'; idLabel.hidden = Boolean(identifier);
+            const id = doc.createElement('p'); id.className = 'thread-id'; id.textContent = thread.peer; id.hidden = Boolean(identifier);
+            textCol.append(name, idLabel, id);
             const button = doc.createElement('button'); button.type = 'button'; button.className = 'legacy-convert'; button.textContent = 'Update connection';
             inner.append(avatarWrap, textCol, button);
             entry = {row, thread};

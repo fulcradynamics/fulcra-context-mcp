@@ -108,6 +108,10 @@ body .thread-name { white-space: normal; overflow: visible; }
 
 body #connections > li, body #pending-connections > li, body #legacy-connections > li { padding: 0; }
 body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+/* Legacy text stacks as a tight block (name, then an optional Fulcra User ID
+   label + monospace id) rather than spreading into the row grid. */
+body #legacy-connections .thread-text { display: block; min-width: 0; }
+.legacy-id-label { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
 .legacy-convert { grid-column: 1; justify-self: start; }
 .legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
 .legacy-help { color: #6a6a71; font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }

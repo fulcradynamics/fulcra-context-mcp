@@ -76,18 +76,23 @@ const contacts = [
 // yet, so it shows under "Pending" rather than as a contact.
 const pending = channelFixture({ id: 'Event/pending-1', name: 'Dana (outbox)', description: '[mesh_identifier: "Dana"]' });
 
-// A legacy mesh outbox (pre-"connect-agents-with-anyone"): a shared
-// MomentAnnotation named "... mesh outbox", which shows under "Legacy
-// connections" as a conversion candidate rather than as a Contact.
-const legacyOutbox = { id: 'MomentAnnotation/legacy-erin', name: 'Erin mesh outbox', description: '[mesh_identifier: "Erin"]' };
-const legacyPeer = '44444444-4444-4444-4444-444444444444';
+// Legacy mesh outboxes (pre-"connect-agents-with-anyone"): shared
+// MomentAnnotations named "... mesh outbox", which show under "Legacy
+// connections" as conversion candidates rather than as Contacts. Two cases:
+// one whose description still carries a readable mesh identifier (shows the
+// name), and one without (falls back to labelling by Fulcra User ID).
+const legacyNamed = { id: 'MomentAnnotation/legacy-erin', name: 'Erin mesh outbox', description: '[mesh_identifier: "Erin"]' };
+const legacyBare = { id: 'MomentAnnotation/legacy-bare', name: 'mesh outbox', description: '' };
+const legacyNamedPeer = '44444444-4444-4444-4444-444444444444';
+const legacyBarePeer = '55555555-5555-5555-5555-555555555555';
 
 export const scenario = {
-  catalog: [...contacts.flatMap(c => c.catalog), pending, legacyOutbox],
+  catalog: [...contacts.flatMap(c => c.catalog), pending, legacyNamed, legacyBare],
   shares: {
     own_fulcra_userid: own,
     outgoing: [...contacts.flatMap(c => c.outgoing),
-      shareFixture({ data_types: [legacyOutbox.id], with_user_ids: [legacyPeer], share_all_data: false })],
+      shareFixture({ data_types: [legacyNamed.id], with_user_ids: [legacyNamedPeer], share_all_data: false }),
+      shareFixture({ data_types: [legacyBare.id], with_user_ids: [legacyBarePeer], share_all_data: false })],
     incoming: contacts.flatMap(c => c.incoming),
   },
   rows: Object.assign({}, ...contacts.map(c => c.rows)),
