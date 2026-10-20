@@ -4,7 +4,7 @@ import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
-import { contactPreview } from './contact-preview.js';
+import { contactPreview, compareRows } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { pendingContacts, matchInvitations } from './pending-contacts.js';
 import { createDebugPreview, previewAssessment } from './debug-preview.js';
@@ -330,7 +330,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   function renderPreview(entry) {
       const overrides = debug.get(entry.thread.peer);
       const summary = entry.summary, message = summary?.message;
-      renderBadge(entry.assessment, previewAssessment(entry.thread.assessment, overrides));
+      const assessment = previewAssessment(entry.thread.assessment, overrides);
+      renderBadge(entry.assessment, assessment);
+      entry.attention = assessment?.attention === true && Boolean(assessment.reason);
       entry.button.querySelector('.relationship-state').textContent = overrides.relationship === 'pending' ? 'Pending' : 'Connected';
       entry.button.querySelector('.relationship-state').hidden = !overrides.relationship;
       entry.preview.replaceChildren();
@@ -346,7 +348,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       }
       if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
       entry.preview.hidden = !message && !entry.previewFailed;
-      entry.dot.classList.toggle('on', overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged);
+      entry.unread = overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged;
+      entry.dot.classList.toggle('on', entry.unread);
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
       if (entry.summary !== undefined) entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
       else {
@@ -367,11 +370,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
       }
   }
-  // Order rows like a chat list: most recent activity first, threads without a
-  // readable message last. Animates the reorder with a FLIP transform.
+  // Order rows by attention, unread and recency. Animates the reorder with a FLIP transform.
   function sortRows() {
-    const ordered = [...rows.values()].sort((a, b) =>
-      (Number.isFinite(b.lastAt) ? b.lastAt : -Infinity) - (Number.isFinite(a.lastAt) ? a.lastAt : -Infinity));
+    const ordered = [...rows.values()].sort(compareRows);
     // No-op when the DOM already matches, so a steady auto-refresh doesn't move
     // (and repaint) rows for no reason.
     const current = [...list.children];
