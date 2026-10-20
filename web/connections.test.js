@@ -42,6 +42,14 @@ test('legacy group-only entries are excluded and owned provenance suppresses rep
   const description=entry.description+'\nconverted_from_mesh: '+JSON.stringify([{id:old,fulcra_userid:peer}]);
   assert.equal((await discoverThreads(app([{...entry,description},legacy],[share],[grant]))).legacy.length,0);
 });
+test('a two-way contact with the same peer hides its legacy connection', async () => {
+  const legacy={id:old,name:'Mesh Outbox old',fulcra_userid:peer};
+  const grant={grant_type:'user',sharing_fulcra_userid:peer,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[old]};
+  const theirs={...entry,id:'Event/00000000-0000-4000-8000-000000000005',fulcra_userid:peer};
+  const incoming={...grant,data_types:[theirs.id],datashare_name:'connect-our-agents: test'};
+  assert.equal((await discoverThreads(app([entry,theirs,legacy],[share],[grant,incoming]))).legacy.length,0);
+  assert.equal((await discoverThreads(app([entry,legacy],[share],[grant]))).legacy.length,1);
+});
 test('conversion metadata is bounded and exact owner scoped', () => {
   const refs = [{id:old,fulcra_userid:peer}];
   assert.deepEqual(conversionSources('connect-agents-with-anyone channel\nconverted_from_mesh: '+JSON.stringify(refs),own,peer),refs);
