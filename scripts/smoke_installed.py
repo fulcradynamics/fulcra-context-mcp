@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.17.3'
+                assert initialized.serverInfo.version == '1.17.4'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -67,7 +67,7 @@ async def main():
                 assert end_contact.inputSchema['properties']['archive']['default'] is False
                 assert 'fulcra_userid' in tools['open_file_manager'].inputSchema['properties']
                 files_uri = tools['open_file_manager'].meta['ui']['resourceUri']
-                assert files_uri == 'ui://fulcra/file-manager/v3.html'
+                assert files_uri == 'ui://fulcra/file-manager/v4.html'
                 files_html = (await client.read_resource(files_uri)).contents[0].text
                 assert 'currentOwner' in files_html and 'Shared files — read-only' in files_html
                 status = tools['set_contact_status']
