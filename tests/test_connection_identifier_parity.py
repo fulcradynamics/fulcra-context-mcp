@@ -46,7 +46,7 @@ for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
   const { threads } = await discoverThreads({ async callServerTool({ name }) {
     return { structuredContent: { result: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry] })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',data_types:[entry.id]}], outgoing: [] }) } };
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[entry.id]}], outgoing: [] }) } };
   } });
   assert.equal(threads.length, 1);
   assert.equal(threads[0].identifier, valid ? 'Trip' : undefined);

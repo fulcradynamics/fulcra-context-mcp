@@ -38,7 +38,7 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
 });
 
 test('previews survive metadata-only refreshes while their reads are pending', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'threads' });
+  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'thread' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.clock.runFor(11000);
   await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(2);
@@ -47,7 +47,7 @@ test('previews survive metadata-only refreshes while their reads are pending', a
 });
 
 test('slow list previews do not hold up opening a contact', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'threads' });
+  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'thread' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.evaluate(() => { window.holdReads = false; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
@@ -70,7 +70,7 @@ test('failed opening reads do not turn a later poll into an acknowledgement', as
 });
 
 test('leaving before reads finish cancels acknowledgement', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, presentation: 'threads' });
+  const ui = await open(page, 900, { listOnly: true, presentation: 'thread' });
   await page.evaluate(() => { window.direct = true; });
   await page.clock.runFor(11000);
   await expect(ui.locator('.thread-button').filter({hasText:'Alex'})).toBeVisible();

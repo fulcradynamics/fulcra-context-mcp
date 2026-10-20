@@ -85,13 +85,14 @@ def find_type(api, own):
 
 
 def _check_private(api, entry):
+    from .share_selectors import selectors_complete
     shares = api.get_datashares()
     if not isinstance(shares, list):
         raise ValueError('Could not establish preference privacy.')
     covering = {'*', 'Event', 'Event/*'} | ({entry['id']} if entry else set())
     for share in shares:
-        selectors = share.get('fulcra_data_types', [])
-        if share.get('share_all_data') is not False or not isinstance(selectors, list) or covering & set(selectors):
+        selectors = share.get('fulcra_data_types')
+        if share.get('share_all_data') is not False or not selectors_complete(selectors) or covering & set(selectors):
             raise ValueError('Preferences may be shared; repair privacy first.')
 
 

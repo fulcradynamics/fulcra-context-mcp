@@ -1,11 +1,16 @@
 # Agent connection compatibility
 
-Server 1.16.4 / UI v66 pairs with plugin 0.17.2. The list is **Agents I Know**, with an **Agent Chats** section. Tool names and Agent Contact relationships are unchanged. The UI replaces its action controls with copyable chat instructions; the plugin describes them. Refresh server discovery and reinstall the plugin. Local support is not deployment.
+Server 1.17.1 / UI v67 requires the skill-first plugin (0.17.2 describes the chat-only
+instructions) for model-driven contact workflows.
+The list remains **Agents I Know**, with an **Agent Chats** section. Stored relationships
+and private configuration schemas are unchanged. Refresh server discovery and install
+the compatible plugin together; local support is not deployment or native-host acceptance.
 
 ## Current interface
 
-Open invitations require `prepare_agent_invitation(data_type, open_invitation=true)`
-and `match_agent_invitations()`. The returned first-message topic uses the distinct
+Native invitation operations retain app-only `prepare_agent_invitation(data_type, open_invitation=true)`
+and `match_agent_invitations()`. Skills use generic primitives over the same state.
+The returned first-message topic uses the distinct
 `open_invitation <code>` prefix. Existing single-person invitations retain
 `handshake <code>` (missing stored prefix means an existing individual invitation).
 The private persisted code and prefix select the correct invitation before any
@@ -17,19 +22,25 @@ template remains available to new owners. Ambiguous same-owner channels stay pen
 Sender is display-only, with `<sender> via <open invitation identifier>` as the
 fallback label, bounded by the existing 80-character identifier limit. Invalid or
 missing sender uses `Agent`; a missing template label uses its exact type ID.
-UI load/refresh and authorized manual/scheduled checks use the same deterministic
-matcher under persisted-invitation authorization. Ordinary discovery/message polls
+UI load/refresh uses the deterministic matcher under persisted-invitation authorization.
+Skills must preserve its validation and state transitions. Ordinary discovery/message polls
 remain read-only; matching adds no model turns or arbitrary shares.
 Worker-local locking is not a distributed transaction or cross-worker CAS guarantee.
 
-- `fulcra_open`: global list; `ui://fulcra/contacts/v66.html`.
-- `agent_contacts_open`: inline list; `ui://fulcra/contacts/threads/v66.html`.
-- `agent_contact_open`: contact/picker; `ui://fulcra/contacts/thread/v66.html`.
+- `fulcra_open`: app-only global full-panel list; `ui://fulcra/contacts/v67.html`.
+- `agent_contact_open`: sole model-visible contact opener, optional exact peer/thread;
+  `ui://fulcra/contacts/thread/v67.html`. Empty arguments show the full list without selection.
+  Direct-resource startup adds `?startup=resource`. The compact opener and resource are removed.
 - `agent_contacts_search`: app-only native composer mentions, not a model skill dependency.
-- `agent_connection_send`, `send_agent_message`, `set_contact_identifier`: checked sends and metadata operations.
+- `send_agent_message`: canonical model-visible checked sender.
+- `agent_connection_send`, `set_contact_identifier`, `set_contact_status`: app-only checked operations.
+- `update_data_type_metadata`: generic owned active Event/Metric name/description update;
+  exact catalog reads provide raw metadata for lossless read-modify-write. No schema mutation.
 - `create_agent_invitation`: app-only Invite someone dialog; creates a `<recipient>'s agent` outbox, prepares its single-person code and, with an optional recipient ID, shares it with exactly that user. Same template and matching as the plugin's invite procedure.
 - `end_agent_contact`: app-only End contact; deletes our covering shares for one single-peer channel, verifies none remain and optionally archives it, as the plugin's Ending connections step does.
-- `fulcra_settings_read`, `fulcra_settings_update`, `fulcra_check_status`: settings/check status.
+- `fulcra_settings_read`, `fulcra_settings_update`, `get_contact_preferences`,
+  `set_contact_preferences`, `fulcra_check_status`: app-only settings/check status;
+  native settings registration is preserved.
 - Existing model-visible `open_file_manager`, file and sharing tools support the plugin's new files/send entry skills; no additional file server or upload mechanism.
 
 ## Renamed connection skill
@@ -38,7 +49,9 @@ The adapted plugin workflow is now `connect-our-agents`, tracking the upstream r
 
 The pinned SDK's canonical connection resolver understands only historical share names. `send_agent_message` translates the new name in a local discovery copy; the common send implementation rechecks untouched live grants before writing. No API mutation or permission widening is involved.
 
-Existing tool-name translations still apply to historical references inside the adapted skill. Initialization and the plugin compatibility reference explain them without granting extra permission or lower-level fallback. Existing task prompts need consented same-task dependency updates/readback, preserving task identity, permissions and checkpoints. Reinstalling alone does not update schedules.
+No compatibility aliases are added for obsolete unreleased tools. Current prompt
+templates must use generic primitives, not app-only operations. This release does
+not migrate or edit existing schedules; reinstalling does not update host tasks.
 
 ## Preserved data
 

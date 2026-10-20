@@ -100,8 +100,9 @@ def test_sibling_mentions_ignore_unnamed_grant():
     from fulcra_mcp.mentions import _thread_labels
     entry = dict(channel(IN, PEER), fields=connections.CHANNEL_FIELDS['properties'],
                  required_fields=connections.CHANNEL_FIELDS['required'])
-    named = dict(incoming(), data_types=[IN])
-    unnamed = dict(named, datashare_name=None, data_types=['file:/shared/'])
+    from fulcra_mcp.tools import _slim_share
+    named = _slim_share(incoming())
+    unnamed = _slim_share(dict(incoming(), datashare_name=None, fulcra_data_types=['file:/shared/']))
     labels = _thread_labels({'data types usable with: get_records': [entry]},
         dict(own_fulcra_userid=OWN, outgoing=[], incoming=[unnamed, named]))
     assert PEER in labels
@@ -263,7 +264,7 @@ async def test_public_tools_have_same_auth_and_narrow_results(api, monkeypatch):
     async with Client(mcp) as client:
         listed = {t.name: t for t in await client.list_tools()}
         for name in ('prepare_agent_invitation', 'match_agent_invitations'):
-            assert listed[name].meta['ui']['visibility'] == ['app', 'model']
+            assert listed[name].meta['ui']['visibility'] == ['app']
             assert listed[name].annotations.readOnlyHint is False
         prepared = (await client.call_tool('prepare_agent_invitation', {'data_type': OUT})).structured_content
         handshake(api, prepared['code'])

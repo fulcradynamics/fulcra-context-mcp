@@ -44,7 +44,7 @@ for (const outgoing of [false, true]) test(`incoming assistance remains availabl
 });
 
 test('outgoing-only stays pending, matched result still needs independently discovered two-way grants', async ({page}) => {
-  const ui = await open(page, 900, {listOnly:true, presentation:'threads'});
+  const ui = await open(page, 900, {listOnly:true, presentation:'thread'});
   await page.evaluate(out => { window.excludeIncoming = true; window.invitationMatches = [{data_type:out,status:'matched'}]; }, out);
   await page.clock.runFor(11000);
   await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
@@ -80,7 +80,7 @@ test('uncertain pending handoff locks the exact source without automatic retry',
 });
 
 test('invitation completion does not veto later reciprocal multiparty grants', async ({page}) => {
-  const ui = await open(page, 900, {listOnly:true, presentation:'threads'});
+  const ui = await open(page, 900, {listOnly:true, presentation:'thread'});
   await page.evaluate(({out, peer}) => {
     window.audience = [peer];
     window.invitationMatches = [{data_type:out,status:'matched'}];

@@ -47,7 +47,8 @@ def catalog(entry):
 def shares():
     return dict(own_fulcra_userid=OWN, outgoing=[], incoming=[dict(
         sharing_fulcra_userid=PEER, grant_type='user',
-        datashare_name='connect-agents-with-anyone: test', data_types=[OUT])])
+        datashare_name='connect-agents-with-anyone: test', selectors_complete=True,
+        file_paths=[], file_history_paths=[], data_types=[OUT])])
 
 
 @pytest.mark.parametrize('change', ['types', 'required', 'kind', 'body_limit', 'sender_limit', 'recipients', 'valid'])

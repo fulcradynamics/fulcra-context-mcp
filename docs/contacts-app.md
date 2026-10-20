@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.16.4 / contacts UI v66 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.17.1 / contacts UI v67 / file manager v3 requires a skill-first plugin for model-driven contact operations.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -20,10 +20,17 @@ harness uses `full` unless a test passes `controls: 'chat'`.
 
 ## Entrypoints and discovery
 
-`fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
-inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v66.html`, `ui://fulcra/contacts/threads/v66.html` and
-`ui://fulcra/contacts/thread/v66.html`. The direct-list URI adds `?startup=resource`.
+`agent_contact_open` is the only model-visible contact opener. Empty arguments
+open the full-panel list; optional exact `peer_fulcra_userid` or `thread_id`
+selects an authorized contact without acknowledging messages. App-only
+`fulcra_open` retains the native global entrypoint. Both use the same packaged
+`fulcra_mcp/ui/contacts.html` renderer, through `ui://fulcra/contacts/v67.html`
+and `ui://fulcra/contacts/thread/v67.html`. The direct-list URI is
+`ui://fulcra/contacts/thread/v67.html?startup=resource` and needs no tool result.
+The obsolete compact opener/resource are removed without aliases.
+OpenAI resource metadata advertises only fullscreen; the generic MCP Apps bridge
+may separately support PiP. Host mode changes never reset selection or drafts.
+`open_file_manager` remains a separate model-visible file browser, not a dispatcher.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone’s agent**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -36,7 +43,10 @@ and prepares its handshake code without the model, then shows the plugin's
 invitation template to copy. With a user ID, the outbox is shared with exactly
 that user up front; their handshake still completes the invitation through
 `match_agent_invitations`. **Continue in chat** sends the invite skill request with
-whatever was entered. Open (group) invitations stay in chat.
+whatever was entered. New open (group) invitations stay in chat and require
+host-provided secure code execution. Without it they are unavailable, not a reason
+to loop back to this single-person dialog or silently change mode. Existing
+prepared open codes and matching remain usable.
 
 The app reads `fulcra_check_status` (each configuration when there are several)
 every minute while visible. With no check configuration, a sticky onboarding card
@@ -154,9 +164,8 @@ no-selection state and invite dialog. Later polling does not replace a selection
 or acknowledge messages on the user's behalf.
 Explicit launch IDs wait for their result and must match authorized discovery exactly;
 missing IDs never fall back to another contact. A user's selection wins over a delayed
-launch, and subsequent preview ordering does not change the selected contact. The
-inline picker retains explicit selection/fullscreen navigation; it never requests a
-host mode change automatically. There is no Contacts back button.
+launch, and subsequent preview ordering does not change the selected contact.
+Selection never requires a display-mode transition. There is no Contacts back button.
 
 The bounded two-pane layout keeps the transparent contact header above an independently
 scrollable message area. The reply composer follows history inside that scroller,
@@ -184,7 +193,11 @@ establish the actual host's floating input size or chat visibility behavior.
 
 ## Metadata and handoffs
 
-`set_contact_identifier` edits only an owned Event/legacy outbox description label
+Contact-specific operations (including prepare/match, sends, identifiers, status,
+preferences and native settings) are app-only. Native settings and UI calls keep
+their existing validation and persistence. Model workflows use generic catalog,
+record, metadata and sharing tools plus canonical `send_agent_message`; chat
+handoffs ask for skills, never app-only operations. `set_contact_identifier` edits only an owned Event/legacy outbox description label
 and verifies readback. `set_contact_status` verifies own Event schema and single-peer
 grants, preserves other metadata and independently reads back. Its peer-visible
 reason is trimmed single-line Unicode, 1–80 code points without controls. Malformed
@@ -246,7 +259,7 @@ gets a separate one-to-one outbox with the template schema and display-only labe
 `<sender> via <open invitation identifier>`. The reusable template is never shared.
 Both prefix and code must match persisted invitation metadata; no prefix substitution.
 
-`match_agent_invitations()` is model/app callable and also runs during visible UI
+App-only `match_agent_invitations()` runs during visible UI
 load/refresh under persisted-invitation authorization, without model turns or arbitrary
 shares. Ordinary discovery/message polls remain read-only. Changed matcher results
 request fresh discovery; only actual reciprocal grants establish a connection.

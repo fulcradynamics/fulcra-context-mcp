@@ -28,7 +28,7 @@ export function parseConnections(result) {
 export const isConnection = e => e.id.startsWith('Event/') && CONNECTION_PREFIXES.some(prefix => e.description?.startsWith(`${prefix} channel`));
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
 const namedShare = s => CONNECTION_PREFIXES.some(prefix => s.datashare_name?.startsWith(prefix));
-const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
+const covers = (s, id) => s.selectors_complete !== true || s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
 export function conversionSources(description, own, peer) {
   const lines = (description ?? '').split('\n').filter(l => l.startsWith(CONVERSION_PREFIX));
@@ -53,10 +53,10 @@ function parseShares(result) {
   return shares;
 }
 
-// _slim_share omits empty lists. Only exact, single-channel direct grants
+// Unknown selectors potentially cover every channel. Only complete, single-channel direct grants
 // establish outgoing recipients. Inspect ALL covering grants, not just narrow ones.
 function directRecipients(share) {
-  return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
+  return share.selectors_complete === true && share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
     && Array.isArray(share.data_types) && share.data_types.length === 1
     && Array.isArray(share.with_user_ids) && share.with_user_ids.length > 0
@@ -109,7 +109,7 @@ export async function discoverThreads(app) {
         peer = 'connection:' + JSON.stringify([own, ...recipients].sort());
       }
     } else if (!shares.incoming.some(s => s.sharing_fulcra_userid === owner
-      && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
+      && s.selectors_complete === true && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
       && s.data_types?.length === 1 && s.data_types[0] === entry.id)) {
       omitted++; continue;
     }

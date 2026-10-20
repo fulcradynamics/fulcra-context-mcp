@@ -7,10 +7,10 @@ import schema from '../tests/fixtures/connection-schema.json' with { type: 'json
 const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 const id='Event/00000000-0000-4000-8000-000000000004';
 const entry={id,name:'Shared label',description:'connect-agents-with-anyone channel',...schema};
-const share={share_all_data:false,datashare_name:'connect-agents-with-anyone: test',data_types:[id],with_user_ids:[peer]};
+const share={share_all_data:false,datashare_name:'connect-agents-with-anyone: test',selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:[peer]};
 function app(outgoing) { return {callServerTool:async ({name})=>({content:[{type:'text',text: name==='get_data_catalog'
   ? 'Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[entry,{...entry,fulcra_userid:peer}]})
-  : 'Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing,incoming:[{grant_type:'user',sharing_fulcra_userid:peer,datashare_name:share.datashare_name,data_types:[id]}]})}]})}; }
+  : 'Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing,incoming:[{grant_type:'user',sharing_fulcra_userid:peer,datashare_name:share.datashare_name,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[id]}]})}]})}; }
 test('exact owned roster is separate from unpaired incoming and changes identity on revocation',async()=>{
  const result=await discoverThreads(app([share,{...share,with_user_ids:[other]}]));
  const multi=result.threads.find(t=>t.participants?.length===3);

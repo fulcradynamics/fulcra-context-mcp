@@ -9,24 +9,21 @@ for (const presentation of ['global', 'thread', 'threads']) {
       const launch = receiveEntrypoint(app, { querySelector: selector => ({
         content: selector.includes('connection-presentation') ? presentation : startup,
       }) });
-      assert.equal(launch.directResource, presentation === 'threads' && startup === 'resource');
+      assert.equal(launch.directResource, presentation === 'thread' && startup === 'resource');
     });
   }
 }
 
-test('host handler is installed before connect and partial changes are buffered', () => {
-  const listeners = new Map();
-  const app = { addEventListener: (name, fn) => listeners.set(name, fn),
-    removeEventListener: name => listeners.delete(name),
-    getHostContext: () => ({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] }) };
-  const launch = receiveEntrypoint(app, { querySelector: () => ({ content: 'threads' }) });
-  assert.equal(typeof listeners.get('hostcontextchanged'), 'function');
-  listeners.get('hostcontextchanged')({ displayMode: 'fullscreen' });
+test('initial result is buffered once and late results cannot revive teardown', () => {
+  const app = {};
+  const launch = receiveEntrypoint(app, { querySelector: () => ({ content: 'thread' }) });
+  const first = { structuredContent: { presentation: 'thread', peer_fulcra_userid: 'exact' } };
+  app.ontoolresult(first);
   const seen = [];
-  const stop = launch.observeHost(context => seen.push(context));
-  assert.deepEqual(seen, [{ displayMode: 'fullscreen', availableDisplayModes: ['inline', 'fullscreen'] }]);
-  listeners.get('hostcontextchanged')({ theme: 'dark' });
-  assert.deepEqual(seen[1], { theme: 'dark' });
-  stop();
-  assert.equal(listeners.size, 0);
+  launch.consume(result => seen.push(result));
+  app.ontoolresult({ isError: true });
+  assert.deepEqual(seen, [first]);
+  launch.dispose();
+  app.ontoolcancelled();
+  assert.deepEqual(seen, [first]);
 });

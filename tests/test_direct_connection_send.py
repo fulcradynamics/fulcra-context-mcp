@@ -103,7 +103,7 @@ async def test_uncertainty_never_claims_posted_or_delivered(call, backend, monke
 
 async def test_registration_visible_to_model_and_app(client):
     tool = next(t for t in await client.list_tools() if t.name == 'agent_connection_send')
-    assert tool.meta['ui']['visibility'] == ['model', 'app']
+    assert tool.meta['ui']['visibility'] == ['app']
     assert tool.annotations.readOnlyHint is False
     assert tool.annotations.idempotentHint is False
 

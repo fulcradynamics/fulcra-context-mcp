@@ -7,9 +7,7 @@ import { setupCheckStatus } from './check-status.js';
 import { showToast, continueMessage } from './toast.js';
 import { CHAT_ONLY, chatInstruction, hostName } from './chat-only.js';
 
-const inlineList = document.querySelector('meta[name="connection-presentation"]')?.content === 'threads';
-const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisplayModes: inlineList ? ['inline', 'fullscreen'] : ['fullscreen', 'pip'] });
-if (inlineList) document.documentElement.classList.add('compact-threads');
+const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisplayModes: ['fullscreen'] });
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
 function applySafeArea(context) {
   if (context?.displayMode) document.documentElement.dataset.displayMode = context.displayMode;
@@ -31,7 +29,7 @@ const notifySent = description => {
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
 const inviteButtons = [...document.querySelectorAll('#invite, #invite-welcome')];
 for (const button of inviteButtons) { button.prepend(icon(UserPlus, 'btn-icon')); button.hidden = CHAT_ONLY; }
-setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status'), { inlineList, notifySent }).then(connected => {
+setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status'), { notifySent }).then(connected => {
   // The host name is known once connected.
   if (CHAT_ONLY) for (const button of inviteButtons) button.replaceWith(chatInstruction(document, hostName(app), 'invite someone’s agent'));
   applySafeArea(app.getHostContext());
@@ -40,6 +38,6 @@ setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status
     status.textContent = 'Could not load Agent Contacts: host connection failed. Reopen the app to retry.';
     return;
   }
-  setupCheckStatus(app, document, CHAT_ONLY || Boolean(app.getHostCapabilities()?.message?.text), continueMessage(app, inlineList), notifySent);
+  setupCheckStatus(app, document, CHAT_ONLY || Boolean(app.getHostCapabilities()?.message?.text), continueMessage(app), notifySent);
   return setupThreads(app, document, entrypoint);
 });
