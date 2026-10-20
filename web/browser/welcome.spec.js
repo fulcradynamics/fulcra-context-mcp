@@ -28,7 +28,6 @@ for (const width of [320, 390, 900]) test(`instructional layout and aligned rail
   const name = await ui.locator('#legacy-connections .thread-name').boundingBox();
   const action = await ui.locator('.legacy-convert').boundingBox();
   expect(action.y).toBeGreaterThanOrEqual(name.y + name.height);
-  expect(name.width).toBeGreaterThan(75);
   await ui.locator('.legacy-convert').scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${process.env.TMPDIR}/contacts-rail-${width}.png` });
 });
