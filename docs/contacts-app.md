@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.16.1 / contacts UI v61 / file manager v3 requires an invitation-aware plugin for code-based setup.
+Server 1.16.1 / contacts UI v62 / file manager v3 requires an invitation-aware plugin for code-based setup.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -8,8 +8,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 `fulcra_open`, `agent_contacts_open` and `agent_contact_open` serve global,
 inline-list and thread presentations of the same packaged `fulcra_mcp/ui/contacts.html`:
-`ui://fulcra/contacts/v61.html`, `ui://fulcra/contacts/threads/v61.html` and
-`ui://fulcra/contacts/thread/v61.html`. The direct-list URI adds `?startup=resource`.
+`ui://fulcra/contacts/v62.html`, `ui://fulcra/contacts/threads/v62.html` and
+`ui://fulcra/contacts/thread/v62.html`. The direct-list URI adds `?startup=resource`.
 Presentation comes from resource metadata, not subsequent tool results. A bare
 Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
 successful discovery with no contacts, the list explains that invited contacts
@@ -79,8 +79,12 @@ The list renders before previews, showing an explicit **Unread** badge only for 
 non-ack message without an opposite-direction ack/reply. A newer outgoing message
 suppresses the badge. Relative times use Event `start_time`. Explicitly clicking a
 contact can acknowledge that message through the checked send path; startup,
-programmatic selection and polling never acknowledge. Failed acks are not retried
-automatically. Send replies to the newest unread message and acks the others.
+programmatic selection and polling never acknowledge. Each acknowledgement attempt
+retains its first ID and outcome per target for the app's lifetime, including across
+contact reopening. Unconfirmed responses/timeouts wait for existing read-only polls
+to reconcile that ID; they never invite a fresh-ID retry. Rejections are shown
+separately without raw host errors or automatic retries. Send replies to the newest
+unread message and acks the others using the same attempt tracking.
 Receipt-only ack rows are hidden but retained for state/context; substantive ack
 bodies remain visible. Sent receipt bodies are exactly `ack`.
 
@@ -260,6 +264,13 @@ queue/lock, abort on changed selection/references and clear attached context aft
 completion. Accepted/uncertain sends disable duplicate clicks; polling never retries.
 
 ## Verification
+
+For a local mock-only preview, run `npm run dev` from `web/`. Its host handles
+`agent_connection_send` using page-local records; reload resets those writes.
+This harness does not use a client tunnel or authenticate to Fulcra. Its synthetic
+IDs and responses are UI fixtures, not a simulation of server authorization.
+A tunneled server uses the real checked send path instead; an acknowledgement
+warning there needs the actual tool response and deployed revision to diagnose.
 
 From `web/`: `npm ci`, `npm test`, `npm run build`,
 `npx playwright install chromium`, `npm run test:browser`.
