@@ -4,10 +4,16 @@ from importlib.resources import files
 
 from fastmcp import FastMCP
 
-from fulcra_mcp import server_info
+from mcp.types import Icon
 from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
+# MCP Icon.theme names the host background, independent of the app's dark UI.
+MENU_ICONS = [
+    Icon(src=f"https://mcp.fulcradynamics.com/menu-{theme}.svg",
+         mimeType="image/svg+xml", sizes=["any"], theme=theme)
+    for theme in ("light", "dark")
+]
 UI_URI = "ui://fulcra/contacts/v67.html"
 THREAD_UI_URI = "ui://fulcra/contacts/thread/v67.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
@@ -15,7 +21,7 @@ FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisp
 
 
 @app_mcp.tool(
-    icons=server_info.icons(),
+    icons=MENU_ICONS,
     title="Agent Contacts",
     app={"resourceUri": THREAD_UI_URI, "visibility": ["model", "app"]},
     meta={"openai/ui": {"entrypoints": [{"type": "thread"}]}},
@@ -49,7 +55,7 @@ def contacts_html() -> str:
 
 
 @app_mcp.tool(
-    icons=server_info.icons(),
+    icons=MENU_ICONS,
     title="Agents I Know",
     app={"resourceUri": UI_URI, "visibility": ["app"]},
     meta={"openai/ui": {"entrypoints": [{"type": "global"}]}},

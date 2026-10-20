@@ -1,6 +1,6 @@
 [project]
 name = "fulcra-context-mcp"
-version = "1.17.1"
+version = "1.17.2"
 description = "Fulcra Context MCP Server"
 license = "Apache-2.0"
 authors = [
@@ -48,4 +48,4 @@ fulcra-context-mcp = "fulcra_mcp.main:main"
 include = ["fulcra_mcp*"]
 
 [tool.setuptools.package-data]
-fulcra_mcp = ["ui/*.html", "static/icon.png", "static/*.json", "static/.well-known/*.json"]
+fulcra_mcp = ["ui/*.html", "static/icon.png", "static/menu-*.svg", "static/*.json", "static/.well-known/*.json"]
