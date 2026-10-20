@@ -5,6 +5,7 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 from fulcra_mcp import server_info
+from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
 UI_URI = "ui://fulcra/contacts/v67.html"
@@ -62,4 +63,8 @@ def fulcra_open() -> dict[str, str]:
 @app_mcp.resource(UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
 def contacts_html_bundle() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
-    return files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")
+    html = files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")
+    if settings.fulcra_contacts_controls != "chat":
+        return html
+    return html.replace('<meta name="connection-controls" content="full">',
+                        '<meta name="connection-controls" content="chat">', 1)

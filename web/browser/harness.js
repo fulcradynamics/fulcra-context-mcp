@@ -89,7 +89,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    else respond();
   }); frame.srcdoc=bundle.replace('name="connection-presentation" content="global"', `name="connection-presentation" content="${presentation}"`)
     .replace('</head>', resourceStartup ? '<meta name="connection-startup" content="resource"></head>' : '</head>')
-    .replace('name="connection-controls" content="chat"', `name="connection-controls" content="${controls}"`);
+    .replace('name="connection-controls" content="full"', `name="connection-controls" content="${controls}"`);
  },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,sampling,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,controls});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }

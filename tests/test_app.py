@@ -119,3 +119,17 @@ async def test_contacts_app():
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen"]
         assert 'agent_connection_send' in resources[0].text
         assert "get_data_catalog" in tools  # Existing tools remain mounted.
+
+
+async def test_contacts_controls_default_full_and_chat_by_env(monkeypatch):
+    from fulcra_mcp.settings import settings
+    uris = ("ui://fulcra/contacts/v67.html", "ui://fulcra/contacts/thread/v67.html",
+            "ui://fulcra/contacts/thread/v67.html?startup=resource")
+    async with Client(mcp) as client:
+        for uri in uris:
+            text = (await client.read_resource(uri))[0].text
+            assert '<meta name="connection-controls" content="full">' in text
+        monkeypatch.setattr(settings, "fulcra_contacts_controls", "chat")
+        for uri in uris:
+            text = (await client.read_resource(uri))[0].text
+            assert '<meta name="connection-controls" content="chat">' in text

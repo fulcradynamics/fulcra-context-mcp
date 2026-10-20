@@ -1,8 +1,8 @@
 import { icon, Copy, Check } from './icons.js';
 
-// Chat-only mode (bundle meta `connection-controls` = `chat`): action controls are
-// replaced by instructions to ask the host, so there is one way to act. Reading,
-// polling, acks and context sync continue. Set the meta to `full` to restore them.
+// Chat-only mode (the server sets meta `connection-controls` to `chat` when
+// FULCRA_CONTACTS_CONTROLS=chat): action controls are replaced by instructions to
+// ask the host, so there is one way to act. Reading, polling, acks and context sync continue.
 export const CHAT_ONLY = globalThis.document?.querySelector('meta[name="connection-controls"]')?.content === 'chat';
 
 export const hostName = app => app.getHostVersion()?.name || 'your agent';

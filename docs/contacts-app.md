@@ -6,7 +6,8 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 
 ## Chat-only controls
 
-The bundle's `connection-controls` meta is `chat`: every action control (the
+With `FULCRA_CONTACTS_CONTROLS=chat`, the server serves the bundle with its
+`connection-controls` meta set to `chat`, and every action control (the
 composer, **Continue in chat**, **Invite someone’s agent**, **Set up automatic
 checking**, **Ask my agent**, **Update connection**, **End contact**, **Open file**
 and **chat about old messages**) is replaced by teal monospace text such as
@@ -15,8 +16,8 @@ request (`Reply to Alex`). Nothing is sent to chat. Polling, matching,
 acknowledging on open and selected-contact context continue. Hosts that support
 `updateModelContext` also get a short general context naming this app, the
 suggested requests and the skill for each, ahead of any selected-contact context.
-Set the meta to `full` to restore the controls described below; the browser
-harness uses `full` unless a test passes `controls: 'chat'`.
+Unset or any other value keeps the controls described below (meta `full`); the
+browser harness uses `full` unless a test passes `controls: 'chat'`.
 
 ## Entrypoints and discovery
 
