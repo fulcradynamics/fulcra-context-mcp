@@ -35,7 +35,8 @@
   /* Floating host input clearance plus device/host safe-area insets.
      max() avoids double-counting
      when the device safe area is exposed via both env() and the host context. */
-  --footer-clearance: calc(72px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
+  --composer-clearance: 36px;
+  --footer-clearance: calc(var(--composer-clearance) + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px)));
   scroll-padding-bottom: var(--footer-clearance);
 }
 
@@ -89,12 +90,16 @@ body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
 body .row-avatar-wrap { width: auto; height: auto; flex: none; }
 body .unread-dot { display: none; position: static; width: auto; height: auto; border: 0; padding: 0; font-size: 11px; background: transparent; color: var(--lavender); }
 body .unread-dot.on { display: inline-block; }
-body .pending-row { flex-wrap: wrap; padding: 8px; }
+body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
 body .pending-row .thread-text { min-width: 0; }
 body .thread-text { min-width: 0; flex-basis: 100%; }
 body .thread-name { white-space: normal; overflow: visible; }
 
-body #connections > li { padding: 0; }
+body #connections > li, body #pending-connections > li, body #legacy-connections > li { padding: 0; }
+body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.legacy-convert { grid-column: 1; justify-self: start; }
+.legacy-convert, .pending-assist { font-size: 12px; padding: 8px 6px; overflow-wrap: normal; }
+.legacy-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
 body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
 #host-guidance::backdrop { background: #0009; }
@@ -107,7 +112,8 @@ body #invite { font-size: 12px; padding: 8px 4px; gap: 4px; }
 .app-dialog .dialog-form { display: grid; gap: 12px; }
 .app-dialog .dialog-form p, .app-dialog > p { margin: 0 0 8px; }
 #invite-template { font-size: 13px; margin-bottom: 8px; }
-button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; }
+button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
+button.danger:hover:not(:disabled) { background: #ff8a802e; }
 #end-contact { align-self: flex-start; }
 [hidden] { display: none !important; }
 body { margin: 0; overflow-wrap: anywhere; }
@@ -399,14 +405,39 @@ html { overflow-anchor: none; }
   .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
 }
 
-/* Inline launch has no floating host composer to clear until a panel opens. */
-.compact-threads { --footer-clearance: calc(16px + max(env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px))); }
+/* Use host mode, not viewport width, to choose spacing. Insets stay separate. */
+:root[data-display-mode='fullscreen'] { --composer-clearance: 24px; }
 .compact-threads .invite-section { margin-bottom: 12px; padding-bottom: 0; border: 0; }
 .compact-threads .invite-section > p:not([role='status']) { display: none; }
-.compact-threads #connections > li { padding: 10px 16px; }
+.compact-threads #connections > li { padding: 0; }
 .compact-threads #connection-list > p.meta { margin-block: 6px; }
 
 @media (max-width: 520px) {
 
   .section-header h2 { font-size: 11px; }
+}
+
+/* A quiet explanation, not a simulated conversation or another card. */
+.app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
+.welcome-content { max-width: 440px; margin-inline: auto; }
+.welcome-illustration { width: 180px; max-width: 100%; height: auto; color: var(--lavender); margin-bottom: 20px; }
+.welcome-bubble-one { fill: var(--surface); stroke: var(--teal); stroke-width: 1.5; }
+.welcome-bubble-two { fill: var(--surface); stroke: var(--lavender); stroke-width: 1.5; }
+.welcome-eyebrow { color: var(--teal); font-size: 12px; font-weight: 500; margin: 0 0 8px; }
+#welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
+.welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
+.welcome-next { margin-bottom: 24px; }
+.welcome-note { font-size: 12px; margin-top: 12px; }
+#invite-welcome { min-height: 44px; }
+@media (hover: hover) and (pointer: fine) {
+  #invite-welcome:active { transform: scale(.97); }
+}
+@media (prefers-reduced-motion: reduce) { #invite-welcome:active { transform: none; } }
+@media (max-width: 520px) {
+  body main { padding-top: calc(12px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); }
+  .app-intro { font-size: 12px; line-height: 1.4; }
+  #selection-empty { padding: 16px 4px; align-items: start; }
+  .welcome-illustration { width: 120px; margin-bottom: 12px; }
+  .welcome-content > p { font-size: 12px; }
 }

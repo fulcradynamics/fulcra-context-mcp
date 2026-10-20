@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { open } from './harness.js';
+import { open, readOnlyThread } from './harness.js';
 
 test('quiet contact hierarchy keeps assessment in Advanced and name beside info', async ({page}) => {
-  const ui = await open(page,390,{listOnly:true});
+  const ui = await open(page,390,readOnlyThread);
   await expect(ui.locator('#message-title')).toHaveText('Weekend');
   await expect(ui.locator('.relationship-state')).toBeHidden();
   await expect(ui.locator('#contact-assessment')).toBeHidden();

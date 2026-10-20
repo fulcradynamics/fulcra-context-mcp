@@ -10,6 +10,7 @@ const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisp
 if (inlineList) document.documentElement.classList.add('compact-threads');
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
 function applySafeArea(context) {
+  if (context?.displayMode) document.documentElement.dataset.displayMode = context.displayMode;
   if (!context?.safeAreaInsets) return;
   for (const side of ['top', 'right', 'bottom', 'left']) {
     document.documentElement.style.setProperty(`--host-safe-${side}`, `${Math.max(0, context.safeAreaInsets[side])}px`);
@@ -17,7 +18,7 @@ function applySafeArea(context) {
 }
 app.addEventListener('hostcontextchanged', applySafeArea);
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
-const inviteButtons = [...document.querySelectorAll('#invite, #invite-empty')];
+const inviteButtons = [...document.querySelectorAll('#invite, #invite-empty, #invite-welcome')];
 for (const button of inviteButtons) button.prepend(icon(UserPlus, 'btn-icon'));
 setupInvite(app, inviteButtons, document.querySelector('#status')).then(connected => {
   applySafeArea(app.getHostContext());

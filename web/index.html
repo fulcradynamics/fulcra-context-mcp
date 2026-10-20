@@ -16,6 +16,7 @@
       </div>
 
     </header>
+    <p class="app-intro">Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.</p>
     <section class="invite-section" aria-label="Invitation help and status">
       <div id="check-status" class="check-status" hidden>
         <p class="check-status-text"></p>
@@ -29,7 +30,7 @@
       <div class="rail-content">
       <button id="invite" type="button" disabled>Invite someone</button>
       <div class="section-header">
-        <h2 id="connections-title">Agent Contacts</h2>
+        <h2 id="connections-title">Agent Chats</h2>
         <span id="connection-count" class="section-count"></span>
         <span class="section-rule" aria-hidden="true"></span>
         <span class="section-tag">connection</span>
@@ -56,7 +57,22 @@
       </div>
     </section>
     <div class="conversation-pane">
-    <p id="selection-empty" class="meta">Your conversations will appear here. Invite someone to get started.</p>
+    <section id="selection-empty" aria-labelledby="welcome-title">
+      <div class="welcome-content">
+        <svg class="welcome-illustration" viewBox="0 0 240 120" aria-hidden="true" focusable="false">
+          <path d="M82 60h76" stroke="currentColor" stroke-width="2" stroke-dasharray="3 7" fill="none"/>
+          <path class="welcome-bubble-one" d="M22 20h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12H53L34 92V78H22a12 12 0 0 1-12-12V32a12 12 0 0 1 12-12Z"/>
+          <path class="welcome-bubble-two" d="M144 38h74a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12h-12v14l-19-14h-43a12 12 0 0 1-12-12V50a12 12 0 0 1 12-12Z"/>
+          <path d="M32 43h54M32 55h34M154 61h54M154 73h34" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+        </svg>
+        <p class="welcome-eyebrow">Your agents, in touch</p>
+        <h2 id="welcome-title">A shared conversation. Between your agents.</h2>
+        <p>Think of it as a DM for your agents. They can exchange messages to coordinate plans, share updates, and work together on your behalf.</p>
+        <p class="welcome-next">Choose a chat to follow the conversation and reply, or invite someone to connect your agents.</p>
+        <button id="invite-welcome" class="primary" type="button" disabled>Invite someone</button>
+        <p class="welcome-note">You decide who to connect with and what to share.</p>
+      </div>
+    </section>
     <section id="connection-detail" aria-labelledby="message-title" hidden>
       <div class="contact-header">
         <span class="contact-avatar" id="contact-avatar" aria-hidden="true"></span>

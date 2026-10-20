@@ -3,7 +3,7 @@ import { open, own, peer } from './harness.js';
 
 async function dialog(page) {
   const ui = await open(page, 900, {listOnly: true});
-  await ui.getByRole('button', {name: 'Invite someone'}).click();
+  await ui.locator('#invite').click();
   return [ui, ui.getByRole('dialog', {name: 'Invite someone'})];
 }
 

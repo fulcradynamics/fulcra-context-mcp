@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { open } from './harness.js';
+import { open, readOnlyThread } from './harness.js';
 
 for (const [width, height] of [[900,700], [390,600], [320,600]]) {
   test(`check status preserves bounded panes and read-only selection at ${width}x${height}`, async ({page}) => {
-    const ui = await open(page, width, {listOnly:true, checkStatus:{status:'not_set_up'}});
+    const ui = await open(page, width, {...readOnlyThread, checkStatus:{status:'not_set_up'}});
     await page.locator('iframe').evaluate((el,h) => el.style.height = `${h}px`, height);
     await expect(ui.locator('#messages li')).toHaveCount(6);
     await expect(ui.getByRole('button', {name:'Start Checking'})).toBeVisible();
@@ -21,7 +21,7 @@ for (const [width, height] of [[900,700], [390,600], [320,600]]) {
       expect(m.overflow).toBe(false);
       expect(m.horizontal).toBe(false);
       expect(m.railBottom).toBe(height);
-      expect(m.composerBottom).toBe(height - 72);
+      expect(m.composerBottom).toBe(height - 24);
       expect(m.areaHeight).toBeGreaterThan(100);
       expect(m.lastTop).toBeGreaterThanOrEqual(m.headerBottom);
       expect(m.lastBottom).toBeLessThanOrEqual(m.composerTop);

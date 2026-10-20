@@ -35,13 +35,15 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   let matchingPending = false, matchingFailed = false;
   const legacySection = doc.createElement('section');
   const legacyHeader = doc.createElement('div'); legacyHeader.className = 'section-header';
-  const legacyTitle = doc.createElement('h2'); legacyTitle.textContent = 'Legacy connections';
+  const legacyTitle = doc.createElement('h2'); legacyTitle.textContent = 'Legacy Connections';
   const legacyCount = doc.createElement('span'); legacyCount.className = 'section-count';
   const legacyRule = doc.createElement('span'); legacyRule.className = 'section-rule'; legacyRule.setAttribute('aria-hidden', 'true');
   const legacyTag = doc.createElement('span'); legacyTag.className = 'section-tag'; legacyTag.textContent = 'legacy';
   legacyHeader.append(legacyTitle, legacyCount, legacyRule, legacyTag);
   const legacyList = doc.createElement('ul'); legacyList.id = 'legacy-connections';
-  legacySection.append(legacyHeader, legacyList); pendingSection.after(legacySection);
+  const legacyHelp = doc.createElement('p'); legacyHelp.className = 'legacy-help';
+  legacyHelp.textContent = 'From the older connect-our-agents skill. Convert to a Contact for more reliable messaging.';
+  legacySection.append(legacyHeader, legacyHelp, legacyList); pendingSection.after(legacySection);
   legacySection.hidden = true;
   const legacyRows = new Map();
 
@@ -84,6 +86,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
         // The response is host authority too; a notification need not follow it.
         hostContext = { ...hostContext, displayMode: result.mode };
+        doc.documentElement.dataset.displayMode = result.mode;
       } catch {
         if (current()) launchStatus.textContent = 'Could not confirm fullscreen mode change. The Agent Contacts list remains open. Check the host before retrying.';
         return;
@@ -94,7 +97,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     detail.select(entry.thread, entry.button, { acknowledge: true });
   }
   let requestedPeer, launchPending = false, userSelected = false;
-  let autoSelect = entrypoint.presentation === 'global';
+
   const launchStatus = doc.createElement('p');
   launchStatus.id = 'entrypoint-status'; launchStatus.setAttribute('role', 'status');
   if (entrypoint.presentation !== 'global') {
@@ -229,12 +232,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             detail.select(matches[0], rows.get(requestedPeer)?.button);
           } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
         }
-        if (autoSelect && !userSelected && discovery.threads.length) {
-          autoSelect = false;
-          launchStatus.textContent = '';
-          const thread = discovery.threads[0];
-          detail.select(thread, rows.get(thread.peer)?.button);
-        }
+
         lastSuccess = new Date().toISOString();
         count.textContent = String(discovery.threads.length);
         listFailed = false; listWarnings = discovery.warnings.join(' '); renderConnectionStatus();
@@ -434,7 +432,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       } else {
         requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
         launchPending = requestedPeer != null;
-        autoSelect = !launchPending;
+
         launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : '';
       }
       scheduler.request();
