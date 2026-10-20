@@ -1,6 +1,6 @@
 # Agents I Know
 
-Server 1.17.0 / contacts UI v63 / file manager v3 requires a skill-first plugin for model-driven contact operations.
+Server 1.17.0 / contacts UI v66 / file manager v3 requires a skill-first plugin for model-driven contact operations.
 Refresh server discovery after updating; reinstall the plugin when its version changes.
 See [compatibility](connection-compatibility.md) and [private settings](fulcra-settings.md).
 
@@ -10,17 +10,17 @@ See [compatibility](connection-compatibility.md) and [private settings](fulcra-s
 open the full-panel list; optional exact `peer_fulcra_userid` or `thread_id`
 selects an authorized contact without acknowledging messages. App-only
 `fulcra_open` retains the native global entrypoint. Both use the same packaged
-`fulcra_mcp/ui/contacts.html` renderer, through `ui://fulcra/contacts/v63.html`
-and `ui://fulcra/contacts/thread/v63.html`. The direct-list URI is
-`ui://fulcra/contacts/thread/v63.html?startup=resource` and needs no tool result.
+`fulcra_mcp/ui/contacts.html` renderer, through `ui://fulcra/contacts/v66.html`
+and `ui://fulcra/contacts/thread/v66.html`. The direct-list URI is
+`ui://fulcra/contacts/thread/v66.html?startup=resource` and needs no tool result.
 The obsolete compact opener/resource are removed without aliases.
 OpenAI resource metadata advertises only fullscreen; the generic MCP Apps bridge
 may separately support PiP. Host mode changes never reset selection or drafts.
 `open_file_manager` remains a separate model-visible file browser, not a dispatcher.
 Presentation comes from resource metadata, not subsequent tool results. A bare
-Fulcra mention opens **Agents I Know**, including **Invite someone**. After a
+Fulcra mention opens **Agents I Know**, including **Invite someone’s agent**. After a
 successful discovery with no contacts, the list explains that invited contacts
-appear once connected and offers **Invite a new contact**, the same request.
+appear once connected; the sidebar invite button remains available.
 
 **Invite someone** opens a dialog for the user's name, the other person's name and
 an optional Fulcra user ID. **Create invitation** calls app-only
@@ -34,17 +34,14 @@ host-provided secure code execution. Without it they are unavailable, not a reas
 to loop back to this single-person dialog or silently change mode. Existing
 prepared open codes and matching remain usable.
 
-Below the header, the app reads `fulcra_check_status` (each configuration when
-there are several, reporting the latest check) every minute while visible. With no
-check configuration it says “Your agent is not automatically checking for messages.”
-and **Start Checking** asks the agent in chat to set up scheduled checks through
-`set-up-agent-contacts`. Otherwise it shows the last scheduled check time and
-**Check Now** asks the agent to run `check-messages`. The buttons only send chat
-requests; the app never creates schedules or runs checks itself. Unavailable status
-hides the row rather than claiming no schedule exists.
-The compact status row keeps its action beside wrapping text; bounded request feedback
-does not displace the bottom composer. Status refreshes preserve selection and drafts
-without acknowledging messages or sending chat requests automatically.
+The app reads `fulcra_check_status` (each configuration when there are several)
+every minute while visible. With no check configuration, a sticky onboarding card
+offers **Set up automatic checking**, an explicit chat request through
+`set-up-agent-contacts`. Dismissing the card moves the offer into Advanced.
+Existing schedules or unavailable status hide the offer rather than claiming no
+schedule exists. The app never creates schedules or runs checks itself. Status
+refreshes preserve selection and drafts without acknowledging messages or sending
+chat requests automatically.
 
 Active conversations use Event channels with either supported connection prefix,
 the canonical SDK sender/kind/body schema and current direct grants. Names and
@@ -102,6 +99,8 @@ Under the preview, each contact shows a quiet saved-assessment reason, amber whe
 it needs attention. It appears only when every own channel has an assessment (or
 any says attention); the full assessment and oldest time remain in its title and
 the selected contact's Advanced panel. Assessment is distinct from unread state.
+Contacts needing attention sort first, then unread contacts, then by latest
+activity; contacts without a readable message come last.
 
 Opening a thread reads each channel's latest record, then loads from one week
 before the earlier latest incoming/outgoing record through now (one week ago if
@@ -112,6 +111,19 @@ pauses while hidden and backs off failures. Optimistic reconciliation matches `m
 Uncertain sends do not invent a new ID. Sampling suggestions remain disabled on every host.
 
 ### Sidebar and host chat
+
+Hosts advertising `updateModelContext.text` receive the selected contact's identity
+while history loads, then bounded displayed context after loads and changed refreshes.
+This does not require `message.text`, send `ui/message`, sample, or start a model turn.
+The pinned MCP Apps SDK 1.7.5 specifies replacement context for future turns, normally
+the next native user message; actual ChatGPT ingestion still needs native acceptance.
+Labels and records are untrusted references, not write authority. Exact owner/type
+provenance, applied range and stale/partial warnings remain in the 24,000-character
+snapshot. Navigation, source deselection, revocation and disposal use the same serialized
+clear/replace lifecycle as explicit handoffs; late responses cannot restore old context.
+Unsupported hosts continue displaying contacts without automatic bridge calls.
+Continue in chat, Send and invitation actions remain explicit; existing authorized acknowledgements
+are unchanged. A disconnected or rejecting host cannot guarantee successful cleanup.
 
 Advanced → Debug opens display-only, per-contact previews: unread/read, assessment
 and reason, connected/pending label, list loading/empty/error and preview text/time,
@@ -132,21 +144,22 @@ activity and an explicit Unread indicator, without avatars. Invite someone lives
 the sidebar. Empty states distinguish no contacts, no selection and no messages
 in the selected contact's loaded history window.
 
-Global and untargeted thread launches show an instructional no-selection state, with
-a decorative DM illustration and an Invite someone button using the existing dialog.
-Polling does not choose a conversation or acknowledge messages on the user's behalf.
+Global launches open the top sorted contact once after previews load, without
+acknowledging messages. Untargeted thread launches retain the instructional
+no-selection state and invite dialog. Later polling does not replace a selection
+or acknowledge messages on the user's behalf.
 Explicit launch IDs wait for their result and must match authorized discovery exactly;
 missing IDs never fall back to another contact. A user's selection wins over a delayed
 launch, and subsequent preview ordering does not change the selected contact.
 Selection never requires a display-mode transition. There is no Contacts back button.
 
 The bounded two-pane layout keeps the transparent contact header above an independently
-scrollable message area and pins the reply composer at the pane bottom even for empty
-history. The sidebar reaches the viewport bottom; its inner content reserves safe-bottom
-padding rather than shortening the rail. The conversation footer reserves 24px in
-host-reported fullscreen mode and 36px otherwise (inline, PiP or unknown mode), plus
-the larger of device and host bottom insets (not both). The pane observes resizing to
-keep the latest message above the composer while preserving older reader anchors.
+scrollable message area. The reply composer follows history inside that scroller,
+with extra bottom room so the user can scroll it above host chrome. The default
+resting position leaves one eighth of the viewport below the composer. The sidebar
+reaches the viewport bottom; inner content reserves the maximum of device/host bottom
+insets and 48px in host-reported fullscreen mode (36px otherwise), not their sum.
+The pane observes resizing while preserving older reader anchors.
 
 Exact IDs remain in routing and explicit context disclosures, not ordinary labels or
 sender headings. The borderless information control beside the name opens an interactive
@@ -157,14 +170,12 @@ manual copy. Advanced is right-aligned in the same header. Rubik and Fulcra colo
 the disclosure uses restrained translucency with reduced-transparency/contrast fallbacks,
 and motion respects reduced-motion preferences.
 
-Discuss sends a host request, not a direct peer reply. After acceptance, conditional
-guidance explains expanding host input if details are hidden; it never claims a
-model turn is running or complete. OK dismisses once; Don't show again stores only
-a boolean UI preference, with an app-lifetime fallback when storage is blocked.
-Rejection and uncertain delivery stay distinct. An uncertain host-message attempt
-pauses Discuss for that contact for the app session, including after navigation.
-Direct Send never opens this guidance. Local sandbox tests do not establish the
-actual host's floating input size or chat visibility behavior.
+Continue in chat sends a host request, not a direct peer reply. A host-named toast
+reports acceptance and where to continue; it never claims a model turn is running
+or complete. Rejection and uncertain delivery stay distinct. An uncertain host-message
+attempt pauses handoff for that contact for the app session, including after navigation.
+Direct-send outcomes use message badges and toasts. Local sandbox tests do not
+establish the actual host's floating input size or chat visibility behavior.
 
 ## Metadata and handoffs
 
@@ -179,6 +190,9 @@ reason is trimmed single-line Unicode, 1–80 code points without controls. Malf
 status is unknown and cannot be silently replaced. Any own-channel attention wins;
 clear requires every own channel to have a valid clear assessment. The oldest time
 is disclosed. Status is not unread state; an ack alone cannot resolve a decision.
+A posted message or reply (not an ack) through `agent_connection_send` rewrites an
+attention status on that channel to `Waiting on them` and reports `attention_cleared`;
+a failed clear does not fail the post.
 Use current status preferences and complete scoped reads; optional write failure
 must not block read/report/checkpoint work. Multiparty status stays in chat.
 

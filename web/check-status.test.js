@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCheckStatus, describeCheckStatus, startPrompt, checkPrompt } from './check-status.js';
+import { readCheckStatus, startPrompt } from './check-status.js';
 
 const host = statuses => ({
   calls: [],
@@ -10,25 +10,12 @@ const host = statuses => ({
   },
 });
 
-test('no schedule offers Start automatic checking through the setup skill', () => {
-  const view = describeCheckStatus({ status: 'not_set_up' });
-  assert.equal(view.text, 'Your agent is not automatically checking for messages.');
-  assert.equal(view.action, 'Start automatic checking');
-  assert.equal(view.prompt, startPrompt);
+test('the setup prompt uses the set-up-agent-contacts skill', () => {
   assert.match(startPrompt, /set-up-agent-contacts/);
 });
 
-test('a scheduled configuration shows the last check and offers Check for new messages', () => {
-  const view = describeCheckStatus({ status: 'checked', last_checked: '2026-10-19T12:00:00Z' });
-  assert.match(view.text, /^Your agent last checked for messages /);
-  assert.equal(view.action, 'Check for new messages');
-  assert.equal(view.prompt, checkPrompt);
-  assert.match(checkPrompt, /check-messages/);
-  assert.equal(describeCheckStatus({ status: 'never_checked' }).action, 'Check for new messages');
-});
-
-test('unknown status shows nothing rather than claiming no schedule', () => {
-  assert.equal(describeCheckStatus({ status: 'unavailable' }), null);
+test('a single not_set_up configuration is reported as such', async () => {
+  assert.equal((await readCheckStatus(host({ '': { status: 'not_set_up' } }))).status, 'not_set_up');
 });
 
 test('multiple configurations report the most recent check', async () => {

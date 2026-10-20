@@ -5,13 +5,14 @@
 import { scenario, own } from './mock-data.js';
 
 // Preview empty states using the same app/SDK bridge, not a replacement mock UI.
-const state = new URLSearchParams(location.search).get('state');
-if (state === 'no-history') scenario.rows = {};
-if (state === 'no-contacts') {
+// Combine states with commas, e.g. ?state=no-autoselect,no-schedule.
+const states = new Set((new URLSearchParams(location.search).get('state') || '').split(',').filter(Boolean));
+if (states.has('no-history')) scenario.rows = {};
+if (states.has('no-contacts')) {
   scenario.catalog = []; scenario.rows = {};
   scenario.shares = { own_fulcra_userid: own, incoming: [], outgoing: [] };
 }
-const checkStatus = state === 'no-schedule' ? { status: 'not_set_up', label: 'Not set up' }
+const checkStatus = states.has('no-schedule') ? { status: 'not_set_up', label: 'Not set up' }
   : { status: 'checked', last_checked: new Date(Date.now() - 20 * 60000).toISOString() };
 
 const CATALOG_PREFIX = 'Available data types, grouped by compatible tool: ';
@@ -81,7 +82,7 @@ addEventListener('message', ({ data: r, source }) => {
     // Dev-only: delay the send ack so the button spinner is visible before the toast.
     // state=handoff-error surfaces the #status error label that lives in the gap
     // between the check-status card and the side panel.
-    setTimeout(() => reply(r.id, state === 'handoff-error' ? { isError: true } : {}), 2000);
+    setTimeout(() => reply(r.id, states.has('handoff-error') ? { isError: true } : {}), 2000);
   } else if (r.method === 'ui/update-model-context') {
     reply(r.id, {});
   } else if (r.id !== undefined && typeof r.method === 'string' && r.method.startsWith('ui/')) {
@@ -90,5 +91,10 @@ addEventListener('message', ({ data: r, source }) => {
   // Notifications (no id) need no response.
 });
 
-// Load the real built app bundle into the sandboxed iframe.
-fetch('contacts.html').then(res => res.text()).then(html => { frame.srcdoc = html; });
+// Load the real built app bundle into the sandboxed iframe. no-autoselect sets a
+// flag the app reads (it can't see the harness URL from inside the sandbox) so the
+// empty/welcome state stays visible instead of opening the first contact.
+fetch('contacts.html').then(res => res.text()).then(html => {
+  if (states.has('no-autoselect')) html = html.replace('</head>', '<script>window.__fulcraDevNoAutoSelect=true;</script></head>');
+  frame.srcdoc = html;
+});

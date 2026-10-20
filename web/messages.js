@@ -359,6 +359,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
           displayed = { ...displayed, messages: accessible, warnings: [...displayed.warnings, 'Previously displayed sources no longer accessible; removed.'] };
           render(displayed, false);
         }
+      } else {
+        // Replace desired loading context before reads can yield to a handoff release.
+        updateComposer(selected.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
       }
       // Initial window: one week before the earlier of the latest incoming and latest outgoing messages.
       if (!start && !requestedStart && thread) {
@@ -452,9 +455,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     visibleMessages = []; liveTopic = '';
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
+    selected = selectedSources(thread, drafts.get(thread.peer).excludedSources);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
+    updateComposer(thread.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');

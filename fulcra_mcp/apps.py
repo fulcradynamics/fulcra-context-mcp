@@ -7,8 +7,8 @@ from fastmcp import FastMCP
 from fulcra_mcp import server_info
 
 app_mcp = FastMCP("Agents I Know UI")
-UI_URI = "ui://fulcra/contacts/v63.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v63.html"
+UI_URI = "ui://fulcra/contacts/v66.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v66.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 

@@ -26,7 +26,7 @@ const notifySent = description => {
   });
 };
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
-const inviteButtons = [...document.querySelectorAll('#invite, #invite-empty, #invite-welcome')];
+const inviteButtons = [...document.querySelectorAll('#invite, #invite-welcome')];
 for (const button of inviteButtons) button.prepend(icon(UserPlus, 'btn-icon'));
 setupInvite(app, inviteButtons, document.querySelector('#status'), { notifySent }).then(connected => {
   applySafeArea(app.getHostContext());

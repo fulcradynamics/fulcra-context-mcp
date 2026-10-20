@@ -431,6 +431,7 @@ async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body
     """Post to an existing exact-audience Event channel. Only status=posted confirms
     own-channel readback, not peer delivery. Uncertain retries: bounded, same mid
     and payload; never bypass denial. Replies/acks target messages/replies, not acks.
+    A posted message/reply clears a saved attention Status.
 
     Args:
         peer_userid: Exact peer UUID.

@@ -77,8 +77,8 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('fulcra_open', 'ui://fulcra/contacts/v63.html', 'global'),
-                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v63.html', 'thread'),
+                    ('fulcra_open', 'ui://fulcra/contacts/v66.html', 'global'),
+                    ('agent_contact_open', 'ui://fulcra/contacts/thread/v66.html', 'thread'),
                 ):
                     assert tools[name].icons == icons
                     opened = await client.call_tool(name, {})
@@ -88,10 +88,11 @@ async def main():
                         'preferredDisplayMode': 'fullscreen', 'availableDisplayModes': ['fullscreen']}
                     text = resource.text
                     assert f'name="connection-presentation" content="{marker}"' in text
+                    assert 'selected_contact' in text and 'Messages loading; displayed history is not yet available.' in text
                     assert 'id="message-back"' not in text
-                    assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 24px' in text
-                    for value in ('id="check-status"', 'fulcra_check_status', 'Start automatic checking', 'Check for new messages',
-                                  'set-up-agent-contacts', 'check-messages skill'):
+                    assert 'conversation-pane' in text and 'rail-content' in text and '--composer-clearance: 48px' in text
+                    for value in ('id="onboarding-thread"', 'id="onboarding-advanced"', 'fulcra_check_status',
+                                  'Set up automatic checking', 'set-up-agent-contacts'):
                         assert value in text, value
                     for value in ('ack-status', 'confirm messages read',
                                   'The read state is kept and no duplicate will be sent.'):
@@ -99,19 +100,19 @@ async def main():
                     for value in ('open_invitation followed by one space', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
-                                  'Load more history', 'Showing messages through', 'thread-preview', 'footer-spacer',
+                                  'Load more history', 'Showing messages through', 'thread-preview', '--message-scroll-clearance: 50dvh',
                                   'end-contact-dialog', 'End contact', 'Also archive your messages',
                                   'debug-preview', 'Reset to live', 'Debug preview active',
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v63.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v66.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v63 entrypoints verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v66 entrypoints verified.')
 
 
 if __name__ == '__main__':

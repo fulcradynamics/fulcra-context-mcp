@@ -4,7 +4,7 @@ import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
 import { readLatest } from './conversation.js';
-import { contactPreview } from './contact-preview.js';
+import { contactPreview, compareRows } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { pendingContacts, matchInvitations } from './pending-contacts.js';
 import { createDebugPreview, previewAssessment } from './debug-preview.js';
@@ -67,6 +67,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   // In the two-pane (global) layout, open the top conversation once on first load
   // so the panel isn't empty — unless an entrypoint peer or the user already chose.
   function maybeAutoSelect() {
+    // Dev harness opt-out (set via the mock host) so the empty/welcome state is viewable.
+    if (doc.defaultView.__fulcraDevNoAutoSelect) return;
     if (autoSelected || userSelected || launchPending || entrypoint.presentation !== 'global' || rows.size === 0) return;
     const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
     if (!entry) return;
@@ -89,7 +91,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         // remount a selected conversation. A changed result requests a fresh read.
         void refreshInvitations();
         const discovery = pendingContacts(await discoverThreads(app));
-        if (matchingFailed) discovery.warnings.push('Invitation matching unavailable; unmatched contacts remain pending.');
         if (disposed) return true;
         const peers = new Set(discovery.threads.map(t => t.peer));
         for (const [peer, entry] of rows) if (!peers.has(peer)) { entry.row.remove(); rows.delete(peer); }
@@ -120,8 +121,6 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
             textCol.append(name, id, preview, assessment);
             const relationship = doc.createElement('span'); relationship.className = 'relationship-state'; relationship.textContent = 'Connected';
             name.after(relationship);
-            const previewLabel = doc.createElement('span'); previewLabel.className = 'debug-preview-label';
-            previewLabel.textContent = 'Preview'; previewLabel.hidden = true; relationship.after(previewLabel);
             const time = doc.createElement('span'); time.className = 'thread-time';
             // Spinner until this thread's latest-message read resolves its time/unread state.
             const timeSpin = doc.createElement('span'); timeSpin.className = 'refresh-spinner'; timeSpin.setAttribute('aria-hidden', 'true');
@@ -300,10 +299,11 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   function renderPreview(entry) {
       const overrides = debug.get(entry.thread.peer);
       const summary = entry.summary, message = summary?.message;
-      renderBadge(entry.assessment, previewAssessment(entry.thread.assessment, overrides));
+      const assessment = previewAssessment(entry.thread.assessment, overrides);
+      renderBadge(entry.assessment, assessment);
+      entry.attention = assessment?.attention === true && Boolean(assessment.reason);
       entry.button.querySelector('.relationship-state').textContent = overrides.relationship === 'pending' ? 'Pending' : 'Connected';
       entry.button.querySelector('.relationship-state').hidden = !overrides.relationship;
-      entry.button.querySelector('.debug-preview-label').hidden = !Object.keys(overrides).length;
       entry.preview.replaceChildren();
       if (message) {
         // Only the user's own messages get a prefix ("You: "); incoming previews
@@ -317,7 +317,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       }
       if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
       entry.preview.hidden = !message && !entry.previewFailed;
-      entry.dot.classList.toggle('on', overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged);
+      entry.unread = overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged;
+      entry.dot.classList.toggle('on', entry.unread);
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
       if (entry.summary !== undefined) entry.time.textContent = Number.isFinite(entry.lastAt) ? relativeTime(entry.lastAt) : '';
       else {
@@ -338,11 +339,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
       }
   }
-  // Order rows like a chat list: most recent activity first, threads without a
-  // readable message last. Animates the reorder with a FLIP transform.
+  // Order rows by attention, unread and recency. Animates the reorder with a FLIP transform.
   function sortRows() {
-    const ordered = [...rows.values()].sort((a, b) =>
-      (Number.isFinite(b.lastAt) ? b.lastAt : -Infinity) - (Number.isFinite(a.lastAt) ? a.lastAt : -Infinity));
+    const ordered = [...rows.values()].sort(compareRows);
     // No-op when the DOM already matches, so a steady auto-refresh doesn't move
     // (and repaint) rows for no reason.
     const current = [...list.children];
