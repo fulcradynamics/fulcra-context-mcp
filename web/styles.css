@@ -36,7 +36,7 @@
   --selected-tint: rgba(59, 130, 246, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
-  --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
+
   /* Bottom clearance is a floor, not an addition: use our own spacing when the
      host reports no bottom inset (native input minimized), but when the host
      chrome is up its reported inset already reserves the room — don't stack ours
@@ -108,7 +108,7 @@ body .section-tag, body .list-intro { display: none; }
 @keyframes copy-check { from { transform: scale(.8); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
 * { box-sizing: border-box; }
-body .contact-avatar, body .bubble-avatar { display: none; }
+
 /* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
 body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #3b82f6; font-size: 0; color: transparent; }
 body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
@@ -331,9 +331,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .message-row { display: flex; align-items: flex-end; gap: 8px; margin: 5px 0; }
 .message-row.incoming { justify-content: flex-start; }
 .message-row.outgoing { justify-content: flex-end; }
-/* Small sender avatar beside incoming bubbles; hidden for your own messages. */
-.bubble-avatar { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--avatar-gradient); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; line-height: 1; }
-.message-row.outgoing .bubble-avatar { display: none; }
+
 .msg-content { display: flex; flex-direction: column; min-width: 0; max-width: 78%; }
 .message-row.incoming .msg-content { align-items: flex-start; }
 .message-row.outgoing .msg-content { align-items: flex-end; }
@@ -358,7 +356,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .artifact [role='status']:empty { display: none; }
 .artifact-request { white-space: pre-wrap; margin: 6px 0 0; font-size: 11px; }
 
-/* Contact header (avatar + name) and the framed conversation card. */
+/* Contact header and the framed conversation card. */
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
 .contact-headings { min-width: 0; flex: 1; }
 .contact-name { display: flex; align-items: center; gap: 4px; }
@@ -368,7 +366,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-headings h2 { margin: 0; }
 .contact-topic { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .contact-subtitle { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a71; overflow-wrap: anywhere; }
-.contact-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--avatar-gradient); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; line-height: 1; }
+
 
 /* Advanced tools stay one level deeper, beside the contact name. */
 .advanced-toggle { flex: none; margin-left: auto; align-self: flex-start; min-height: 28px; padding: 4px; font-size: 11px; font-weight: 400; background: transparent; color: var(--muted); }

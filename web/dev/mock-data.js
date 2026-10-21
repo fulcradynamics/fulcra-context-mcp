@@ -37,7 +37,7 @@ function contact({ peerId, name, outId, inId, sender = name, topic, outgoing = [
 
 const contacts = [
   // Contact whose agent sends under a different name (person "Gregory Klein",
-  // agent "Schreber") — the header avatar vs message-sender case.
+  // agent "Schreber") — distinct contact and message-sender labels.
   contact({
     peerId: '00000000-0000-0000-0000-000000000001', name: 'Gregory Klein', sender: 'Schreber', topic: 'Q3 numbers', outId: 'g-out', inId: 'g-in',
     outgoing: [{ body: 'Can your agent confirm the Q3 numbers before Friday?', at: iso(2, 10) }],

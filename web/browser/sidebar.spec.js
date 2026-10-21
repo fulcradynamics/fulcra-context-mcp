@@ -27,6 +27,8 @@ test('sidebar uses explicit unread badges without avatars on narrow screens', as
   await expect(ui.locator('.unread-dot.on')).toBeVisible();
   await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
   await expect(ui.locator('#connection-list')).toBeVisible();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
+  await expect(ui.locator('.contact-avatar, .bubble-avatar')).toHaveCount(0);
   expect(await ui.locator('body').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
