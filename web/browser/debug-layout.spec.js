@@ -53,7 +53,7 @@ for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
     await expect(row.locator('.relationship-state')).toBeHidden();
     await expect(ui.locator('#debug-preview-active')).toBeHidden();
     await expect(ui.locator('.composer-input')).toHaveValue('Preserve this draft');
-    expect(await page.evaluate(() => calls.filter(c => !['get_data_catalog', 'list_shares', 'get_records', 'match_agent_invitations', 'fulcra_check_status'].includes(c.name)))).toEqual([]);
+    expect(await page.evaluate(() => calls.filter(c => !['get_data_catalog', 'list_shares', 'get_records', 'match_agent_invitations', 'get_message_check_status'].includes(c.name)))).toEqual([]);
     expect(await page.evaluate(() => hostMessages)).toEqual([]);
   });
 }

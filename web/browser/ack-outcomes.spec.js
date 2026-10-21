@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
-const writes = page => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').map(c => c.arguments));
+const writes = page => page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').map(c => c.arguments));
 const choose = ui => ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
 const leave = async (page, ui) => {
   await page.evaluate(() => { window.navigationContact = true; });

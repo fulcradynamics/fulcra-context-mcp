@@ -14,8 +14,8 @@ MENU_ICONS = [
          mimeType="image/svg+xml", sizes=["any"], theme=theme)
     for theme in ("light", "dark")
 ]
-UI_URI = "ui://fulcra/contacts/v72.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v72.html"
+UI_URI = "ui://fulcra/contacts/v74.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v74.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 
@@ -27,7 +27,7 @@ FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisp
     meta={"openai/ui": {"entrypoints": [{"type": "thread"}]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
-def agent_contact_open(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
+def open_agent_contacts(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
     """Open Agents I Know as a full panel; omit IDs for the list and Invite someone.
     Read-only. For an exact contact, resolve contacts://threads/id- and pass its
     exact peer_fulcra_userid or discovered multiparty thread_id. Names are not IDs.
@@ -61,7 +61,7 @@ def contacts_html() -> str:
     meta={"openai/ui": {"entrypoints": [{"type": "global"}]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
-def fulcra_open() -> dict[str, str]:
+def open_agent_contacts_home() -> dict[str, str]:
     """Open Agents I Know, selecting the first available contact read-only."""
     return {"message": "Agents I Know is ready."}
 

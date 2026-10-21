@@ -6,7 +6,7 @@ async function standing(page, options = {listOnly: true}) {
   await page.locator('iframe').evaluate(el => el.style.height = '1100px');
   return ui;
 }
-const calls = page => page.evaluate(() => window.calls.filter(c => c.name === 'standing_agent_invitation').map(c => c.arguments));
+const calls = page => page.evaluate(() => window.calls.filter(c => c.name === 'prepare_standing_agent_invitation').map(c => c.arguments));
 
 test('Copy open invitation shows the standing invitation with a live, saved name', async ({page}) => {
   const ui = await standing(page);

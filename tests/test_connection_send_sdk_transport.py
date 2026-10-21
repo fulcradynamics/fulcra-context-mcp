@@ -47,7 +47,7 @@ async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypat
         return BytesIO(json.dumps(result).encode())
     monkeypatch.setattr('urllib.request.urlopen', transport)
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
-    result = await tools.agent_connection_send(**ARGS)
+    result = await tools.send_agent_contact_message(**ARGS)
     assert result['status'] == 'posted', result
     assert result['peer_acknowledged'] is False
     assert calls.count(('POST', '/ingest/v1/record/' + OUTBOX)) == 1

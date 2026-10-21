@@ -56,7 +56,7 @@ async def test_send_http_auth_and_per_user_isolation(tmp_path, monkeypatch, kind
         monkeypatch.setitem(oauth_provider.tokens, owner, AccessToken(token=owner, client_id='synthetic', scopes=OIDC_SCOPES, expires_at=int(time.time()) + 3600))
     async with mcp_client(tmp_path) as http:
         async def rpc(token):
-            response = await http.post('/mcp', headers={'Authorization': 'Bearer ' + token}, json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'agent_connection_send', 'arguments': args}})
+            response = await http.post('/mcp', headers={'Authorization': 'Bearer ' + token}, json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'send_agent_contact_message', 'arguments': args}})
             if response.status_code != 200: return response.status_code
             text = response.text
             data = json.loads(next(line[6:] for line in text.splitlines() if line.startswith('data: ')) if text.startswith('event:') else text)

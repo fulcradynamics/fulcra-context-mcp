@@ -8,11 +8,11 @@ and [private settings](fulcra-settings.md).
 
 ## Entrypoints
 
-- `agent_contact_open` is the only model-visible opener. With no arguments it shows
+- `open_agent_contacts` is the only model-visible opener. With no arguments it shows
   the full list; an exact `peer_fulcra_userid` or `thread_id` selects that contact.
   A bare `@Fulcra` mention routes to the `set-up-agent-contacts` onboarding skill;
   an explicit task takes precedence and the mention grants no write consent.
-- `fulcra_open` is the app-only native global entrypoint.
+- `open_agent_contacts_home` is the app-only native global entrypoint.
 - Both serve `ui://fulcra/contacts/v<N>.html` (global) or
   `ui://fulcra/contacts/thread/v<N>.html` (thread); `?startup=resource` starts the
   thread resource without a tool result. `apps.py` holds the current `N`.
@@ -80,7 +80,7 @@ history** adds two weeks. Polling runs every 10 seconds while visible, backs off
 on failure and preserves drafts, focus, selection and scroll position. Failed
 reads keep the last good view with a stale warning; revoked sources are removed.
 
-`agent_connection_send` (app) and `send_agent_message` (model) share one checked
+`send_agent_contact_message` (app) and `send_agent_message` (model) share one checked
 send path:
 
 - Exact UUIDs and owned `Event/<uuid>` channels. Multiparty sends need the full
@@ -127,14 +127,14 @@ contact's handoff for the session to avoid duplicates.
   that user. **Continue in chat** hands the entered details to the invite skill.
   `Your name` is pre-filled from the standing open invitation.
 - **Copy open invitation** (under Invite someone's agent, and beside it in the
-  empty state) calls app-only `standing_agent_invitation`, which gets or creates
+  empty state) calls app-only `prepare_standing_agent_invitation`, which gets or creates
   the private `connect-our-agents-standing-invitation` open-invitation template,
   then shows it with an editable `Your name in this invitation` field. The text
   updates as the user types; a blank name gives an ID-only invitation. **Done**
   saves the name on the template (Escape discards it). The template never shows
   under Pending. Other open invitations are handled in chat.
 - **Set up automatic checking** appears on a dismissible onboarding card when
-  `fulcra_check_status` reports no schedule; it asks the chat to run
+  `get_message_check_status` reports no schedule; it asks the chat to run
   `set-up-agent-contacts`. The app never creates schedules.
 - **Ask my agent** on a pending contact and **Update connection** on a legacy one
   send bounded chat requests; neither grants sharing consent.

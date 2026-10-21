@@ -14,7 +14,7 @@ for (const kind of ['direct', 'multiparty']) {
     await expect(ui.getByRole('button', {
       name: 'Continue in synthetic', exact: true,
     })).toBeEnabled();
-    const writes = await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'));
+    const writes = await page.evaluate(() => window.calls.filter(call => call.name === 'send_agent_contact_message'));
     expect(writes).toHaveLength(kind === 'direct' ? 2 : 1);
     expect(writes.every(write => write.arguments.kind === 'ack')).toBe(true);
   });
@@ -27,5 +27,5 @@ test('contact branding uses the compiled app without changing polling writes', a
   const names = await page.evaluate(() => window.calls.map(call => call.name));
   expect(names.every(name => !name.includes('mesh') && !name.includes('aicq'))).toBe(true);
   await page.clock.runFor(11000);
-  expect(await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'))).toHaveLength(1);
+  expect(await page.evaluate(() => window.calls.filter(call => call.name === 'send_agent_contact_message'))).toHaveLength(1);
 });

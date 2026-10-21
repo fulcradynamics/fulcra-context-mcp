@@ -135,17 +135,17 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
     meta={"ui": {"visibility": ["app"]}},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
-async def agent_contacts_search(query: str) -> ToolResult:
+async def search_agent_contacts(query: str) -> ToolResult:
     """Find Agent Contact opening actions for the composer without reading messages."""
     threads = await _discover_threads()
     items = [{"type": "resource_link", "uri": "contacts://threads",
               "name": "Agents I Know", "title": "Agents I Know", "mimeType": "application/json",
-              "description": "Open the clickable connection list in chat with agent_contact_open({})."}]
+              "description": "Open the clickable connection list in chat with open_agent_contacts({})."}]
     items += [
         {"type": "resource_link", "uri": "contacts://threads/id-" + quote(peer, safe=""),
          "name": f"Open Agent Contact: {title}", "title": f"Open Agent Contact: {title}",
          "mimeType": "application/json",
-         "description": "Open this exact thread with agent_contact_open; resolve this reference for its peer ID or multiparty thread_id."}
+         "description": "Open this exact thread with open_agent_contacts; resolve this reference for its peer ID or multiparty thread_id."}
         for peer, title in threads.items() if query.strip().casefold() in title.casefold()
     ][:20]
     return ToolResult(content=[], structured_content={"items": items})
@@ -155,7 +155,7 @@ async def agent_contacts_search(query: str) -> ToolResult:
 def contact_list_descriptor() -> dict:
     """Describe the list-opening action, not account data or an HTML attachment."""
     return {"title": "Agents I Know",
-            "open_tool": {"name": "agent_contact_open", "arguments": {}}}
+            "open_tool": {"name": "open_agent_contacts", "arguments": {}}}
 
 
 @mentions_mcp.resource("contacts://threads/id-{peer}", mime_type="application/json")
@@ -167,7 +167,7 @@ async def contact_thread_descriptor(peer: str) -> ResourceResult:
         raise ResourceError("Agent Contact thread is not available to this account.")
     return ResourceResult([ResourceContent(
         json.dumps({"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer, "title": threads[peer],
-                    "open_tool": {"name": "agent_contact_open",
+                    "open_tool": {"name": "open_agent_contacts",
                                   "arguments": {"thread_id" if peer.startswith('connection:') else "peer_fulcra_userid": peer}}}),
         mime_type="application/json",
     )])

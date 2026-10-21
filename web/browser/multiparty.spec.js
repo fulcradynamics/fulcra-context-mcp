@@ -13,7 +13,7 @@ test('own audience names, exact addressing, provenance and safe responsive label
  await expect(ui.getByLabel('Your agent name')).toHaveValue('chatgpt');
  await ui.getByLabel('Your agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
- expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send').map(c=>c.arguments.kind))).toEqual(['ack']);
+ expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='send_agent_contact_message').map(c=>c.arguments.kind))).toEqual(['ack']);
 });
 test('incoming selection remains selectable across polling and context includes sources',async({page})=>{
  const ui=await open(page);
@@ -49,8 +49,8 @@ test('send carries full expected audience; widening invalidates context and pres
  const ui=await open(page);
  await ui.locator('#thread-composer textarea:not([readonly])').fill('Exact authorized text');
  await ui.getByRole('button',{name:'Send',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').length)).toBe(1);
- const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='agent_connection_send' && c.arguments.kind!=='ack').arguments);
+ await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c.name==='send_agent_contact_message' && c.arguments.kind!=='ack').length)).toBe(1);
+ const sent=await page.evaluate(()=>window.calls.find(c=>c.name==='send_agent_contact_message' && c.arguments.kind!=='ack').arguments);
  expect(sent.expected_peer_userids).toEqual([peer,other]); expect(sent.outbox).toBe(out);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Exact authorized text');
  await ui.getByRole('button',{name:'Continue in synthetic',exact:true}).click();

@@ -25,7 +25,7 @@ async def test_contacts_debug_resource_env(monkeypatch, value, enabled):
 async def test_app_tools_advertise_navigation_icons():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        for name in ("fulcra_open", "agent_contact_open"):
+        for name in ("open_agent_contacts_home", "open_agent_contacts"):
             assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
                 {"src": f"https://mcp.fulcradynamics.com/menu-{theme}.svg",
                  "mimeType": "image/svg+xml", "sizes": ["any"], "theme": theme}
@@ -36,8 +36,8 @@ async def test_app_tools_advertise_navigation_icons():
 
 async def test_direct_contacts_resource_contract():
     async with Client(mcp) as client:
-        direct = (await client.read_resource("ui://fulcra/contacts/thread/v72.html?startup=resource"))[0]
-        normal = (await client.read_resource("ui://fulcra/contacts/thread/v72.html"))[0]
+        direct = (await client.read_resource("ui://fulcra/contacts/thread/v74.html?startup=resource"))[0]
+        normal = (await client.read_resource("ui://fulcra/contacts/thread/v74.html"))[0]
         assert direct.mimeType == "text/html;profile=mcp-app"
         assert direct.meta["openai/ui"] == {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}
         assert direct.text == normal.text.replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
@@ -47,7 +47,7 @@ async def test_direct_contacts_resource_contract():
 async def test_single_full_panel_opener():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        tool = tools['agent_contact_open']
+        tool = tools['open_agent_contacts']
         result = await client.call_tool(tool.name, {})
         assert result.data == {'presentation': 'thread', 'peer_fulcra_userid': None}
         resource = (await client.read_resource(tool.meta['ui']['resourceUri']))[0]
@@ -58,21 +58,21 @@ async def test_single_full_panel_opener():
 async def test_thread_entrypoint():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        tool = tools["agent_contact_open"]
+        tool = tools["open_agent_contacts"]
         assert tool.title == "Agent Contacts"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v72.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v74.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert not tool.inputSchema.get("required")
         for args in [{}, {"peer_fulcra_userid": "exact-peer"}, {"peer_fulcra_userid": " unknown "}]:
-            result = await client.call_tool("agent_contact_open", args)
+            result = await client.call_tool("open_agent_contacts", args)
             assert result.data == {"presentation": "thread", "peer_fulcra_userid": args.get("peer_fulcra_userid")}
         import pytest
         for invalid in ["", "   ", 123, ["peer"]]:
             with pytest.raises(Exception):
-                await client.call_tool("agent_contact_open", {"peer_fulcra_userid": invalid})
+                await client.call_tool("open_agent_contacts", {"peer_fulcra_userid": invalid})
         resource = await client.read_resource(tool.meta["ui"]["resourceUri"])
         assert '<meta name="connection-presentation" content="thread">' in resource[0].text
 
@@ -80,19 +80,19 @@ async def test_thread_entrypoint():
 async def test_contacts_app():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert "fulcra_open" in tools
-        tool = tools["fulcra_open"]
+        assert "open_agent_contacts_home" in tools
+        tool = tools["open_agent_contacts_home"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Agents I Know"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v72.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v74.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.openWorldHint is False
-        result = await client.call_tool("fulcra_open", {})
+        result = await client.call_tool("open_agent_contacts_home", {})
         assert not result.is_error
         assert result.data == {"message": "Agents I Know is ready."}
-        resources = await client.read_resource("ui://fulcra/contacts/v72.html")
+        resources = await client.read_resource("ui://fulcra/contacts/v74.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Agents I Know</h1>" in resources[0].text
         assert "data:font/woff2;base64," in resources[0].text
@@ -112,7 +112,7 @@ async def test_contacts_app():
         assert resources[0].text.index('id="messages"') < resources[0].text.index('Load more history</button>') < resources[0].text.index('id="thread-composer"')
         assert 'get_records' in resources[0].text
         assert '<meta name="connection-presentation" content="global">' in resources[0].text
-        thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v72.html")
+        thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v74.html")
         assert thread_resource[0].text == resources[0].text.replace(
             '<meta name="connection-presentation" content="global">',
             '<meta name="connection-presentation" content="thread">', 1)
@@ -128,5 +128,5 @@ async def test_contacts_app():
         assert "Conversation incomplete" in resources[0].text
         assert resources[0].meta["openai/ui"]["preferredDisplayMode"] == "fullscreen"
         assert resources[0].meta["openai/ui"]["availableDisplayModes"] == ["fullscreen"]
-        assert 'agent_connection_send' in resources[0].text
+        assert 'send_agent_contact_message' in resources[0].text
         assert "get_data_catalog" in tools  # Existing tools remain mounted.

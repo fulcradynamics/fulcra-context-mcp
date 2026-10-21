@@ -10,7 +10,7 @@ test('initial selection waits for previews and chooses attention over discovery 
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(ui.locator('#message-title')).toHaveText('Weekend');
   await expect(ui.locator('#connections .thread-row').first()).toContainText('Weekend');
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
   await ui.locator('.thread-button').filter({hasText:'Alex'}).click();
   await page.clock.runFor(11000);
   await expect(ui.locator('#message-title')).toHaveText('Alex');
@@ -25,7 +25,7 @@ test('global launch auto-selects the first contact without acknowledging or send
   await expect(ui.locator('#selection-empty')).toBeHidden();
   await expect(ui.locator('#connection-detail')).toBeVisible();
   // Auto-selection only views; it must not acknowledge messages or hand off to chat.
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
 });
 
@@ -44,7 +44,7 @@ test('missing explicit launch identity never falls back to the first contact', a
   await expect(ui.locator('#entrypoint-status')).toContainText('no other peer was selected');
   await page.clock.runFor(11000);
   await expect(ui.locator('#connection-detail')).toBeHidden();
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
 });
 
 test('thread launch without a peer selects the highest sorted contact once', async ({page}) => {
@@ -56,7 +56,7 @@ test('thread launch without a peer selects the highest sorted contact once', asy
   await page.clock.runFor(11000);
   await expect(ui.locator('#message-title')).toHaveText(title);
   await expect(ui.locator('#entrypoint-status')).toHaveText('');
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
 });
 
 test('an authorized explicit launch target opens read-only and is stable across list reorder', async ({page}) => {
@@ -66,5 +66,5 @@ test('an authorized explicit launch target opens read-only and is stable across 
   await ui.locator('#connections').evaluate(el => el.prepend(el.lastElementChild));
   await page.clock.runFor(11000);
   await expect(ui.locator('#message-title')).toHaveText('Alex');
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
 });

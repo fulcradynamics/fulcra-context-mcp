@@ -17,7 +17,7 @@ test('dev host acknowledges opening and confirms sends through the real app', as
   await page.addInitScript(() => {
     window.sends = [];
     addEventListener('message', ({ data }) => {
-      if (data.method === 'tools/call' && data.params.name === 'agent_connection_send') window.sends.push(data.params.arguments);
+      if (data.method === 'tools/call' && data.params.name === 'send_agent_contact_message') window.sends.push(data.params.arguments);
     });
   });
   await page.goto('http://dev.test/');

@@ -8,14 +8,14 @@ and verifying privacy and readback.
 
 ## Tools
 
-- `fulcra_settings_read` returns `{schema, values, checking_preferences, layout}`.
-- `fulcra_settings_update({set: ...})` validates, merges, saves and reads back.
+- `get_fulcra_settings` returns `{schema, values, checking_preferences, layout}`.
+- `update_fulcra_settings({set: ...})` validates, merges, saves and reads back.
   Empty updates, unknown fields, bad values and unverifiable saves fail.
 - `get_contact_preferences(data_type, peer_userid[, expected_peer_userids])`
   verifies an owned connection's exact audience and returns effective values and
   overrides. `set_contact_preferences(..., overrides)` replaces them; `{}` restores
   inheritance.
-- `fulcra_check_status` reports the last check per configuration (not set up,
+- `get_message_check_status` reports the last check per configuration (not set up,
   never checked, a UTC time, several configurations, or unavailable) from
   `/connect-our-agents/connection-checks/`. It never exposes message contents.
 

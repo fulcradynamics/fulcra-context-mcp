@@ -6,24 +6,24 @@ test('contacts render before message reads and show latest preview read state wi
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
   await expect(row.locator('.thread-preview')).toBeHidden();
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(row.locator('.thread-preview')).toContainText('Broadcast message');
   await expect(row.locator('.unread-dot')).toBeVisible();
   await expect(row.locator('.thread-time')).toHaveText('58m');
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
 });
 
 test('opening acknowledges only the latest incoming message once, without detail read badges', async ({ page }) => {
   const ui = await open(page);
-  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
-  const ack = await page.evaluate(() => window.calls.find(c => c.name === 'agent_connection_send').arguments);
+  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').length)).toBe(1);
+  const ack = await page.evaluate(() => window.calls.find(c => c.name === 'send_agent_contact_message').arguments);
   expect(ack).toMatchObject({ kind: 'ack', body: 'ack', expected_peer_userids: [peer, other] });
   expect(ack.in_reply_to).toBe(`${ack.peer_userid}-3`);
   await expect(ui.locator('.unread-badge, .mark-read, #mark-all-read')).toHaveCount(0);
   await expect(ui.locator('#messages .message-row.unread')).toHaveCount(0);
   await page.clock.runFor(11000);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').length)).toBe(1);
 });
 
 test('opening a contact whose last message is outgoing does not acknowledge an older incoming message', async ({ page }) => {
@@ -34,7 +34,7 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
   await expect(row.locator('.thread-time')).toHaveText('30m');
   await row.locator('.thread-button').click();
   await expect(ui.locator('#messages .message-row')).toHaveCount(7);
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
 });
 
 test('previews survive metadata-only refreshes while their reads are pending', async ({ page }) => {
@@ -66,7 +66,7 @@ test('failed opening reads do not turn a later poll into an acknowledgement', as
   await page.evaluate(() => { window.failReads = false; });
   await page.clock.runFor(21000);
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
 });
 
 test('leaving before reads finish cancels acknowledgement', async ({ page }) => {
@@ -82,12 +82,12 @@ test('leaving before reads finish cancels acknowledgement', async ({ page }) => 
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await page.clock.runFor(11000);
   await expect(ui.locator('#message-title')).toHaveText('Alex');
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').some(c => c.arguments.expected_peer_userids?.length > 1))).toBe(false);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').some(c => c.arguments.expected_peer_userids?.length > 1))).toBe(false);
 });
 
 test('verified acknowledgement clears the list dot and is not sent again on reopening', async ({ page }) => {
   const ui = await open(page, 390, { acceptAck: true });
-  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').length)).toBe(1);
   await expect(ui.locator('#connection-list')).toBeVisible();
   await page.clock.runFor(11000);
   const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
@@ -95,7 +95,7 @@ test('verified acknowledgement clears the list dot and is not sent again on reop
   await expect(row.locator('.unread-dot')).toBeHidden();
   await row.locator('.thread-button').click();
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').length)).toBe(1);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').length)).toBe(1);
 });
 
 test('malformed ack bodies retain safe rows alongside valid messages', async ({ page }) => {
@@ -120,7 +120,7 @@ test('preview recovers newer outgoing content behind a receipt', async ({ page }
   await expect(row.locator('.thread-preview')).toHaveText('You: Hidden outgoing');
   await expect(row.locator('.thread-time')).toHaveText('30m');
   await expect(row.locator('.unread-dot')).toBeHidden();
-  expect(await page.evaluate(() => window.calls.some(c => c.name === 'agent_connection_send'))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
   await page.evaluate(() => { window.failReads = true; });
   await page.clock.runFor(11000);
   await expect(row.locator('.thread-preview')).toContainText('Preview unavailable');

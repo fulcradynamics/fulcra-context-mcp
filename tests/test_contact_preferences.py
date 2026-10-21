@@ -33,7 +33,7 @@ def storage(fake_fulcra):
 async def test_native_defaults_guidance_and_verified_update(storage):
     api, catalog = storage
     async with Client(mcp) as client:
-        initial = (await client.call_tool('fulcra_settings_read', {})).structured_content
+        initial = (await client.call_tool('get_fulcra_settings', {})).structured_content
         assert initial['values'] == policy.native_values({k: policy.DEFAULTS[k] for k in policy.SCHEMA})
         assert initial['values']['acknowledge_messages'] is True
         assert initial['values']['share_contact_status'] is True
@@ -42,11 +42,11 @@ async def test_native_defaults_guidance_and_verified_update(storage):
         assert 'checking_preferences' not in initial['schema']['properties']
         assert initial['layout'][-1]['title'] == 'For more specific preferences, chat with your agent.'
         api.create_data_type.assert_not_called()
-        saved = (await client.call_tool('fulcra_settings_update', {'set': {
+        saved = (await client.call_tool('update_fulcra_settings', {'set': {
             'checking_preferences': 'Treecle messages about travel are important.',
             'pause_autonomous_replies': True}})).structured_content
         assert saved['verified'] is True
-        current = (await client.call_tool('fulcra_settings_read', {})).structured_content
+        current = (await client.call_tool('get_fulcra_settings', {})).structured_content
         assert current['values']['pause_autonomous_replies'] is True
         assert current['checking_preferences'] == 'Treecle messages about travel are important.'
     assert len(catalog) == 1 and catalog[0]['name'] == 'Fulcra Contact Preferences'
@@ -61,7 +61,7 @@ async def test_native_defaults_guidance_and_verified_update(storage):
 async def test_invalid_updates_do_not_write(storage, changes):
     api, _ = storage
     async with Client(mcp) as client:
-        result = await client.call_tool('fulcra_settings_update', {'set': changes}, raise_on_error=False)
+        result = await client.call_tool('update_fulcra_settings', {'set': changes}, raise_on_error=False)
         assert result.is_error
     api.create_data_type.assert_not_called()
 
@@ -92,7 +92,7 @@ async def test_notification_labels_roundtrip_to_canonical_storage(storage):
     api, catalog = storage
     async with Client(mcp) as client:
         for stored, label in policy.NOTIFICATION_LABELS.items():
-            saved = (await client.call_tool('fulcra_settings_update', {'set': {
+            saved = (await client.call_tool('update_fulcra_settings', {'set': {
                 'notifications': label, 'attention_new_unmatched_contact': False}})).structured_content
             assert saved['values']['notifications'] == label
             assert policy.read(api)['notifications'] == stored

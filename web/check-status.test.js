@@ -26,7 +26,7 @@ test('multiple configurations report the most recent check', async () => {
     c: { status: 'never_checked' },
   });
   assert.equal((await readCheckStatus(app)).last_checked, '2026-10-19T12:00:00Z');
-  assert.deepEqual(app.calls.map(([name]) => name), Array(4).fill('fulcra_check_status'));
+  assert.deepEqual(app.calls.map(([name]) => name), Array(4).fill('get_message_check_status'));
   const unread = host({ '': { status: 'choose_configuration', configurations: ['a', 'b'] },
     a: { status: 'checked', last_checked: '2026-10-18T12:00:00Z' }, b: { status: 'unavailable' } });
   assert.equal((await readCheckStatus(unread)).status, 'unavailable');

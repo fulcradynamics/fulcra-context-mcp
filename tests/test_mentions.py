@@ -15,7 +15,7 @@ from fulcra_api.connections import CHANNEL_FIELDS
 
 LIST_ITEM = {"type": "resource_link", "uri": "contacts://threads",
              "name": "Agents I Know", "title": "Agents I Know", "mimeType": "application/json",
-             "description": "Open the clickable connection list in chat with agent_contact_open({})."}
+             "description": "Open the clickable connection list in chat with open_agent_contacts({})."}
 
 
 def entry(id, owner=None):
@@ -47,7 +47,7 @@ async def test_multiparty_native_descriptor_opens_exact_own_audience(fake_fulcra
         assert 'peer_fulcra_userid' not in descriptor
         assert descriptor['thread_id'].startswith('connection:')
         assert descriptor['open_tool']['arguments'] == {'thread_id': descriptor['thread_id']}
-        opened = await client.call_tool('agent_contact_open', descriptor['open_tool']['arguments'])
+        opened = await client.call_tool('open_agent_contacts', descriptor['open_tool']['arguments'])
         assert opened.structured_content['thread_id'] == descriptor['thread_id']
         fake_fulcra.get_datashares.return_value = []
         with pytest.raises(McpError):
@@ -55,7 +55,7 @@ async def test_multiparty_native_descriptor_opens_exact_own_audience(fake_fulcra
 
 
 async def search(client, query=""):
-    return (await client.call_tool("agent_contacts_search", {"query": query})).structured_content["items"]
+    return (await client.call_tool("search_agent_contacts", {"query": query})).structured_content["items"]
 
 
 @pytest.mark.parametrize("query,expected", [("", ["other", "peer"]), ("aLeX", ["other", "peer"]),
@@ -66,7 +66,7 @@ async def test_search_includes_list_and_exact_peer_actions(query, expected, fake
             incoming=[{"sharing_fulcra_userid": p, "sharing_fulcra_user_name": "Alex"}
                       for p in ["peer", "other"]])
     async with Client(mcp) as client:
-        result = await client.call_tool("agent_contacts_search", {"query": query})
+        result = await client.call_tool("search_agent_contacts", {"query": query})
         assert result.content == []
         items = result.structured_content["items"]
         assert items[0]["name"] == items[0]["title"] == "Agents I Know"
@@ -74,7 +74,7 @@ async def test_search_includes_list_and_exact_peer_actions(query, expected, fake
         assert [item["uri"] for item in items[1:]] == ["contacts://threads/id-" + p for p in expected]
         for item, peer in zip(items[1:], expected):
             assert item["name"] == item["title"] == f"Open Agent Contact: Alex ({peer})"
-            assert "agent_contact_open" in item["description"]
+            assert "open_agent_contacts" in item["description"]
         for item in items:
             assert ResourceLink.model_validate(item).mimeType == "application/json"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
@@ -127,16 +127,16 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
         instructions = client.initialize_result.instructions
         assert "Agents I Know" in instructions and "Open Agent Contact:" in instructions
         assert "Bare @Fulcra: use set-up-agent-contacts for onboarding." in instructions
-        assert "Agents I Know: agent_contact_open({})." in instructions
+        assert "Agents I Know: open_agent_contacts({})." in instructions
         assert "explicit task wins" in instructions
         assert "mentions authorize opening only, not sends/shares/edits" in instructions
         assert "mesh_identifier/converted_from_mesh" in instructions
         assert "Do not migrate user data without explicit consent" in instructions
-        contact = next(t for t in await client.list_tools() if t.name == "agent_contact_open")
+        contact = next(t for t in await client.list_tools() if t.name == "open_agent_contacts")
         assert "resolve contacts://threads/id-" in contact.description
         assert "exact peer_fulcra_userid" in contact.description
         items = await search(client)
-        for item, name, arguments in zip(items, ["agent_contact_open", "agent_contact_open"],
+        for item, name, arguments in zip(items, ["open_agent_contacts", "open_agent_contacts"],
                                          [{}, {"peer_fulcra_userid": "peer"}]):
             descriptor = json.loads((await client.read_resource(item["uri"]))[0].text)
             assert descriptor["open_tool"] == {"name": name, "arguments": arguments}
@@ -206,7 +206,7 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
             assert resource.mimeType == "application/json"
             assert json.loads(resource.text) == {
                 "peer_fulcra_userid": peer, "title": f"Alex ({peer})",
-                "open_tool": {"name": "agent_contact_open", "arguments": {"peer_fulcra_userid": peer}}}
+                "open_tool": {"name": "open_agent_contacts", "arguments": {"peer_fulcra_userid": peer}}}
             assert str(resource.uri) == uri
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
@@ -268,7 +268,7 @@ async def test_required_string_query_and_unbounded_resource_lookup(fake_fulcra):
     async with Client(mcp) as client:
         for args in [{}, {"query": None}, {"query": 123}, {"query": []}]:
             with pytest.raises(ToolError):
-                await client.call_tool("agent_contacts_search", args)
+                await client.call_tool("search_agent_contacts", args)
         assert not fake_fulcra.mock_calls
         resource = (await client.read_resource("contacts://threads/id-peer-24"))[0]
         assert json.loads(resource.text)["peer_fulcra_userid"] == "peer-24"
@@ -301,10 +301,10 @@ async def test_backend_denial_after_success_never_reuses_discovery(method, fake_
 async def test_native_picker_metadata(fake_fulcra):
     backend(fake_fulcra, [])
     async with Client(mcp) as client:
-        tool = next(t for t in await client.list_tools() if t.name == "agent_contacts_search")
+        tool = next(t for t in await client.list_tools() if t.name == "search_agent_contacts")
         assert tool.meta["ui"] == {"visibility": ["app"]}
         capabilities = client.initialize_result.capabilities.model_dump(by_alias=True)
-        assert capabilities["experimental"]["openai/mentions"] == {"searchTool": "agent_contacts_search"}
+        assert capabilities["experimental"]["openai/mentions"] == {"searchTool": "search_agent_contacts"}
         assert "openai/extensions" not in tool.meta
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False

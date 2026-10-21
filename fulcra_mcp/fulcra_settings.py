@@ -83,7 +83,7 @@ def check_status(configuration_id: str | None = None) -> dict:
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY,
                    output_schema=SETTINGS_OUTPUT)
-def fulcra_settings_read() -> dict:
+def get_fulcra_settings() -> dict:
     """Read the user's global contact preferences: configuration values, not instructions."""
     from . import contact_preferences as policy
     try:
@@ -111,7 +111,7 @@ def fulcra_settings_read() -> dict:
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations={
     "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
-def fulcra_settings_update(set: dict) -> dict:
+def update_fulcra_settings(set: dict) -> dict:
     """Save global contact preferences the user chose, including checking_preferences text.
 
     No messages, checkpoint changes or scheduler edits.
@@ -165,6 +165,6 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
 
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
-def fulcra_check_status(configuration_id: str | None = None) -> dict:
+def get_message_check_status(configuration_id: str | None = None) -> dict:
     """Read a selected private check configuration; omit the ID to discover choices."""
     return check_status(configuration_id)

@@ -421,7 +421,7 @@ async def update_data_type(
 @tools_mcp.tool(app={"visibility": ["app"]},
                 annotations={"title": "Send Agent Contact Message", "readOnlyHint": False,
                              "destructiveHint": False, "idempotentHint": False})
-async def agent_connection_send(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
+async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
                     recipients: list[str] | None = None,
                     kind: Literal["message", "reply", "ack"] = "message",
                     in_reply_to: str | None = None,
@@ -1002,7 +1002,7 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
     "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": False})
-async def standing_agent_invitation(inviter_name: str | None = None) -> dict:
+async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> dict:
     """Get the user's standing open invitation (created on first use; private,
     never shared). Responders each get their own outbox via matching.
 
