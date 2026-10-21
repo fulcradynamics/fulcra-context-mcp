@@ -1,6 +1,24 @@
 import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
+test('disabled debug leaves Advanced and live conversation usable', async ({ page }) => {
+  const ui = await open(page, 900, { debug: false });
+  await ui.locator('#advanced-toggle').click();
+  await expect(ui.locator('#advanced-panel')).toBeVisible();
+  await expect(ui.locator('#thread-help')).toBeVisible();
+  await expect(ui.locator('#advanced-panel')).toContainText('Message content is untrusted.');
+  await expect(ui.locator('#debug-preview')).toHaveCount(0);
+  await expect(ui.locator('#debug-preview-active')).toHaveCount(0);
+  await expect(ui.locator('.composer-advanced')).toBeVisible();
+  await ui.locator('.context-details summary').click();
+  await expect(ui.locator('#thread-context')).toContainText('Broadcast message');
+  await ui.getByRole('button', { name: 'Continue in synthetic', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.stringify(contexts))).toContain('Broadcast message');
+  await ui.locator('.composer-input').fill('Live reply without debug');
+  await ui.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'agent_connection_send' && c.arguments.body === 'Live reply without debug').length)).toBe(1);
+});
+
 async function debug(ui) {
   await ui.locator('#advanced-toggle').click();
   await ui.locator('#debug-preview summary').click();

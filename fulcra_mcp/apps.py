@@ -14,8 +14,8 @@ MENU_ICONS = [
          mimeType="image/svg+xml", sizes=["any"], theme=theme)
     for theme in ("light", "dark")
 ]
-UI_URI = "ui://fulcra/contacts/v68.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v68.html"
+UI_URI = "ui://fulcra/contacts/v69.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v69.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 
@@ -70,7 +70,8 @@ def fulcra_open() -> dict[str, str]:
 def contacts_html_bundle() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
     html = files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")
-    if settings.fulcra_contacts_controls != "chat":
-        return html
-    return html.replace('<meta name="connection-controls" content="full">',
-                        '<meta name="connection-controls" content="chat">', 1)
+    if settings.fulcra_contacts_controls == "chat":
+        html = html.replace('<meta name="connection-controls" content="full">',
+                            '<meta name="connection-controls" content="chat">', 1)
+    return html.replace('<meta name="connection-debug" content="true">',
+                        f'<meta name="connection-debug" content="{str(settings.fulcra_contacts_debug).lower()}">', 1)

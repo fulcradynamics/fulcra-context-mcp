@@ -60,6 +60,7 @@ export const acknowledgementPreview = {
 };
 
 export function setupDebugControls(doc, preview, selectedPeer) {
+  if (doc.querySelector('meta[name="connection-debug"]')?.content === 'false') return () => {};
   const section = doc.createElement('details'); section.id = 'debug-preview';
   const summary = doc.createElement('summary'); summary.textContent = 'Debug';
   const help = doc.createElement('p'); help.className = 'meta';

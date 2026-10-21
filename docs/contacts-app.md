@@ -34,6 +34,21 @@ acknowledge-on-open and selected-contact context continue, and hosts with
 `updateModelContext` get a short general context listing the requests and their
 skills. Any other value keeps the full controls (the browser harness default).
 
+## Debug menu configuration
+
+`FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**, independently of
+`FULCRA_CONTACTS_CONTROLS`. It defaults to **true (visible)**. Like other typed
+server settings, it uses Pydantic boolean parsing: `1`, `true`, `on`, `yes`, `y`,
+`t` enable it; `0`, `false`, `off`, `no`, `n`, `f` disable it (case-insensitive).
+Invalid values, including an empty string, fail settings validation at startup.
+Restart the server and reopen the app after changing the environment.
+
+All three contact resources carry a `connection-debug` meta value of `true` or
+`false`. The frontend omits Debug controls only for `false`; a standalone bundle
+or missing meta keeps previews available. Other Advanced controls, the dark UI,
+and authoritative live actions/context are unchanged. This is a display setting,
+not an authorization boundary.
+
 ## Discovery
 
 Contacts are Event channels named with either supported prefix
