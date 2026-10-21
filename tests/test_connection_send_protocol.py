@@ -47,7 +47,7 @@ async def test_send_http_auth_and_per_user_isolation(tmp_path, monkeypatch, kind
                         [target] if entry['id'] == incoming else list(saved[api.get_fulcra_userid()]))
     creds = {owner: FulcraCredentials(access_token=owner, access_token_expiration=datetime.now() + timedelta(hours=1)) for owner in owners}
     monkeypatch.setattr(settings, 'fulcra_environment', 'test')
-    monkeypatch.setattr(credentials, 'FulcraAPI', lambda **kwargs: clients[kwargs['credentials'].access_token])
+    monkeypatch.setattr(credentials, 'GrantFulcraAPI', lambda grant_id, **kwargs: clients[kwargs['credentials'].access_token])
     monkeypatch.setattr(oauth_provider, 'credentials_for_token', lambda token: (token, creds[token]) if token in creds else None)
     import time
     from mcp.server.auth.provider import AccessToken
