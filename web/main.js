@@ -5,7 +5,7 @@ import { receiveEntrypoint } from './entrypoint.js';
 import { icon, UserPlus } from './icons.js';
 import { setupCheckStatus } from './check-status.js';
 import { showToast, continueMessage } from './toast.js';
-import { CHAT_ONLY, chatInstruction, hostName } from './chat-only.js';
+import { CHAT_ONLY, chatInstruction, hostName, hostLabel } from './chat-only.js';
 
 const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisplayModes: ['fullscreen'] });
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
@@ -20,7 +20,7 @@ app.addEventListener('hostcontextchanged', applySafeArea);
 // A chat handoff shows a spinner on the button, then a "Request sent to <host>"
 // toast — the global toast persists (guidance) while the inline one auto-dismisses.
 const notifySent = description => {
-  const host = app.getHostVersion()?.name;
+  const host = hostLabel(app.getHostVersion()?.name);
   return showToast(document, {
     title: host ? `Request sent to ${host}` : 'Request sent',
     description,

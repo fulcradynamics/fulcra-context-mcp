@@ -151,9 +151,10 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 .app-dialog .dialog-actions { margin-top: 6px; }
 .app-dialog .dialog-actions .dialog-ghost { margin-right: auto; }
 /* Secondary path: hand the invite to the agent in chat, set apart from Create. */
-.app-dialog .dialog-alt { border-top: 1px solid var(--divider); margin-top: 18px; padding-top: 16px; display: grid; gap: 10px; }
+.app-dialog .dialog-alt { margin-top: 14px; display: grid; gap: 10px; }
 .app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.app-dialog .dialog-alt-action { justify-self: start; min-height: 0; padding: 7px 11px; font-size: 12px; }
+/* Confirmation after copying the invitation: green so it clearly stands out. */
+.dialog-copied.copy-success { color: var(--teal); font-weight: 500; }
 .app-dialog button:active:not(:disabled) { transform: scale(.98); }
 #invite-template { font-size: 13px; margin-bottom: 8px; }
 button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
@@ -259,11 +260,17 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
 #connections > li, #pending-connections > li, #legacy-connections > li { padding: 10px 8px; }
 #connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
+/* Subtle divider between rows in each section. */
+#connections > li + li, #pending-connections > li + li, #legacy-connections > li + li { border-top: 1px solid rgba(255, 255, 255, .06); }
 /* Pending rows match legacy rows: text column, then a right-aligned action. */
 .pending-row { display: flex; align-items: center; gap: 8px; }
 #pending-connections .pending-label { font-weight: 500; }
 .pending-assist { flex: none; }
-#connections-empty p { margin: 0 0 12px; font-size: 13px; }
+/* Empty state echoes an auto-selected contact row (selected tint + name/preview)
+   so the rail keeps its shape before any contacts exist. */
+.empty-card { padding: 12px 8px; border-radius: 8px; background: var(--violet-tint); }
+.empty-card-title { margin: 0; font-size: 15px; font-weight: 500; color: #fff; }
+.empty-card-detail { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
 #pending-connections p { margin: 2px 0 0; }
 #connections > li:hover { background: var(--row-hover); }
 /* Legacy rows aren't clickable as a whole (the Convert button is the action), so
