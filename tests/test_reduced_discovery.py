@@ -13,7 +13,7 @@ async def test_model_tool_inventory_is_not_arbitrarily_capped():
         if "model" in (tool.meta or {}).get("ui", {}).get("visibility", ["model"])
     }
     assert {
-        "agent_contact_open", "send_agent_message", "update_data_type_metadata",
+        "agent_contact_open", "send_agent_message", "update_data_type",
         "create_data_type", "get_data_catalog", "record_data", "get_records", "list_shares",
         "list_files", "read_file", "write_file", "delete_file", "restore_file", "open_file_manager",
         "get_groups", "join_group", "leave_group", "create_group", "get_calendar_events",

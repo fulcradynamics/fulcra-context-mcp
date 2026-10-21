@@ -3,7 +3,7 @@
 The server advertises native `openai/settings`. Settings are configuration, not
 instructions: saving never sends messages, changes checkpoints or schedules
 anything. Every tool here is app-only. Skills edit the same private document with
-exact catalog reads and `update_data_type_metadata`, preserving unrelated values
+exact catalog reads and `update_data_type`, preserving unrelated values
 and verifying privacy and readback.
 
 ## Tools

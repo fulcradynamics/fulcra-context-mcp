@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.18.1'
+                assert initialized.serverInfo.version == '1.18.3'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -36,11 +36,11 @@ async def main():
                              'prepare_agent_invitation', 'match_agent_invitations'):
                     assert tools[name].meta['ui']['visibility'] == ['app']
                 assert 'model' in (tools['send_agent_message'].meta or {}).get('ui', {}).get('visibility', ['model'])
-                metadata = tools['update_data_type_metadata']
+                metadata = tools['update_data_type']
                 assert metadata.inputSchema['required'] == ['data_type']
                 assert set(metadata.inputSchema['properties']) == {
                     'data_type', 'name', 'description', 'expected_description'}
-                rejected_metadata = await client.call_tool('update_data_type_metadata', {'data_type': 'Event'})
+                rejected_metadata = await client.call_tool('update_data_type', {'data_type': 'Event'})
                 assert rejected_metadata.structuredContent['status'] == 'rejected'
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 for name in ('prepare_agent_invitation', 'match_agent_invitations'):

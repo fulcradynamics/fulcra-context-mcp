@@ -354,9 +354,9 @@ def _check_metadata_privacy(api, base, name, entry=None):
         _check_private(api, entry)
 
 
-@tools_mcp.tool(annotations={"title": "Update Data Type Metadata", "readOnlyHint": False,
+@tools_mcp.tool(annotations={"title": "Update Data Type", "readOnlyHint": False,
                             "destructiveHint": True, "idempotentHint": False})
-async def update_data_type_metadata(
+async def update_data_type(
     data_type: str, name: str | None = None, description: str | None = None,
     expected_description: str | None = None,
 ) -> dict:
@@ -1322,7 +1322,7 @@ async def get_data_catalog(
     Args:
         data_type: Optional. Return only the data type with this exact ID.
             Exact v1 entries include raw metadata (name, description, ownership
-            and lifecycle fields) for update_data_type_metadata read-modify-write.
+            and lifecycle fields) for update_data_type read-modify-write.
             For a user-defined type, this also lists its fields (what
             record_data takes in `fields`): a type name, or the field's JSON
             Schema if it has nested fields or rules; plus required_fields.

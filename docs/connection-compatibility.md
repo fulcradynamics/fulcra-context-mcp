@@ -11,7 +11,7 @@ Model-visible:
 
 - `agent_contact_open`: the contacts app; optional exact peer or thread.
 - `send_agent_message`: the checked sender.
-- `update_data_type_metadata`: owned Event/Metric name/description edits. Read the
+- `update_data_type`: owned Event/Metric name/description edits. Read the
   exact catalog entry first for lossless read-modify-write; schemas never change.
 - Existing data, file, sharing and `open_file_manager` tools.
 
