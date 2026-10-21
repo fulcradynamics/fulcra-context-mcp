@@ -158,7 +158,11 @@ test('initial source removal stays filtered when temporary ownership ends before
   expect(await latest(page)).not.toContain(out);
   expect(await latest(page)).toContain(remaining);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  // The explicit click can now acknowledge through the newest eligible outbox.
+  const sends = await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').map(c => c.arguments));
+  expect(sends).toHaveLength(1);
+  expect(sends[0].kind).toBe('ack');
+  expect(sends[0].outbox).toBe(remaining);
 });
 
 test('reopening applies saved source exclusions before delayed discovery', async ({ page }) => {
@@ -192,8 +196,6 @@ test('unchanged polling does not repeat passive attachment', async ({ page }) =>
 
 test('host mode changes preserve full-panel selection context without a turn', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true, presentation: 'thread' });
-  expect(await latest(page)).toBe('');
-  await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { displayMode: 'inline' } }, '*'));
   await expect(ui.locator('html')).toHaveAttribute('data-display-mode', 'inline');

@@ -56,7 +56,7 @@ test('loads all deduplicated channels for exact peer, not other peers; chronolog
   assert.match(result.warnings.join(' '), /co-recipients.*not a verified complete roster/);
   assert.deepEqual(result.messages.map(m => m.direction), ['Incoming', 'Outgoing', 'Outgoing']);
   assert.deepEqual(result.messages.map(m => m.source), [
-    { id: peer.id, name: peer.name, fulcra_userid: 'peer' }, { id: own.id, name: own.name, fulcra_userid: 'me' }, { id: second.id, name: second.name, fulcra_userid: 'me' },
+    { id: peer.id, name: peer.name, fulcra_userid: 'peer' }, { id: own.id, name: own.name, fulcra_userid: 'me', sharedAt: 0 }, { id: second.id, name: second.name, fulcra_userid: 'me', sharedAt: 0 },
   ]);
   assert.equal(h.calls.length, 5);
   for (const c of h.calls.slice(2)) assert.deepEqual({ start_time: c.arguments.start_time, end_time: c.arguments.end_time }, range);

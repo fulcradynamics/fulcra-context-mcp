@@ -51,5 +51,6 @@ async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypat
     assert result['status'] == 'posted', result
     assert result['peer_acknowledged'] is False
     assert calls.count(('POST', '/ingest/v1/record/' + OUTBOX)) == 1
-    assert calls[-1] == ('GET', '/data/v1/records')
+    # Confirm the record first, then fetch current metadata for best-effort clearing.
+    assert calls[-2:] == [('GET', '/data/v1/records'), ('GET', '/data/v1/catalog')]
     assert sum(path == '/user/v1/datashare' for _, path in calls) == 2

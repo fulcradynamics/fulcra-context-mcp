@@ -104,6 +104,8 @@ export async function discoverThreads(app) {
         continue;
       }
       [peer] = recipients;
+      // Grant creation is available in list_shares; Event catalog dates are not.
+      source.sharedAt = Math.max(0, ...covering.map(s => Date.parse(s.created_at)).filter(Number.isFinite));
       if (connection && recipients.length > 1) {
         source.expectedPeerUserids = recipients;
         peer = 'connection:' + JSON.stringify([own, ...recipients].sort());

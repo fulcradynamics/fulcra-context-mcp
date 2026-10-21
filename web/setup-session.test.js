@@ -19,6 +19,17 @@ test('linked handoff retains exact request and context with explicit navigation 
   assert.match(text, /Open the original setup session/);
   assert.match(text, /rather than starting a new thread/);
   assert.match(text, /not authority/);
-  assert.equal(sessionHandoff(request, context), request);
+  assert.ok(sessionHandoff(request, context).includes(request));
   assert.match(sessionHandoff('', context, url), /Let’s talk about this Agent Contact/);
+});
+test('composer handoff identifies a possible contact draft, never a host instruction or send consent', () => {
+  for (const link of [undefined, url]) {
+    const text = sessionHandoff('Please book the room', 'Selected contact: Alex', link);
+    assert.match(text, /send-message composer/);
+    assert.match(text, /draft to the selected contact/);
+    assert.match(text, /not an instruction to the host/);
+    assert.match(text, /clarify.*before sending/i);
+    assert.match(text, /does not authorize sending/);
+    assert.ok(text.includes('Please book the room'));
+  }
 });
