@@ -5,7 +5,7 @@ import { receiveEntrypoint } from './entrypoint.js';
 import { icon, UserPlus, Link } from './icons.js';
 import { setupCheckStatus } from './check-status.js';
 import { showToast, continueMessage } from './toast.js';
-import { CHAT_ONLY, chatInstruction, hostName, hostLabel } from './chat-only.js';
+import { hostLabel } from './host-label.js';
 
 const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisplayModes: ['fullscreen'] });
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
@@ -28,20 +28,16 @@ const notifySent = description => {
 };
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
 const inviteButtons = [...document.querySelectorAll('#invite, #invite-welcome')];
-for (const button of inviteButtons) { button.prepend(icon(UserPlus, 'btn-icon')); button.hidden = CHAT_ONLY; }
+for (const button of inviteButtons) button.prepend(icon(UserPlus, 'btn-icon'));
 const openInviteButtons = [...document.querySelectorAll('#open-invite, #open-invite-welcome')];
-for (const button of openInviteButtons) { button.prepend(icon(Link, 'btn-icon')); button.hidden = CHAT_ONLY; }
-setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status'), { notifySent },
-  CHAT_ONLY ? [] : openInviteButtons).then(connected => {
-  // The host name is known once connected.
-  if (CHAT_ONLY) for (const button of inviteButtons) button.replaceWith(chatInstruction(document, hostName(app), 'invite someone’s agent'));
-  if (CHAT_ONLY) for (const button of openInviteButtons) button.replaceWith(chatInstruction(document, hostName(app), 'show my open invitation'));
+for (const button of openInviteButtons) button.prepend(icon(Link, 'btn-icon'));
+setupInvite(app, inviteButtons, document.querySelector('#status'), { notifySent }, openInviteButtons).then(connected => {
   applySafeArea(app.getHostContext());
   const status = document.querySelector('#connection-status');
   if (!connected) {
     status.textContent = 'Could not load Agent Contacts: host connection failed. Reopen the app to retry.';
     return;
   }
-  setupCheckStatus(app, document, CHAT_ONLY || Boolean(app.getHostCapabilities()?.message?.text), continueMessage(app), notifySent);
+  setupCheckStatus(app, document, Boolean(app.getHostCapabilities()?.message?.text), continueMessage(app), notifySent);
   return setupThreads(app, document, entrypoint);
 });

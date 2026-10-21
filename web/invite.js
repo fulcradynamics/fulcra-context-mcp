@@ -1,7 +1,7 @@
 import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
 import { spinButton, showToast } from './toast.js';
-import { hostLabel } from './chat-only.js';
+import { hostLabel } from './host-label.js';
 import { icon, Copy } from './icons.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '

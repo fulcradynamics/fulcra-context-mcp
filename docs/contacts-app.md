@@ -26,19 +26,10 @@ without acknowledging anything. Later sorting never replaces the selection.
 An explicit launch target must match discovery exactly; otherwise nothing is
 selected. A user's own click always wins over a late launch result.
 
-## Chat-only controls
-
-With `FULCRA_CONTACTS_CONTROLS=chat`, the bundle's `connection-controls` meta is
-`chat` and every action control is replaced with a copyable request such as
-`Ask ChatGPT to reply to Alex`. Nothing is sent to chat. Polling, matching,
-acknowledge-on-open and selected-contact context continue, and hosts with
-`updateModelContext` get a short general context listing the requests and their
-skills. Any other value keeps the full controls (the browser harness default).
-
 ## Debug menu configuration
 
-`FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**, independently of
-`FULCRA_CONTACTS_CONTROLS`. It defaults to **true (visible)**. Like other typed
+`FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**.
+It defaults to **true (visible)**. Like other typed
 server settings, it uses Pydantic boolean parsing: `1`, `true`, `on`, `yes`, `y`,
 `t` enable it; `0`, `false`, `off`, `no`, `n`, `f` disable it (case-insensitive).
 Invalid values, including an empty string, fail settings validation at startup.
@@ -141,7 +132,7 @@ contact's handoff for the session to avoid duplicates.
   then shows it with an editable `Your name in this invitation` field. The text
   updates as the user types; a blank name gives an ID-only invitation. **Done**
   saves the name on the template (Escape discards it). The template never shows
-  under Pending. Other open invitations are chat-only.
+  under Pending. Other open invitations are handled in chat.
 - **Set up automatic checking** appears on a dismissible onboarding card when
   `fulcra_check_status` reports no schedule; it asks the chat to run
   `set-up-agent-contacts`. The app never creates schedules.
