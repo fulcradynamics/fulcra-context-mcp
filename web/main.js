@@ -2,7 +2,7 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { setupInvite } from './invite.js';
 import { setupThreads } from './threads.js';
 import { receiveEntrypoint } from './entrypoint.js';
-import { icon, UserPlus } from './icons.js';
+import { icon, UserPlus, Link } from './icons.js';
 import { setupCheckStatus } from './check-status.js';
 import { showToast, continueMessage } from './toast.js';
 import { CHAT_ONLY, chatInstruction, hostName } from './chat-only.js';
@@ -29,9 +29,13 @@ const notifySent = description => {
 const entrypoint = receiveEntrypoint(app, document); // Before setupInvite connects.
 const inviteButtons = [...document.querySelectorAll('#invite, #invite-welcome')];
 for (const button of inviteButtons) { button.prepend(icon(UserPlus, 'btn-icon')); button.hidden = CHAT_ONLY; }
-setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status'), { notifySent }).then(connected => {
+const openInviteButtons = [...document.querySelectorAll('#open-invite, #open-invite-welcome')];
+for (const button of openInviteButtons) { button.prepend(icon(Link, 'btn-icon')); button.hidden = CHAT_ONLY; }
+setupInvite(app, CHAT_ONLY ? [] : inviteButtons, document.querySelector('#status'), { notifySent },
+  CHAT_ONLY ? [] : openInviteButtons).then(connected => {
   // The host name is known once connected.
   if (CHAT_ONLY) for (const button of inviteButtons) button.replaceWith(chatInstruction(document, hostName(app), 'invite someone’s agent'));
+  if (CHAT_ONLY) for (const button of openInviteButtons) button.replaceWith(chatInstruction(document, hostName(app), 'show my open invitation'));
   applySafeArea(app.getHostContext());
   const status = document.querySelector('#connection-status');
   if (!connected) {

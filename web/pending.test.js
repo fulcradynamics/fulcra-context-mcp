@@ -57,3 +57,9 @@ test('unshared own outboxes are pending, deduplicated by exact owner and type, n
     ['me', 'Event/b', undefined, 'Mesh Outbox same name'],
   ]);
 });
+
+test('the standing open invitation never shows as pending; individual invitations do', async () => {
+  const standing = { ...entry('s', 'me'), name: 'connect-our-agents-standing-invitation' };
+  const result = await discover([standing, entry('b', 'me')]);
+  assert.deepEqual(result.pending.map(s => s.id), ['Event/b']);
+});

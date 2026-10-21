@@ -20,7 +20,7 @@ App-only:
 - `fulcra_open`: native global entrypoint.
 - `agent_contacts_search`: native composer mentions.
 - `agent_connection_send`, `set_contact_identifier`, `set_contact_status`.
-- `prepare_agent_invitation`, `match_agent_invitations`, `create_agent_invitation`.
+- `prepare_agent_invitation`, `match_agent_invitations`, `create_agent_invitation`, `standing_agent_invitation`.
 - `end_agent_contact`.
 - `fulcra_settings_read`, `fulcra_settings_update`, `get_contact_preferences`,
   `set_contact_preferences`, `fulcra_check_status` (see [settings](fulcra-settings.md)).

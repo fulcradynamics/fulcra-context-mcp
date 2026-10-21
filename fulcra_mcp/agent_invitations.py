@@ -19,6 +19,8 @@ from .connection_compatibility import SHARE_NAME_PREFIX
 from .contact_preferences import _check_private
 
 NAME = 'Fulcra Agent Invitations'
+STANDING_NAME = 'connect-our-agents-standing-invitation'
+STANDING_INVITER = 'standing_invitation_inviter: '
 LOCK = RLock()  # Storage has no compare-and-swap; serialize this worker.
 CODE = re.compile('[0-9a-f]{32}')
 logger = logging.getLogger(__name__)
@@ -278,13 +280,14 @@ def _match_open(api, own, document, template, invite):
                 identifier = sender[:max(1, 75 - len(label))] + ' via ' + label[:74]
                 identifier = identifier[:80].strip()
                 fields, required = _user_defined_fields(api.v1_catalog_schema(template, 'v1', fulcra_userid=own))
-                description = write_contact_identifier(source.get('description'), identifier)
+                description = write_contact_identifier(_without_inviter(source.get('description') or ''), identifier)
                 entry = verify()
                 binding = dict(state='creating', incoming_data_type=incoming, identifier=identifier)
                 invite['responses'][peer] = binding
                 _save(api, own, entry, document)
+                # Responders never inherit the standing template's unique name.
                 created = data_type_management.create_data_type(api, {'id': 'Event', 'api_version': 'v1'},
-                    source.get('name') or 'Agent connection',
+                    identifier if source.get('name') == STANDING_NAME else source.get('name') or 'Agent connection',
                     description=description,
                     fields_schema={'properties': fields, 'required': required})
                 data_type = created['id']
@@ -401,6 +404,58 @@ def match(api):
                     'reason': 'Invitation evidence unavailable; nothing shared.',
                     'diagnostic': diagnostic}
     return {'results': results}
+
+
+def _standing_inviter(description):
+    lines = [l for l in (description or '').split('\n') if l.startswith(STANDING_INVITER)]
+    return json.loads(lines[0][len(STANDING_INVITER):]) if lines else ''
+
+
+def _without_inviter(description):
+    # Responder outboxes copy the template description; the name stays private.
+    return '\n'.join(l for l in description.split('\n') if not l.startswith(STANDING_INVITER))
+
+
+def _standing_entry(api, own):
+    entries = [e for e in api.v1_catalog(fulcra_userid=own)
+               if e.get('name') == STANDING_NAME and e.get('fulcra_userid') == own
+               and e.get('api_version') == 'v1' and e.get('id', '').startswith('Event/')
+               and not e.get('deprecated') and not e.get('deleted_at')]
+    if len(entries) > 1:
+        raise ValueError('Ambiguous standing invitation.')
+    return entries[0] if entries else None
+
+
+def standing(api, inviter_name=None):
+    """Return the user's standing open invitation, creating it on first use.
+    A given inviter_name ('' clears it) is saved on the private template."""
+    from fulcra_api import data_type_management
+    from .contact_identifier import write_contact_identifier, validate_identifier
+
+    if inviter_name:
+        inviter_name = validate_identifier(inviter_name.strip())
+    with LOCK:
+        own = api.get_fulcra_userid()
+        entry = _standing_entry(api, own)
+        if not entry:
+            data_type_management.create_data_type(
+                api, {'id': 'Event', 'api_version': 'v1'}, STANDING_NAME,
+                description=write_contact_identifier(f'{SHARE_NAME_PREFIX[-1]} channel', 'Open invitation'),
+                fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
+                               'required': connections.CHANNEL_FIELDS['required']})
+            entry = _standing_entry(api, own)
+            if not entry:
+                raise ValueError('Standing invitation not verified.')
+        prepared = prepare(api, entry['id'], open_invitation=True)
+        if inviter_name is not None and inviter_name != _standing_inviter(entry['description']):
+            lines: list[str] = _without_inviter(entry['description']).split('\n')
+            if inviter_name:
+                lines.insert(1, STANDING_INVITER + json.dumps(inviter_name))
+            api.update_data_type('Event', entry['id'].split('/')[1], {'description': '\n'.join(lines)})
+            entry = _standing_entry(api, own)
+            if not entry or _standing_inviter(entry['description']) != inviter_name:
+                raise ValueError('Name not saved.')
+        return {**prepared, 'inviter_name': _standing_inviter(entry['description'])}
 
 
 def create(api, inviter_name, recipient_name, recipient_userid=None):
