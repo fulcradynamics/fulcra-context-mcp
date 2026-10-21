@@ -1,7 +1,8 @@
 import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
-import { spinButton } from './toast.js';
+import { spinButton, showToast } from './toast.js';
 import { hostLabel } from './chat-only.js';
+import { icon, Copy } from './icons.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
@@ -152,20 +153,21 @@ export async function openStandingInvitation(app, doc, status, button) {
   const restore = spinButton(button);
   let value;
   try { value = await standingInvitation(app); }
-  catch { status.textContent = 'Couldn’t load your open invitation. Try again.'; return; }
+  catch { showToast(doc, { title: 'Couldn’t load your open invitation', description: 'Please try again.' }); return; }
   finally { restore(); }
   doc.querySelector('#standing-dialog')?.remove();
   const host = hostLabel(app.getHostVersion()?.name) || 'agent';
   const dialog = doc.createElement('dialog'); dialog.id = 'standing-dialog'; dialog.className = 'app-dialog';
   dialog.setAttribute('aria-labelledby', 'standing-title');
-  const title = doc.createElement('h2'); title.id = 'standing-title'; title.textContent = 'Your open invitation';
+  const title = doc.createElement('h2'); title.id = 'standing-title'; title.textContent = 'Share this with anyone';
   const intro = doc.createElement('p'); intro.className = 'dialog-intro';
   intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets their own private connection with you.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [nameLabel, name] = field(doc, 'Your name in this invitation', 'inviter_name', { optional: true, placeholder: 'Optional' });
   name.value = value.inviter_name ?? '';
+  const areaLabel = doc.createElement('label'); areaLabel.className = 'dialog-field-label';
+  areaLabel.setAttribute('for', 'standing-template'); areaLabel.textContent = 'Open invitation';
   const area = doc.createElement('textarea'); area.readOnly = true; area.rows = 10; area.id = 'standing-template';
-  area.setAttribute('aria-label', 'Open invitation');
   const render = () => {
     const inviter = name.value.trim();
     area.value = invitationTemplate({ inviterAgent: inviter && `${inviter}'s ${host}`, ownUserid: value.own_userid, topic: value.topic });
@@ -175,10 +177,11 @@ export async function openStandingInvitation(app, doc, status, button) {
   const note = doc.createElement('p'); note.className = 'meta dialog-copied'; note.setAttribute('role', 'status');
   const error = doc.createElement('p'); error.className = 'dialog-error'; error.setAttribute('role', 'alert');
   const actions = doc.createElement('div'); actions.className = 'dialog-actions';
-  const done = doc.createElement('button'); done.type = 'button'; done.textContent = 'Done';
+  const done = doc.createElement('button'); done.type = 'button'; done.className = 'dialog-ghost'; done.textContent = 'Done';
   const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
+  copy.prepend(icon(Copy, 'btn-icon'));
   actions.append(done, copy);
-  form.append(nameLabel, area, note, error, actions);
+  form.append(nameLabel, areaLabel, area, note, error, actions);
   dialog.append(title, intro, form); doc.body.append(dialog);
   const close = () => { dialog.close(); dialog.remove(); if (button.isConnected) button.focus(); };
   dialog.addEventListener('cancel', e => { e.preventDefault(); close(); });

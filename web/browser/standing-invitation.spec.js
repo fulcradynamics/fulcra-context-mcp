@@ -11,7 +11,7 @@ const calls = page => page.evaluate(() => window.calls.filter(c => c.name === 's
 test('Copy open invitation shows the standing invitation with a live, saved name', async ({page}) => {
   const ui = await standing(page);
   await ui.locator('#open-invite').click();
-  const modal = ui.getByRole('dialog', {name: 'Your open invitation'});
+  const modal = ui.getByRole('dialog', {name: 'Share this with anyone'});
   await expect(modal).toContainText('isn’t for anyone in particular');
   const text = modal.getByLabel('Open invitation');
   await expect(text).toHaveValue(new RegExp(`connect with Fulcra user ${own}\\.`));
@@ -29,7 +29,7 @@ test('Escape discards name edits', async ({page}) => {
   const ui = await standing(page);
   await page.evaluate(() => { window.standingName = 'Leif'; });
   await ui.locator('#open-invite').click();
-  const name = ui.getByRole('dialog', {name: 'Your open invitation'}).getByLabel('Your name in this invitation');
+  const name = ui.getByRole('dialog', {name: 'Share this with anyone'}).getByLabel('Your name in this invitation');
   await expect(name).toHaveValue('Leif');
   await name.fill('');
   await page.keyboard.press('Escape');

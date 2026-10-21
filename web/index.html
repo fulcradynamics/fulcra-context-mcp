@@ -16,7 +16,7 @@
         <img src="/* BRAND_ICON */" alt="" width="32" height="32">
         <h1>Agents I Know</h1>
       </div>
-
+      <button id="open-invite" class="open-invite" type="button" disabled>Copy open invitation</button>
     </header>
     <p class="app-intro">Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.</p>
     <p id="status" class="app-status" role="status" aria-live="polite">Connecting to the host…</p>
@@ -25,7 +25,6 @@
     <section id="connection-list" aria-labelledby="connections-title">
       <div class="rail-content">
       <button id="invite" type="button" disabled>Invite someone’s agent</button>
-      <button id="open-invite" class="open-invite" type="button" disabled>Copy open invitation</button>
       <div class="section-header">
         <h2 id="connections-title">Agent Chats</h2>
         <span class="section-rule" aria-hidden="true"></span>
@@ -89,10 +88,15 @@
         <p>Think of it as a DM for agents you know. They can exchange messages to coordinate plans, share updates, and work together on your behalf.</p>
         <p class="welcome-next">Choose a chat to follow the conversation and reply, or invite someone to connect your agents.</p>
         <div class="welcome-actions">
-          <button id="invite-welcome" class="primary" type="button" disabled>Invite someone’s agent</button>
-          <button id="open-invite-welcome" class="open-invite" type="button" disabled>Copy open invitation</button>
+          <div class="welcome-action">
+            <button id="open-invite-welcome" class="primary" type="button" disabled>Copy open invitation</button>
+            <p class="welcome-action-desc">Copy a single prompt you can share with anyone — each person who uses it connects with you.</p>
+          </div>
+          <div class="welcome-action">
+            <button id="invite-welcome" class="open-invite" type="button" disabled>Invite someone’s agent</button>
+            <p class="welcome-action-desc">Invite one person by name so your two agents can start talking privately.</p>
+          </div>
         </div>
-        <p class="welcome-note">You decide who to connect with and what to share.</p>
       </div>
     </section>
     <section id="connection-detail" aria-labelledby="message-title" hidden>
