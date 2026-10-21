@@ -2,7 +2,7 @@ import os
 import sys
 import threading
 import webbrowser
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import structlog
@@ -11,7 +11,7 @@ from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.middleware.auth_context import get_access_token
 
-from .provider import oauth_provider
+from .provider import aware, oauth_provider
 from .settings import settings
 
 
@@ -30,7 +30,9 @@ class SynchronizedFulcraAPI(FulcraAPI):
     short-circuit would skip that early refresh.
     """
 
-    _refresh_lock = threading.Lock()
+    # Reentrant: newer fulcra-api's refresh_access_token calls
+    # refresh_credentials, and both are overridden here.
+    _refresh_lock = threading.RLock()
 
     def refresh_access_token(self) -> bool:
         with self._refresh_lock:
@@ -38,6 +40,23 @@ class SynchronizedFulcraAPI(FulcraAPI):
             if creds is not None and creds.access_token and not creds.is_expired():
                 return True
             return super().refresh_access_token()
+
+    def refresh_credentials(self):
+        # Newer fulcra-api refreshes through this (an expiring token, or a
+        # 401) instead of refresh_access_token. A refresh may be wanted even
+        # though the token looks valid, so skip only if another thread
+        # replaced the token while this one waited.
+        creds = self.fulcra_credentials
+        held = creds.access_token if creds is not None else None
+        with self._refresh_lock:
+            creds = self.fulcra_credentials
+            if (
+                creds is not None
+                and creds.access_token != held
+                and not creds.is_expired()
+            ):
+                return
+            super().refresh_credentials()
 
 
 logger = structlog.getLogger(__name__)
@@ -60,12 +79,10 @@ REFRESH_MARGIN = timedelta(seconds=120)
 
 
 def _needs_refresh(creds: FulcraCredentials) -> bool:
-    # Naive datetimes on purpose: fulcra-api stamps and compares expirations
-    # with datetime.now() (see FulcraCredentials.is_expired), so a tz-aware
-    # comparison here would raise.
     if creds.access_token is None or creds.access_token_expiration is None:
         return True
-    return creds.access_token_expiration - datetime.now() < REFRESH_MARGIN  # noqa: DTZ005
+    expires_at = aware(creds.access_token_expiration)
+    return expires_at - datetime.now(UTC) < REFRESH_MARGIN
 
 
 def _get_credentials_path() -> Path:
@@ -162,6 +179,33 @@ def current_grant_id() -> str | None:
     return resolved[0] if resolved else None
 
 
+class GrantFulcraAPI(FulcraAPI):
+    """A FulcraAPI for one hosted grant, whose token refresh holds the grant
+    lock and first adopts a copy another instance already refreshed.
+
+    The up-front refresh in fulcra_for_grant already does that. This covers
+    refreshes fulcra-api starts itself mid-request: newer releases refresh
+    and retry once when the API answers 401.
+    """
+
+    def __init__(self, grant_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.grant_id = grant_id
+
+    def refresh_credentials(self):
+        held = self.fulcra_credentials.access_token
+        with oauth_provider.grant_lock(self.grant_id):
+            creds = oauth_provider.reload_grant(self.grant_id)
+            if (
+                creds is not None
+                and creds.access_token != held
+                and not _needs_refresh(creds)
+            ):
+                self.fulcra_credentials = creds
+                return
+            super().refresh_credentials()
+
+
 def fulcra_for_grant(
     grant_id: str, creds: FulcraCredentials, client_id: str | None = None
 ) -> FulcraAPI:
@@ -186,7 +230,8 @@ def fulcra_for_grant(
             new_expires_at=str(new_creds.access_token_expiration),
         )
 
-    fulcra = FulcraAPI(
+    fulcra = GrantFulcraAPI(
+        grant_id,
         oidc_client_id=settings.oidc_client_id,
         oidc_domain=settings.fulcra_oidc_domain,
         oidc_audience=settings.fulcra_api,
