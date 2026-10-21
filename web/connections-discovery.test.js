@@ -61,6 +61,14 @@ test('setup links belong only to eligible own outgoing channels', async () => {
   assert.equal(multi.sources[0].setupSession, url);
 });
 const grant = (id, peer = 'peer') => ({ data_types: [`Event/${id}`], with_user_ids: [peer], share_all_data: false });
+test('eligible outboxes retain newest valid covering grant creation time', async () => {
+  const result = await load([entry('old'), entry('new')], [
+    {...grant('old'), created_at:'2026-10-10T12:00:00Z'},
+    {...grant('new'), created_at:'2026-10-12T12:00:00Z'},
+    {...grant('new'), created_at:'invalid'},
+  ]);
+  assert.equal(result.selections[0].sources.find(s => s.id === 'Event/new').sharedAt, Date.parse('2026-10-12T12:00:00Z'));
+});
 test('assessment uses only verified own channels, never peer-authored status', async () => {
   const assessed = (id, owner, attention) => ({ ...entry(id, owner), description:
     `[contact_status: ${JSON.stringify({attention, reason:'Decision needed', assessed_at:'2026-10-13T12:00:00Z'})}]` });

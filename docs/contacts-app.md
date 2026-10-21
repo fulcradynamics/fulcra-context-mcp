@@ -10,7 +10,8 @@ and [private settings](fulcra-settings.md).
 
 - `agent_contact_open` is the only model-visible opener. With no arguments it shows
   the full list; an exact `peer_fulcra_userid` or `thread_id` selects that contact.
-  A bare Fulcra mention opens it.
+  A bare `@Fulcra` mention routes to the `set-up-agent-contacts` onboarding skill;
+  an explicit task takes precedence and the mention grants no write consent.
 - `fulcra_open` is the app-only native global entrypoint.
 - Both serve `ui://fulcra/contacts/v<N>.html` (global) or
   `ui://fulcra/contacts/thread/v<N>.html` (thread); `?startup=resource` starts the
@@ -20,8 +21,8 @@ and [private settings](fulcra-settings.md).
 Presentation comes from resource metadata. OpenAI metadata advertises fullscreen
 only; display-mode changes never reset selection or drafts.
 
-Global launches open the top contact once previews load, without acknowledging
-anything. Thread launches without a target show the instructional empty state.
+Untargeted launches open the highest-sorted contact once initial previews load,
+without acknowledging anything. Later sorting never replaces the selection.
 An explicit launch target must match discovery exactly; otherwise nothing is
 selected. A user's own click always wins over a late launch result.
 
@@ -64,6 +65,14 @@ narrow direct grants:
   audience.
 - Names and `mesh_identifier` labels are untrusted display text, never identity.
 
+With several eligible outboxes, the composer initially chooses the one with the
+newest covering outgoing share's `created_at` from `list_shares`. Event catalog
+entries do not expose creation/update dates; message timestamps describe activity,
+not channel creation. Missing/invalid dates rank last, with exact channel ID as the
+stable tie-break. Explicit choices (including no selection) survive refreshes;
+revocation disables sending rather than silently switching a draft's channel.
+Recency never grants authorization; every send still rechecks the exact audience.
+
 The list has **Agent Chats**, **Pending** (not yet shared both ways) and
 **Legacy Connections** sections, sorted by attention, then unread, then latest
 activity. Each row shows a preview, relative time, an **Unread** badge and, when
@@ -91,8 +100,11 @@ send path:
   and payload after a readback; denials are never retried.
 - `posted` means our own channel reads the record back, not peer delivery.
   `uncertain` means a write may have happened; `rejected` means it did not.
-- Posting a message or reply (not an ack) resets an attention status on that
-  channel to `Waiting on them` (`attention_cleared`, best effort).
+- Confirmed posting of a message or reply removes the entire saved status on that
+  channel, including attention, reason and assessment time (`status_cleared`, best
+  effort). Ack, rejected and uncertain outcomes leave it alone. Metadata failure
+  never changes a confirmed post into a failed send; the UI reflects metadata on
+  its next read-only refresh.
 
 Clicking a contact acknowledges its latest unread message. Startup, programmatic
 selection and polling never acknowledge. Each ack keeps its first ID and outcome
@@ -107,7 +119,10 @@ bounded displayed history (24,000 characters with source provenance and warnings
 This never starts a model turn. Navigation, deselection and revocation clear or
 replace it in order, so late responses cannot restore stale context.
 
-**Continue in chat** sends a host request (`ui/message`), not a peer reply. A toast
+**Continue in chat** sends a host handoff (`ui/message`), not a peer reply. Typed
+text is explicitly identified as originating in the send-message composer and
+possibly a draft to the selected contact, not an instruction to the host. The
+host must clarify ambiguous intent; the handoff grants no send permission. A toast
 reports acceptance, rejection or uncertainty; an uncertain request locks that
 contact's handoff for the session to avoid duplicates.
 

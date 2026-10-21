@@ -124,16 +124,14 @@ def _readback(api, entry, record):
     return matches[0] if matches else None
 
 
-def _clear_attention(api, entry):
-    """Replying addresses what needed the user, so a saved attention status no
-    longer applies. Best effort: the post already succeeded."""
-    from .contact_status import parse_status, write_status
+def _clear_status(api, entry):
+    """Remove the previous assessment after a confirmed send, best effort."""
+    from .contact_status import parse_status, PATTERN
     try:
-        if not (parse_status(entry.get('description')) or {}).get('attention'):
+        entry = channel_entry(api, entry['fulcra_userid'], entry['id'])
+        if parse_status(entry.get('description')) is None:
             return False
-        description = write_status(entry['description'], dict(
-            attention=False, reason='Waiting on them',
-            assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')))
+        description = PATTERN.sub('', entry['description'])
         api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
         return channel_entry(api, entry['fulcra_userid'], entry['id']).get('description') == description
     except Exception:
@@ -147,7 +145,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
 
     def posted(entry, row):
         # A message or reply answers the contact; an ack only marks read.
-        cleared = {} if kind == 'ack' else {'attention_cleared': _clear_attention(api, entry)}
+        cleared = {} if kind == 'ack' else {'status_cleared': _clear_status(api, entry)}
         return {**result, 'status': 'posted', 'record': row, **cleared}
 
     attempted = False

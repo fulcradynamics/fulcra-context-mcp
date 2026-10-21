@@ -126,7 +126,8 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
     async with Client(mcp) as client:
         instructions = client.initialize_result.instructions
         assert "Agents I Know" in instructions and "Open Agent Contact:" in instructions
-        assert "Bare Fulcra/Agents I Know: agent_contact_open({})" in instructions
+        assert "Bare @Fulcra: use set-up-agent-contacts for onboarding." in instructions
+        assert "Agents I Know: agent_contact_open({})." in instructions
         assert "explicit task wins" in instructions
         assert "mentions authorize opening only, not sends/shares/edits" in instructions
         assert "mesh_identifier/converted_from_mesh" in instructions

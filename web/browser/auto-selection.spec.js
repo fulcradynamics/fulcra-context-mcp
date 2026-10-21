@@ -1,6 +1,22 @@
 import { test, expect } from '@playwright/test';
 import { open, peer } from './harness.js';
 
+test('initial selection waits for previews and chooses attention over discovery order', async ({page}) => {
+  const ui = await open(page, 900, {listOnly:true, direct:true, holdReads:true,
+    status:{attention:true,reason:'Decision needed',assessed_at:'2026-10-13T12:00:00Z'}});
+  await expect(ui.locator('#connection-detail')).toBeHidden();
+  await page.clock.runFor(11000);
+  await expect(ui.locator('#connection-detail')).toBeHidden();
+  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
+  await expect(ui.locator('#message-title')).toHaveText('Weekend');
+  await expect(ui.locator('#connections .thread-row').first()).toContainText('Weekend');
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  await ui.locator('.thread-button').filter({hasText:'Alex'}).click();
+  await page.clock.runFor(11000);
+  await expect(ui.locator('#message-title')).toHaveText('Alex');
+  await expect(ui.locator('#connections .thread-row').first()).toContainText('Weekend');
+});
+
 test('global launch auto-selects the first contact without acknowledging or sending', async ({page}) => {
   const ui = await open(page, 900, {listOnly:true});
   await page.clock.runFor(11000);
@@ -31,9 +47,14 @@ test('missing explicit launch identity never falls back to the first contact', a
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
 });
 
-test('thread launch without a peer shows the instructional picker', async ({page}) => {
+test('thread launch without a peer selects the highest sorted contact once', async ({page}) => {
   const ui = await open(page,900,{listOnly:true,presentation:'thread'});
-  await expect(ui.locator('#selection-empty')).toBeVisible();
+  await expect(ui.locator('#selection-empty')).toBeHidden();
+  await expect(ui.locator('#connections .thread-row').first().locator('.thread-button')).toHaveAttribute('aria-current', 'true');
+  const title = await ui.locator('#message-title').textContent();
+  await page.evaluate(() => { window.navigationContact = true; });
+  await page.clock.runFor(11000);
+  await expect(ui.locator('#message-title')).toHaveText(title);
   await expect(ui.locator('#entrypoint-status')).toHaveText('');
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
 });

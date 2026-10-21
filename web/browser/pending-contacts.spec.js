@@ -50,7 +50,8 @@ test('outgoing-only stays pending, matched result still needs independently disc
   await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
   await expect(ui.locator('#pending-connections')).toContainText('Outgoing — awaiting connection');
   await page.evaluate(() => { window.excludeIncoming = false; });
-  await page.clock.runFor(21000);
+  // The auto-selected conversation loses access too; allow its bounded retry backoff.
+  await page.clock.runFor(81000);
   await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
   await expect(ui.locator('#pending-connections > li')).toHaveCount(0);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
@@ -90,7 +91,8 @@ test('invitation completion does not veto later reciprocal multiparty grants', a
   await page.evaluate(({peer, other}) => { window.audience = [peer, other]; }, {peer, other});
   for (const status of ['matched', 'pending', null]) {
     await page.evaluate(({out, status}) => { window.invitationMatches = status ? [{data_type:out,status}] : []; }, {out, status});
-    await page.clock.runFor(21000);
+    // The auto-selected conversation loses access too; allow its bounded retry backoff.
+    await page.clock.runFor(81000);
     await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
     await expect(ui.locator('#pending-connections > li')).toHaveCount(0);
   }
