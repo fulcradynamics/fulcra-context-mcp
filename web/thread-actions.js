@@ -4,7 +4,7 @@ import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
 import { showToast, continueMessage, spinButton } from './toast.js';
 import { contactName, readable } from './contact-identity.js';
-import { CHAT_ONLY, chatInstruction, hostName } from './chat-only.js';
+import { CHAT_ONLY, chatInstruction, hostName, hostLabel } from './chat-only.js';
 const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
@@ -34,7 +34,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   // Reinforces that this input replies to the contact (not ChatGPT's composer).
   const hint = doc.createElement('p'); hint.className = 'composer-hint';
   const handoff = doc.createElement('button'); handoff.type = 'button'; handoff.className = 'btn-secondary';
-  handoff.textContent = `Continue in ${app.getHostVersion()?.name || 'chat'}`;
+  handoff.textContent = `Continue in ${hostLabel(app.getHostVersion()?.name) || 'chat'}`;
   const original = doc.createElement('button'); original.type = 'button'; original.hidden = true;
   original.textContent = 'Open original setup session';
   const transfer = doc.createElement('details'); transfer.hidden = true; transfer.className = 'composer-advanced';
@@ -101,7 +101,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     if (instruction) instruction.set(`reply to ${name}`);
     const placeholder = `Message ${name}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
-    const host = app.getHostVersion()?.name;
+    const host = hostLabel(app.getHostVersion()?.name);
     const hintText = supported
       ? `Send replies to ${name}; Continue in ${host || 'chat'} to work on it there.`
       : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`;
@@ -223,7 +223,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const session = source?.setupSession, snapshot = context();
     const text = sessionHandoff(submitted, snapshot, session);
     const version = draft.version, token = lifecycle.token();
-    const host = app.getHostVersion()?.name;
+    const host = hostLabel(app.getHostVersion()?.name);
     const current = () => isCurrent() && lifecycle.current(token) && source?.setupSession === session;
     const restore = () => { if (draft.version === version) draft.value = submitted; };
     // Progress shows on the button spinner; outcomes speak through toasts.

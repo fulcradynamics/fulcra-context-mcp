@@ -1,6 +1,7 @@
 import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
-import { spinButton, continueMessage } from './toast.js';
+import { spinButton } from './toast.js';
+import { hostLabel } from './chat-only.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
@@ -65,7 +66,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [inviterLabel, inviter] = field(doc, 'Your name', 'inviter_name', { placeholder: 'e.g. Jordan' });
   const [recipientLabel, recipient] = field(doc, 'Their name', 'recipient_name', { placeholder: 'e.g. Alex' });
-  const [idLabel, userid] = field(doc, 'Their Fulcra user ID', 'recipient_userid',
+  const [idLabel, userid] = field(doc, 'Fulcra User ID (if you know it)', 'recipient_userid',
     { optional: true, placeholder: 'Optional', help: 'If you have it, you’ll connect right away. Otherwise they’ll get an invitation to accept.' });
   const error = doc.createElement('p'); error.className = 'dialog-error'; error.setAttribute('role', 'alert');
   const actions = doc.createElement('div'); actions.className = 'dialog-actions';
@@ -73,27 +74,17 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   const create = doc.createElement('button'); create.type = 'button'; create.className = 'primary'; create.textContent = 'Create invitation';
   actions.append(cancel, create);
   form.append(inviterLabel, recipientLabel, idLabel, error, actions);
-  // A separate path: hand the invite off to the agent in chat (e.g. for groups).
-  const host = app.getHostVersion()?.name || 'chat';
+  // Footer note: more invitations are always available by asking the host in chat.
+  const host = hostLabel(app.getHostVersion()?.name) || 'chat';
   const alt = doc.createElement('div'); alt.className = 'dialog-alt';
   alt.hidden = !app.getHostCapabilities()?.message?.text;
   const altText = doc.createElement('p'); altText.className = 'dialog-alt-text';
-  altText.textContent = `Inviting a group, or want help? Continue in ${host}. New open invitations require secure code execution in that host; this dialog creates single-person invitations only.`;
-  const chat = doc.createElement('button'); chat.type = 'button'; chat.className = 'dialog-alt-action'; chat.textContent = `Continue in ${host}`;
-  alt.append(altText, chat);
+  altText.textContent = `You can always create more invitations later by asking ${host}.`;
+  alt.append(altText);
   dialog.append(head, intro, form, alt); doc.body.append(dialog);
   const close = () => { dialog.close(); dialog.remove(); if (returnFocus?.isConnected) returnFocus.focus(); };
   cancel.addEventListener('click', close);
   dialog.addEventListener('cancel', e => { e.preventDefault(); close(); });
-  chat.addEventListener('click', async () => {
-    const entered = [['my name', inviter.value], ['their name', recipient.value], ['their Fulcra user ID', userid.value]]
-      .filter(([, value]) => value.trim()).map(([key, value]) => `${key}: ${value.trim()}`);
-    // Keep the dialog open with a spinner on the button during send; then close.
-    await requestInChat(app, status, invitationPrompt + (entered.length ? ` Details I already entered: ${entered.join('; ')}.` : ''),
-      `${continueMessage(app)} No invitation has been sent yet.`,
-      { button: chat, toast: handoff.notifySent });
-    close();
-  });
   // Sandboxed hosts block form submission; validate and act on click.
   create.addEventListener('click', async () => {
     const missing = [inviter, recipient].find(input => !input.value.trim());
@@ -106,7 +97,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
       const result = await app.callServerTool({ name: 'create_agent_invitation', arguments: args }, { timeout: 30000 });
       const value = result.structuredContent;
       if (result.isError || value?.status !== 'prepared') throw new Error(result.content?.find(c => c.type === 'text')?.text || 'Invitation not verified.');
-      showTemplate(invitationTemplate({ inviterAgent: `${args.inviter_name}'s ${app.getHostVersion()?.name || 'agent'}`,
+      showTemplate(invitationTemplate({ inviterAgent: `${args.inviter_name}'s ${hostLabel(app.getHostVersion()?.name) || 'agent'}`,
         ownUserid: value.own_userid, topic: value.topic }), args.recipient_name);
     } catch (e) {
       error.textContent = `Couldn’t create the invitation. ${e.message} Check Pending before retrying.`;
@@ -115,18 +106,24 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
     }
   });
   function showTemplate(text, name) {
-    title.textContent = `Invitation for ${name}`;
+    title.textContent = `Send Invitation to ${name}`;
     const note = doc.createElement('p'); note.className = 'meta';
     note.textContent = `Send this to ${name} to give to their agent. ${name} shows under Pending until their agent responds.`;
     const area = doc.createElement('textarea'); area.readOnly = true; area.rows = 10; area.value = text; area.id = 'invite-template';
     area.setAttribute('aria-label', 'Invitation');
-    const copied = doc.createElement('p'); copied.className = 'meta'; copied.setAttribute('role', 'status');
+    const copied = doc.createElement('p'); copied.className = 'meta dialog-copied'; copied.setAttribute('role', 'status');
     const done = doc.createElement('div'); done.className = 'dialog-actions';
     const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
     const finish = doc.createElement('button'); finish.type = 'button'; finish.textContent = 'Done';
     copy.addEventListener('click', async () => {
-      try { await doc.defaultView.navigator.clipboard.writeText(text); copied.textContent = 'Copied'; }
-      catch { area.focus(); area.select(); copied.textContent = 'Could not copy. Select and copy the text manually.'; }
+      // Clipboard API first; fall back to selecting the textarea and execCommand,
+      // which works where the sandboxed iframe's async clipboard write is blocked.
+      let ok = false;
+      try { await doc.defaultView.navigator.clipboard.writeText(text); ok = true; } catch { /* try fallback */ }
+      if (!ok) { try { area.focus(); area.select(); ok = doc.execCommand('copy'); } catch { ok = false; } }
+      copied.classList.toggle('copy-success', ok);
+      if (ok) copied.textContent = 'Copied';
+      else { area.focus(); area.select(); copied.textContent = 'Could not copy. Select and copy the text manually.'; }
     });
     finish.addEventListener('click', close);
     done.append(finish, copy);

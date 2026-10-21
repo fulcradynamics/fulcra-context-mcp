@@ -1,5 +1,5 @@
 import { icon, Paperclip } from './icons.js';
-import { CHAT_ONLY, chatInstruction } from './chat-only.js';
+import { CHAT_ONLY, chatInstruction, hostLabel } from './chat-only.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,7 +36,7 @@ export function renderArtifacts(container, record, source, app, lifecycle, isCur
   const label = doc.createElement('p'); label.className = 'artifact-label';
   label.append(icon(Paperclip, 'artifact-clip', 13), doc.createTextNode(files.length === 1 ? 'File attached' : 'Files attached'));
   container.append(label);
-  const host = app.getHostVersion()?.name || (CHAT_ONLY ? 'your agent' : 'chat');
+  const host = hostLabel(app.getHostVersion()?.name) || (CHAT_ONLY ? 'your agent' : 'chat');
   for (const file of files) {
     const row = doc.createElement('div'); row.className = 'artifact';
     if (!file) { row.textContent = 'Invalid file reference'; container.append(row); continue; }
