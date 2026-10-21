@@ -7,8 +7,7 @@ for (const launch of ['global', 'thread', 'resource']) {
       listOnly: true, presentation: launch === 'global' ? 'global' : 'thread',
       resourceStartup: launch === 'resource', holdLaunch: launch === 'resource',
     });
-    if (launch === 'global') await expect(ui.locator('#connection-detail')).toBeVisible();
-    else await expect(ui.locator('#connection-detail')).toBeHidden();
+    await expect(ui.locator('#connection-detail')).toBeVisible();
     await expect(ui.locator('body')).not.toContainText('Waiting for the initial conversation result');
     await page.clock.runFor(11000);
     expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);

@@ -106,7 +106,8 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       ? `Send replies to ${name}; Continue in ${host || 'chat'} to work on it there.`
       : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
-    const outgoing = current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [];
+    const outgoing = (current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [])
+      .sort((a, b) => (b.sharedAt ?? 0) - (a.sharedAt ?? 0) || a.id.localeCompare(b.id));
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
       sourceIdentity = identity;
@@ -119,7 +120,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         outbox.append(option);
       }
       draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
-        : draft.outbox === undefined && outgoing.length === 1 ? outgoing[0].id : '';
+        : draft.outbox === undefined ? outgoing[0]?.id ?? '' : '';
       outbox.value = draft.outbox;
     }
     const selected = outgoing.find(s => s.id === outbox.value);

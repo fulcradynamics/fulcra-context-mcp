@@ -65,12 +65,14 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     detail.select(entry.thread, entry.button, { acknowledge: true });
   }
   let requestedPeer, launchPending = false, userSelected = false, autoSelected = false;
-  // In the two-pane (global) layout, open the top conversation once on first load
+  let launchResolved = entrypoint.presentation === 'global' || entrypoint.directResource;
+  // Open the highest-sorted conversation once after initial previews load,
   // so the panel isn't empty — unless an entrypoint peer or the user already chose.
   function maybeAutoSelect() {
     // Dev harness opt-out (set via the mock host) so the empty/welcome state is viewable.
     if (doc.defaultView.__fulcraDevNoAutoSelect) return;
-    if (autoSelected || userSelected || launchPending || entrypoint.presentation !== 'global' || rows.size === 0) return;
+    if (disposed || autoSelected || userSelected || !launchResolved || requestedPeer != null || launchPending || rows.size === 0
+      || [...rows.values()].some(e => e.reading || e.summary === undefined)) return;
     const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
     if (!entry) return;
     autoSelected = true;
@@ -404,6 +406,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         || (data.peer_fulcra_userid != null && (typeof data.peer_fulcra_userid !== 'string' || !data.peer_fulcra_userid.trim()))) {
         launchStatus.textContent = 'The requested conversation could not be opened safely. Choose an accessible Agent Contact below.';
       } else {
+        launchResolved = true;
         requestedPeer = data.thread_id ?? data.peer_fulcra_userid;
         launchPending = requestedPeer != null;
 
@@ -412,6 +415,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       // Untargeted startup already requested discovery. Only an exact late
       // target needs another pass; don't duplicate the initial list refresh.
       if (launchPending) scheduler.request();
+      else { sortRows(); maybeAutoSelect(); }
     });
   } else scheduler.request();
   return dispose;
