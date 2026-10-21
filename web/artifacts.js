@@ -1,5 +1,5 @@
 import { icon, Paperclip } from './icons.js';
-import { CHAT_ONLY, chatInstruction } from './chat-only.js';
+import { CHAT_ONLY, HIDE_ACTIONS, chatInstruction } from './chat-only.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,6 +41,7 @@ export function renderArtifacts(container, record, source, app, lifecycle, isCur
     const row = doc.createElement('div'); row.className = 'artifact';
     if (!file) { row.textContent = 'Invalid file reference'; container.append(row); continue; }
     const path = doc.createElement('span'); path.className = 'artifact-path'; path.textContent = file.path;
+    if (HIDE_ACTIONS) { row.append(path); container.append(row); continue; }
     if (CHAT_ONLY) { row.append(path, chatInstruction(doc, host, `open ${file.path}`)); container.append(row); continue; }
     const button = doc.createElement('button'); button.type = 'button'; button.className = 'artifact-open'; button.textContent = `Open file in ${host}`;
     const status = doc.createElement('p'); status.setAttribute('role','status');
