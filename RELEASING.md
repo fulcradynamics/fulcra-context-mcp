@@ -4,15 +4,6 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## 1.17.1 release notes
-
-- Contacts UI v67 can replace every action control with teal monospace "Ask <host>
-  to …" instructions and a copy button; nothing is sent to chat. Polling,
-  matching, acknowledgement on open and selected-contact context continue, and
-  hosts with `updateModelContext` also get a short general app context naming
-  the suggested requests and their skills. Enabled only with
-  `FULCRA_CONTACTS_CONTROLS=chat`; controls remain the default.
-
 ## 1.17.0 release notes
 
 - Add [owned Event/Metric metadata updates](docs/data-type-metadata.md) with

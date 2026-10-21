@@ -11,8 +11,6 @@ class Settings(BaseSettings):
     state_bucket: str | None = None
     oidc_server_url: str = "http://localhost:4499"
     fulcra_environment: str = "stdio"
-    # "chat" replaces Agents I Know action controls with chat instructions.
-    fulcra_contacts_controls: str = "full"
     fulcra_contacts_debug: bool = True
     port: int = 4499
     oidc_client_id: str | None = None

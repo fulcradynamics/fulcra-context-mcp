@@ -4,7 +4,7 @@ import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
 import { showToast, continueMessage, spinButton } from './toast.js';
 import { contactName, readable } from './contact-identity.js';
-import { CHAT_ONLY, chatInstruction, hostName, hostLabel } from './chat-only.js';
+import { hostLabel } from './host-label.js';
 const options = { timeout: 15000 };
 
 // Both presentations use the same direct send and separate host-chat handoff.
@@ -58,13 +58,11 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const notify = (title, description) => showToast(doc, { title, description });
   const actions = doc.createElement('div'); actions.className = 'composer-actions';
   actions.append(handoff, send);
-  // Chat-only keeps the send/ack logic (acks still run on open) but shows no controls.
-  const instruction = CHAT_ONLY ? chatInstruction(doc, hostName(app)) : null;
-  container.append(...(instruction ? [instruction] : [label, actions, hint]));
+  container.append(label, actions, hint);
   // Delivery address (and any setup-session handoff) lives in the Advanced panel.
   const advanced = doc.querySelector('#advanced-panel');
   advanced?.querySelectorAll('.composer-advanced').forEach(el => el.remove());
-  if (!CHAT_ONLY) (advanced ?? container).append(address);
+  (advanced ?? container).append(address);
   const supported = Boolean(app.getHostCapabilities()?.message?.text && app.getHostCapabilities()?.updateModelContext?.text);
   let source, sourceIdentity, selectionVersion = 0, sending = false;
   draft.posts ??= []; draft.acks ??= new Map();
@@ -98,7 +96,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   const update = () => {
     const current = view();
     const name = contactName(current.thread);
-    if (instruction) instruction.set(`reply to ${name}`);
     const placeholder = `Message ${name}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = hostLabel(app.getHostVersion()?.name);

@@ -1,7 +1,7 @@
 import { requestInChat } from './invite.js';
 import { showToast } from './toast.js';
 import { icon, Sparkles, X } from './icons.js';
-import { CHAT_ONLY, chatInstruction, hostName } from './chat-only.js';
+import { hostName } from './host-label.js';
 
 const REFRESH_MS = 60000;
 // UI-only preference (never an account ID or message): keep the dismissed nudge down.
@@ -28,8 +28,7 @@ export async function readCheckStatus(app) {
 const explainer = host => `Set up ${host} to automatically check for new messages and reply on your behalf. `
   + 'New messages still show up here either way — this just lets your agent act on them without you asking.';
 
-const setupAction = (doc, host, className, onSetup) => {
-  if (CHAT_ONLY) return chatInstruction(doc, host, 'set up automatic checking');
+const setupAction = (doc, className, onSetup) => {
   const button = doc.createElement('button'); button.type = 'button'; button.className = className;
   button.textContent = 'Set up automatic checking';
   button.addEventListener('click', () => onSetup(button));
@@ -50,7 +49,7 @@ function fillStickyCard(container, host, onSetup, onDismiss) {
   head.append(dismiss);
   const text = doc.createElement('p'); text.className = 'onboarding-text'; text.textContent = explainer(host);
   // Same teal-tint style as the side-panel invite button (not the solid primary).
-  container.append(head, text, setupAction(doc, host, 'onboarding-action', onSetup));
+  container.append(head, text, setupAction(doc, 'onboarding-action', onSetup));
 }
 
 // The quiet always-available version in the Advanced panel (no dismiss) so a user
@@ -59,7 +58,7 @@ function fillAdvanced(container, host, onSetup) {
   const doc = container.ownerDocument;
   container.replaceChildren();
   const text = doc.createElement('p'); text.className = 'meta'; text.textContent = explainer(host);
-  container.append(text, setupAction(doc, host, 'onboarding-advanced-action', onSetup));
+  container.append(text, setupAction(doc, 'onboarding-advanced-action', onSetup));
 }
 
 export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue in the conversation.',
