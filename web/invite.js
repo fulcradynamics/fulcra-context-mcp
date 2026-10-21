@@ -1,7 +1,8 @@
 import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
-import { spinButton } from './toast.js';
+import { spinButton, showToast } from './toast.js';
 import { hostLabel } from './chat-only.js';
+import { icon, Copy } from './icons.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
@@ -115,33 +116,100 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
     const done = doc.createElement('div'); done.className = 'dialog-actions';
     const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
     const finish = doc.createElement('button'); finish.type = 'button'; finish.textContent = 'Done';
-    copy.addEventListener('click', async () => {
-      // Clipboard API first; fall back to selecting the textarea and execCommand,
-      // which works where the sandboxed iframe's async clipboard write is blocked.
-      let ok = false;
-      try { await doc.defaultView.navigator.clipboard.writeText(text); ok = true; } catch { /* try fallback */ }
-      if (!ok) { try { area.focus(); area.select(); ok = doc.execCommand('copy'); } catch { ok = false; } }
-      copied.classList.toggle('copy-success', ok);
-      if (ok) copied.textContent = 'Copied';
-      else { area.focus(); area.select(); copied.textContent = 'Could not copy. Select and copy the text manually.'; }
-    });
+    copy.addEventListener('click', () => copyTemplate(doc, area, copied));
     finish.addEventListener('click', close);
     done.append(finish, copy);
     form.replaceWith(note, area, copied, done);
     copy.focus();
   }
   dialog.showModal(); inviter.focus();
+  // Pre-fill the user's saved standing-invitation name (creating it if needed).
+  standingInvitation(app).then(v => { if (v.inviter_name && !inviter.value) inviter.value = v.inviter_name; }, () => {});
   return dialog;
 }
 
-export async function setupInvite(app, buttons, status, handoff = {}) {
+// Clipboard API first; fall back to selecting the textarea and execCommand,
+// which works where the sandboxed iframe's async clipboard write is blocked.
+async function copyTemplate(doc, area, status) {
+  let ok = false;
+  try { await doc.defaultView.navigator.clipboard.writeText(area.value); ok = true; } catch { /* try fallback */ }
+  if (!ok) { try { area.focus(); area.select(); ok = doc.execCommand('copy'); } catch { ok = false; } }
+  status.classList.toggle('copy-success', ok);
+  if (ok) status.textContent = 'Copied';
+  else { area.focus(); area.select(); status.textContent = 'Could not copy. Select and copy the text manually.'; }
+}
+
+async function standingInvitation(app, inviterName) {
+  const result = await app.callServerTool({ name: 'standing_agent_invitation',
+    arguments: inviterName === undefined ? {} : { inviter_name: inviterName } }, { timeout: 30000 });
+  const value = result.structuredContent;
+  if (result.isError || value?.status !== 'prepared') throw new Error(result.content?.find(c => c.type === 'text')?.text || 'Invitation not verified.');
+  return value;
+}
+
+// Creates the standing open invitation if needed (spinner on the button), then
+// shows it with an editable name. Done saves the name; Escape discards it.
+export async function openStandingInvitation(app, doc, status, button) {
+  const restore = spinButton(button);
+  let value;
+  try { value = await standingInvitation(app); }
+  catch { showToast(doc, { title: 'Couldn’t load your open invitation', description: 'Please try again.' }); return; }
+  finally { restore(); }
+  doc.querySelector('#standing-dialog')?.remove();
+  const host = hostLabel(app.getHostVersion()?.name) || 'agent';
+  const dialog = doc.createElement('dialog'); dialog.id = 'standing-dialog'; dialog.className = 'app-dialog';
+  dialog.setAttribute('aria-labelledby', 'standing-title');
+  const title = doc.createElement('h2'); title.id = 'standing-title'; title.textContent = 'Share this with anyone';
+  const intro = doc.createElement('p'); intro.className = 'dialog-intro';
+  intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets their own private connection with you.';
+  const form = doc.createElement('div'); form.className = 'dialog-form';
+  const [nameLabel, name] = field(doc, 'Your name in this invitation', 'inviter_name', { optional: true, placeholder: 'Optional' });
+  name.value = value.inviter_name ?? '';
+  const areaLabel = doc.createElement('label'); areaLabel.className = 'dialog-field-label';
+  areaLabel.setAttribute('for', 'standing-template'); areaLabel.textContent = 'Open invitation';
+  const area = doc.createElement('textarea'); area.readOnly = true; area.rows = 10; area.id = 'standing-template';
+  const render = () => {
+    const inviter = name.value.trim();
+    area.value = invitationTemplate({ inviterAgent: inviter && `${inviter}'s ${host}`, ownUserid: value.own_userid, topic: value.topic });
+  };
+  render();
+  name.addEventListener('input', render);
+  const note = doc.createElement('p'); note.className = 'meta dialog-copied'; note.setAttribute('role', 'status');
+  const error = doc.createElement('p'); error.className = 'dialog-error'; error.setAttribute('role', 'alert');
+  const actions = doc.createElement('div'); actions.className = 'dialog-actions';
+  const done = doc.createElement('button'); done.type = 'button'; done.className = 'dialog-ghost'; done.textContent = 'Done';
+  const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
+  copy.prepend(icon(Copy, 'btn-icon'));
+  actions.append(done, copy);
+  form.append(nameLabel, areaLabel, area, note, error, actions);
+  dialog.append(title, intro, form); doc.body.append(dialog);
+  const close = () => { dialog.close(); dialog.remove(); if (button.isConnected) button.focus(); };
+  dialog.addEventListener('cancel', e => { e.preventDefault(); close(); });
+  copy.addEventListener('click', () => copyTemplate(doc, area, note));
+  done.addEventListener('click', async () => {
+    const inviter = name.value.trim();
+    if (inviter === (value.inviter_name ?? '')) { close(); return; }
+    const restoreDone = spinButton(done);
+    try { await standingInvitation(app, inviter); close(); }
+    catch (e) { error.textContent = `Couldn’t save your name. ${e.message}`; }
+    finally { restoreDone(); }
+  });
+  dialog.showModal(); name.focus();
+  return dialog;
+}
+
+// Invite buttons open the single-person dialog; open-invitation buttons show the standing invitation.
+export async function setupInvite(app, buttons, status, handoff = {}, openButtons = []) {
   for (const button of buttons) button.addEventListener('click', () => {
     if (!button.disabled) openInviteDialog(app, button.ownerDocument, status, button, handoff);
+  });
+  for (const button of openButtons) button.addEventListener('click', () => {
+    if (!button.disabled) openStandingInvitation(app, button.ownerDocument, status, button);
   });
   try {
     await app.connect();
     status.textContent = '';
-    for (const button of buttons) button.disabled = false;
+    for (const button of [...buttons, ...openButtons]) button.disabled = false;
     return true;
   } catch {
     status.textContent = 'Could not connect to the host. Reopen the app to try again.';

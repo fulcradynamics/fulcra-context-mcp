@@ -1001,6 +1001,24 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": False})
+async def standing_agent_invitation(inviter_name: str | None = None) -> dict:
+    """Get the user's standing open invitation (created on first use; private,
+    never shared). Responders each get their own outbox via matching.
+
+    Args:
+        inviter_name: Name to save for the invitation text; "" clears it, omit to keep.
+    """
+    from .agent_invitations import standing
+    try:
+        return await asyncio.to_thread(standing, get_fulcra_object(), inviter_name)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    except Exception:
+        raise ToolError('Standing invitation not verified. Reload before retrying.') from None
+
+
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
     "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": False})
 async def match_agent_invitations() -> dict:
     """Match unambiguous FIRST-message codes for user-prepared invitations using

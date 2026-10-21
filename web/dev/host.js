@@ -16,6 +16,7 @@ const checkStatus = states.has('no-schedule') ? { status: 'not_set_up', label: '
   : { status: 'checked', last_checked: new Date(Date.now() - 20 * 60000).toISOString() };
 
 const CATALOG_PREFIX = 'Available data types, grouped by compatible tool: ';
+let standingName = ''; // Dev-only: persists the open-invitation name across calls, like a saved account.
 const text = t => ({ content: [{ type: 'text', text: t }] });
 
 // Mirrors the production tool responses the app parses (catalog / shares /
@@ -23,6 +24,11 @@ const text = t => ({ content: [{ type: 'text', text: t }] });
 function toolResult(name, args = {}) {
   if (scenario.fail?.includes(name)) return { isError: true };
   if (name === 'match_agent_invitations') return { structuredContent: { results: [] } };
+  if (name === 'standing_agent_invitation') {
+    if (args.inviter_name !== undefined) standingName = args.inviter_name;
+    return { structuredContent: { status: 'prepared', own_userid: own,
+      topic: 'open_invitation ' + 'f'.repeat(32), inviter_name: standingName } };
+  }
   if (name === 'fulcra_check_status') return { structuredContent: checkStatus };
   if (name === 'get_data_catalog') {
     let catalog = scenario.catalog;

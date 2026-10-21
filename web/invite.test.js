@@ -58,3 +58,9 @@ test('template substitutes inviter, own ID and exact topic', () => {
   assert.match(text, /topic exactly `handshake abc`/);
   assert.doesNotMatch(text, /</);
 });
+
+test('template without a name gives only the Fulcra user ID', () => {
+  const text = invitationTemplate({ inviterAgent: '', ownUserid: 'own-id', topic: 'open_invitation abc' });
+  assert.match(text, /\nPlease help me connect with Fulcra user own-id\.\n/);
+  assert.match(text, /topic exactly `open_invitation abc`/);
+});

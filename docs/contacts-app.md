@@ -134,7 +134,14 @@ contact's handoff for the session to avoid duplicates.
   shows the plugin's invitation template (`web/invite-template.js`, kept identical
   to the plugin by a paired test). With an ID, the outbox is shared with exactly
   that user. **Continue in chat** hands the entered details to the invite skill.
-  Open (group) invitations are chat-only.
+  `Your name` is pre-filled from the standing open invitation.
+- **Copy open invitation** (under Invite someone's agent, and beside it in the
+  empty state) calls app-only `standing_agent_invitation`, which gets or creates
+  the private `connect-our-agents-standing-invitation` open-invitation template,
+  then shows it with an editable `Your name in this invitation` field. The text
+  updates as the user types; a blank name gives an ID-only invitation. **Done**
+  saves the name on the template (Escape discards it). The template never shows
+  under Pending. Other open invitations are chat-only.
 - **Set up automatic checking** appears on a dismissible onboarding card when
   `fulcra_check_status` reports no schedule; it asks the chat to run
   `set-up-agent-contacts`. The app never creates schedules.
@@ -162,7 +169,9 @@ earliest matching first message, marks the code consumed, shares our outbox with
 that owner only, verifies the grant and marks it `completed`. Ties, duplicates and
 incomplete history fail closed; uncertain shares are not retried. Open invitations
 keep the template private and create a separate outbox per responder, labeled
-`<sender> via <identifier>`.
+`<sender> via <identifier>`. The standing template's saved name (a
+`standing_invitation_inviter: "<name>"` description line) is never copied to
+responder outboxes, which are named after their label.
 
 `create_share` refuses any grant covering invitation or preference storage.
 Storage has no compare-and-swap; a worker lock serializes one process only.

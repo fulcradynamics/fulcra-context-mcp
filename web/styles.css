@@ -45,8 +45,8 @@
 }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
-.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
-#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-radius: 12px; }
+.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; margin-top: 12px; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-bottom: 0; border-radius: 12px 12px 0 0; }
 /* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
 #connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
 #connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
@@ -172,7 +172,11 @@ main {
     calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
     calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
 }
-.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.brand { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+/* "Copy open invitation" sits top-right, aligned with the title, styled like the
+   composer's gray secondary button (a touch larger than the rail CTAs). */
+#open-invite { flex: none; background: var(--raised); color: #fff; font-weight: 500; }
+#open-invite:hover:not(:disabled) { background: #2d2d34; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
 .brand img { flex: none; }
@@ -503,15 +507,20 @@ html { overflow-anchor: none; }
 
 /* A quiet explanation, not a simulated conversation or another card. */
 .app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 72px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
 .welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
 #welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
-.welcome-content > p.welcome-note { font-size: 12px; margin-top: 12px; color: #6a6a71; }
-#invite-welcome { min-height: 44px; }
+/* Each welcome CTA gets its own block with a short, plain-language description. */
+.welcome-actions { display: flex; flex-direction: column; gap: 18px; }
+.welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#invite-welcome, #open-invite-welcome { min-height: 44px; }
+.welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }
+#standing-template { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c7c7cc; }
+.app-dialog .dialog-field-label { margin-bottom: -6px; }
 @media (hover: hover) and (pointer: fine) {
   #invite-welcome:active { transform: scale(.97); }
 }

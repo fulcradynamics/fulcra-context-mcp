@@ -48,6 +48,7 @@ export function generalContext(host) {
     `The user is viewing Fulcra Agents I Know, the Fulcra agent contacts app. It has no action buttons; it tells the user to ask ${host} in chat, so short requests below refer to this app.`,
     'Suggested requests and the skill for each:',
     '- "Invite someone\'s agent": invite.',
+    '- "Show my open invitation": invite, using the standing open invitation.',
     '- "Set up automatic checking" (or "Set up checks"): set-up-agent-contacts; an explicit scheduling request, so skip the invitation offer and ask whether to check only or check and reply.',
     '- "Reply to <contact>": send, to the selected contact when one is shown below.',
     '- "Finish connecting <pending contact>": connect-our-agents (match prepared invitations; ask before sharing).',

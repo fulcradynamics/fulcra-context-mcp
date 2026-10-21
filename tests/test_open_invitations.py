@@ -167,3 +167,40 @@ def test_long_valid_sender_is_bounded_not_replaced_by_generic_label(api):
     assert result['identifier'].startswith('AAAA')
     assert result['identifier'].endswith(' via ' + OUT)
     assert len(result['identifier']) <= 80
+
+
+STANDING = 'Event/00000000-0000-4000-8000-000000000040'
+
+
+@pytest.fixture
+def standing_api(api):
+    create_state = api.create_data_type.side_effect
+    def create(base, body):
+        if body.get('name') == invitations.NAME:
+            return create_state(base, body)
+        id = STANDING if body['name'] == invitations.STANDING_NAME else 'Event/00000000-0000-4000-8000-' + str(100 + len(api.catalog)).zfill(12)
+        api.catalog.append(dict(channel(id, OWN), name=body['name'], description=body['description']))
+        return {'id': id}
+    api.create_data_type.side_effect = create
+    return api
+
+
+def test_standing_invitation_is_created_once_and_remembers_the_name(standing_api):
+    first = invitations.standing(standing_api)
+    assert first['data_type'] == STANDING and first['inviter_name'] == ''
+    assert first['topic'] == 'open_invitation ' + first['code']
+    assert invitations.standing(standing_api, 'Leif') == dict(first, inviter_name='Leif')
+    assert invitations.standing(standing_api) == dict(first, inviter_name='Leif')
+    assert invitations.standing(standing_api, '') == first
+    assert sum(e.get('name') == invitations.STANDING_NAME for e in standing_api.catalog) == 1
+    standing_api.create_datashare.assert_not_called()
+
+
+def test_standing_responders_get_their_own_outbox_without_the_private_name(standing_api):
+    code = invitations.standing(standing_api, 'Leif')['code']
+    respond(standing_api, code)
+    result = invitations.match(standing_api)['results'][0]
+    assert result['status'] == 'matched' and result['data_type'] != STANDING
+    outbox = next(e for e in standing_api.catalog if e['id'] == result['data_type'])
+    assert outbox['name'] == 'Alex via Open invitation'
+    assert invitations.STANDING_INVITER not in outbox['description']
