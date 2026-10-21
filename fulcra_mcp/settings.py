@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Controls mode for Agents I Know:
     # "full" = action buttons, "chat" = chat instructions, "none" = read-only (no actions)
     fulcra_contacts_controls: Literal["full", "chat", "none"] = "full"
+    fulcra_contacts_debug: bool = True
     port: int = 4499
     oidc_client_id: str | None = None
     fulcra_oidc_domain: str | None = None
