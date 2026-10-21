@@ -33,6 +33,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
+  // Hide the composer in read-only (none) mode
+  if (HIDE_ACTIONS) composer.hidden = true;
   const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Your agent name';
   const viewer = doc.createElement('input'); viewer.type = 'text'; viewer.maxLength = 128; viewer.id = 'viewing-agent';
   viewerLabel.append(viewer);
@@ -462,7 +464,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
     incoming.update(thread, drafts.get(thread.peer).excludedSources);
     selected = selectedSources(thread, drafts.get(thread.peer).excludedSources);
-    updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
+    const noopComposer = () => {};
+    noopComposer.markRead = () => {};
+    updateComposer = HIDE_ACTIONS ? noopComposer : createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
       () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
     updateComposer(thread.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
