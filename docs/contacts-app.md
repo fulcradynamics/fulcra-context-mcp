@@ -26,19 +26,26 @@ without acknowledging anything. Later sorting never replaces the selection.
 An explicit launch target must match discovery exactly; otherwise nothing is
 selected. A user's own click always wins over a late launch result.
 
-## Chat-only controls
+## Experimental controls modes
 
-With `FULCRA_CONTACTS_CONTROLS=chat`, the bundle's `connection-controls` meta is
-`chat` and every action control is replaced with a copyable request such as
-`Ask ChatGPT to reply to Alex`. Nothing is sent to chat. Polling, matching,
-acknowledge-on-open and selected-contact context continue, and hosts with
-`updateModelContext` get a short general context listing the requests and their
-skills. Any other value keeps the full controls (the browser harness default).
+This branch retains `FULCRA_CONTACTS_CONTROLS=full|chat|none`. The default `full`
+shows action controls. `chat` replaces action controls with purple monospace,
+copyable requests such as `Ask ChatGPT to reply to Alex`; copying sends nothing.
+`none` hides action controls, prompts and the composer. Other values fall back
+to full controls. All three resource variants carry the `connection-controls`
+meta setting; the browser harness and development server support all three modes.
+
+Polling and matching remain active. Full and chat modes retain selected-contact
+context and acknowledgement on open; chat also publishes general app guidance.
+Known experimental limitations are deliberately unchanged: none mode skips the
+composer-managed selected context and acknowledgements, and a converted contact's
+legacy-history button can remain visible in none mode. These behavior fixes need
+separate approval; none mode is not a guarantee that every action is absent.
 
 ## Debug menu configuration
 
-`FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**, independently of
-`FULCRA_CONTACTS_CONTROLS`. It defaults to **true (visible)**. Like other typed
+`FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**, independently of controls mode.
+It defaults to **true (visible)**. Like other typed
 server settings, it uses Pydantic boolean parsing: `1`, `true`, `on`, `yes`, `y`,
 `t` enable it; `0`, `false`, `off`, `no`, `n`, `f` disable it (case-insensitive).
 Invalid values, including an empty string, fail settings validation at startup.
@@ -134,7 +141,14 @@ contact's handoff for the session to avoid duplicates.
   shows the plugin's invitation template (`web/invite-template.js`, kept identical
   to the plugin by a paired test). With an ID, the outbox is shared with exactly
   that user. **Continue in chat** hands the entered details to the invite skill.
-  Open (group) invitations are chat-only.
+  `Your name` is pre-filled from the standing open invitation.
+- **Copy open invitation** (under Invite someone's agent, and beside it in the
+  empty state) calls app-only `standing_agent_invitation`, which gets or creates
+  the private `connect-our-agents-standing-invitation` open-invitation template,
+  then shows it with an editable `Your name in this invitation` field. The text
+  updates as the user types; a blank name gives an ID-only invitation. **Done**
+  saves the name on the template (Escape discards it). The template never shows
+  under Pending. Other open invitations are handled in chat.
 - **Set up automatic checking** appears on a dismissible onboarding card when
   `fulcra_check_status` reports no schedule; it asks the chat to run
   `set-up-agent-contacts`. The app never creates schedules.
@@ -162,7 +176,9 @@ earliest matching first message, marks the code consumed, shares our outbox with
 that owner only, verifies the grant and marks it `completed`. Ties, duplicates and
 incomplete history fail closed; uncertain shares are not retried. Open invitations
 keep the template private and create a separate outbox per responder, labeled
-`<sender> via <identifier>`.
+`<sender> via <identifier>`. The standing template's saved name (a
+`standing_invitation_inviter: "<name>"` description line) is never copied to
+responder outboxes, which are named after their label.
 
 `create_share` refuses any grant covering invitation or preference storage.
 Storage has no compare-and-swap; a worker lock serializes one process only.

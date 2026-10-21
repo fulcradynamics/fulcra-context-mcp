@@ -1,4 +1,5 @@
 import { icon, X } from './icons.js';
+import { hostLabel } from './host-label.js';
 
 // A small vanilla toast, in the spirit of Sonner (the emil-design-eng skill):
 // good defaults, CSS transitions (not keyframes) so stacking/removal stay smooth,
@@ -53,7 +54,7 @@ export function showToast(doc, options) {
 
 // Full-panel handoffs continue in the host conversation.
 export function continueMessage(app) {
-  const host = app.getHostVersion()?.name;
+  const host = hostLabel(app.getHostVersion()?.name);
   return `Open ${host ? `your ${host} chat` : 'your chat'} to continue.`;
 }
 

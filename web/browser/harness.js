@@ -44,6 +44,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    window.calls.push(r.params); const {name,arguments:a}=r.params;
    if(name==='fulcra_check_status'){reply(r.id,window.checkStatus?{structuredContent:window.checkStatus}:{isError:true});return;}
    if(name==='create_agent_invitation'){reply(r.id,window.failInvite?{isError:true,content:[{type:'text',text:'Synthetic denial.'}]}:{structuredContent:{status:'prepared',own_userid:own,code:'0123456789abcdef0123456789abcdef',topic:'handshake 0123456789abcdef0123456789abcdef',data_type:out,identifier:a.recipient_name+"'s agent",shared_with:a.recipient_userid??null}});return;}
+   if(name==='standing_agent_invitation'){if(a.inviter_name!==undefined)window.standingName=a.inviter_name;reply(r.id,window.failStanding?{isError:true,content:[{type:'text',text:'Synthetic denial.'}]}:{structuredContent:{status:'prepared',own_userid:own,code:'f'.repeat(32),topic:'open_invitation '+'f'.repeat(32),data_type:'Event/standing',inviter_name:window.standingName??''}});return;}
    if(name==='end_agent_contact'){window.excludeOut=true;reply(r.id,{structuredContent:{ended:true,archived:a.archive,status:'ended'}});return;}
    if(name==='match_agent_invitations'){
     const respond=()=>reply(r.id,{structuredContent:{results:window.invitationMatches ?? []}});

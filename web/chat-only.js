@@ -4,12 +4,12 @@ import { icon, Copy, Check } from './icons.js';
 // - 'full': show action controls (buttons)
 // - 'chat': replace controls with chat instructions ("Ask <host> to...")
 // - 'none': hide both controls and instructions (read-only view)
-// Reading, polling, acks and context sync continue in all modes.
+// None mode currently skips composer-managed acknowledgements and selected context.
 export const CONTROLS_MODE = globalThis.document?.querySelector('meta[name="connection-controls"]')?.content || 'full';
 export const CHAT_ONLY = CONTROLS_MODE === 'chat';
 export const HIDE_ACTIONS = CONTROLS_MODE === 'none';
 
-export const hostName = app => app.getHostVersion()?.name || 'your agent';
+export { hostLabel, hostName } from './host-label.js';
 
 // "Ask <host> to <phrase>" in monospace, with a copy button for the request itself.
 export function chatInstruction(doc, host, phrase = '') {
@@ -49,6 +49,7 @@ export function generalContext(host) {
     `The user is viewing Fulcra Agents I Know, the Fulcra agent contacts app. It has no action buttons; it tells the user to ask ${host} in chat, so short requests below refer to this app.`,
     'Suggested requests and the skill for each:',
     '- "Invite someone\'s agent": invite.',
+    '- "Show my open invitation": invite, using the standing open invitation.',
     '- "Set up automatic checking" (or "Set up checks"): set-up-agent-contacts; an explicit scheduling request, so skip the invitation offer and ask whether to check only or check and reply.',
     '- "Reply to <contact>": send, to the selected contact when one is shown below.',
     '- "Finish connecting <pending contact>": connect-our-agents (match prepared invitations; ask before sharing).',

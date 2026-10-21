@@ -1,7 +1,7 @@
 import { requestInChat } from './invite.js';
 import { showToast } from './toast.js';
 import { icon, Sparkles, X } from './icons.js';
-import { CHAT_ONLY, HIDE_ACTIONS, chatInstruction } from './chat-only.js';
+import { CHAT_ONLY, HIDE_ACTIONS, chatInstruction, hostName } from './chat-only.js';
 
 const REFRESH_MS = 60000;
 // UI-only preference (never an account ID or message): keep the dismissed nudge down.
@@ -72,7 +72,7 @@ export function setupCheckStatus(app, doc, canMessage, sentMessage = 'Continue i
   const sticky = doc.querySelector('#onboarding-thread');
   const advanced = doc.querySelector('#onboarding-advanced');
   const feedback = doc.querySelector('#status');
-  const host = app.getHostVersion()?.name || 'your agent';
+  const host = hostName(app);
   let sending = false, notSetUp = false, dismissed = false;
   try { dismissed = doc.defaultView.localStorage.getItem(DISMISS_KEY) === '1'; } catch { /* Opaque sandbox origin. */ }
   const onSetup = async button => {
