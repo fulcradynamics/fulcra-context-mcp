@@ -43,8 +43,8 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
     # Keep the actual get_fulcra_object and HTTP OAuth middleware. No real
     # credentials are loaded and no API object capable of networking is created.
     monkeypatch.setattr(settings, "fulcra_environment", "test")
-    factory = Mock(side_effect=lambda **kwargs: fake if kwargs["credentials"] is creds else other)
-    monkeypatch.setattr(credentials, "FulcraAPI", factory)
+    factory = Mock(side_effect=lambda grant_id, **kwargs: fake if kwargs["credentials"] is creds else other)
+    monkeypatch.setattr(credentials, "GrantFulcraAPI", factory)
     monkeypatch.setattr(oauth_provider, "credentials_for_token",
                         lambda token: {"mcp_test": ("synthetic-grant", creds),
                                        "mcp_other": ("synthetic-other-grant", other_creds)}.get(token))
@@ -88,7 +88,7 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
         factory.side_effect = RuntimeError("backend offline")
         for query in ["anyquery", "Agent Contacts", "unmatched"]:
             assert (await rpc("tools/call", {"name": "agent_contacts_search", "arguments": {"query": query}}))["result"]["isError"]
-        factory.side_effect = lambda **kwargs: fake if kwargs["credentials"] is creds else other
+        factory.side_effect = lambda grant_id, **kwargs: fake if kwargs["credentials"] is creds else other
         # Old references continue to resolve only with current account authorization.
         read = {"uri": "contacts://threads/id-peer%2F%252F"}
         resource, = (await rpc("resources/read", read))["result"]["contents"]
