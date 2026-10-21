@@ -5,7 +5,10 @@ import { icon, Copy, Check } from './icons.js';
 // ask the host, so there is one way to act. Reading, polling, acks and context sync continue.
 export const CHAT_ONLY = globalThis.document?.querySelector('meta[name="connection-controls"]')?.content === 'chat';
 
-export const hostName = app => app.getHostVersion()?.name || 'your agent';
+// Friendly display names for known hosts; unknown hosts fall back to their raw name.
+const HOST_LABELS = { chatgpt: 'ChatGPT' };
+export const hostLabel = raw => raw ? (HOST_LABELS[raw.toLowerCase()] ?? raw) : raw;
+export const hostName = app => hostLabel(app.getHostVersion()?.name) || 'your agent';
 
 // "Ask <host> to <phrase>" in monospace, with a copy button for the request itself.
 export function chatInstruction(doc, host, phrase = '') {
