@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
+import pytest
 from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 
@@ -91,3 +92,36 @@ def test_refresh_still_happens_when_actually_expired():
     # Fresh now: a further call is a no-op rather than another rotation.
     assert api.refresh_access_token() is True
     assert api.oidc.refresh_credentials.call_count == 1
+
+
+needs_refresh_credentials = pytest.mark.skipif(
+    not hasattr(FulcraAPI, "refresh_credentials"),
+    reason="fulcra-api before PLAT-829 has no refresh_credentials",
+)
+
+
+@needs_refresh_credentials
+def test_refresh_credentials_is_serialized_too():
+    """Newer fulcra-api refreshes through refresh_credentials (an expiring
+    token, or a 401), bypassing refresh_access_token."""
+    api = SynchronizedFulcraAPI(credentials=_expired())
+    api.oidc = _slow_oidc()
+    threads = [threading.Thread(target=api.refresh_credentials) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert api.oidc.refresh_credentials.call_count == 1
+    assert api.fulcra_credentials.refresh_token == "r2"
+
+
+@needs_refresh_credentials
+def test_refresh_credentials_refreshes_a_valid_token_when_asked():
+    # A 401 means the server rejected a token that looks valid.
+    creds = _expired()
+    creds.access_token_expiration = datetime.now() + timedelta(hours=1)
+    api = SynchronizedFulcraAPI(credentials=creds)
+    api.oidc = _slow_oidc()
+    api.refresh_credentials()
+    assert api.oidc.refresh_credentials.call_count == 1
+    assert api.fulcra_credentials.access_token == "new"

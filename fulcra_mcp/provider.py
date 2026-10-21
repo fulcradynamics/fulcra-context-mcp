@@ -3,6 +3,7 @@ import json
 import secrets
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import structlog
@@ -41,7 +42,16 @@ def _is_newer(candidate: FulcraCredentials, current: FulcraCredentials) -> bool:
         return False
     if current.access_token_expiration is None:
         return True
-    return candidate.access_token_expiration > current.access_token_expiration
+    return aware(candidate.access_token_expiration) > aware(
+        current.access_token_expiration
+    )
+
+
+def aware(dt: datetime) -> datetime:
+    """``dt`` with a timezone: fulcra-api before PLAT-829 stamps expirations
+    as naive local time, later releases as aware, and grant files written by
+    either may be compared."""
+    return dt if dt.tzinfo is not None else dt.astimezone()
 
 
 def _copy_credentials(src: FulcraCredentials, dst: FulcraCredentials) -> None:
@@ -120,7 +130,7 @@ class FulcraOAuthProvider(OAuthProvider):
         self.grant_credentials: dict[str, FulcraCredentials] = {}
         self.token_grant: dict[str, str] = {}
         self.refresh_grant: dict[str, str] = {}
-        self._grant_locks: dict[str, threading.Lock] = {}
+        self._grant_locks: dict[str, threading.RLock] = {}
         self._grant_locks_guard = threading.Lock()
 
     # ------------------------------------------------------------------ paths
@@ -143,13 +153,15 @@ class FulcraOAuthProvider(OAuthProvider):
 
     # ----------------------------------------------------------------- grants
 
-    def grant_lock(self, grant_id: str) -> threading.Lock:
+    def grant_lock(self, grant_id: str) -> threading.RLock:
         """Per-grant lock; hold it while refreshing the Fulcra token so two
-        concurrent tool calls cannot both spend the same Auth0 refresh token."""
+        concurrent tool calls cannot both spend the same Auth0 refresh token.
+        Reentrant, because the up-front refresh in fulcra_for_grant holds it
+        while fulcra-api calls back into GrantFulcraAPI.refresh_credentials."""
         with self._grant_locks_guard:
             lock = self._grant_locks.get(grant_id)
             if lock is None:
-                lock = self._grant_locks[grant_id] = threading.Lock()
+                lock = self._grant_locks[grant_id] = threading.RLock()
             return lock
 
     def save_grant(self, grant_id: str) -> bool:
