@@ -28,10 +28,12 @@
   --lavender: #9c88ff;     /* fulcra-lavender-75 */
   --teal-tint: rgba(86, 214, 183, 0.1);
   --teal-tint-hover: rgba(86, 214, 183, 0.18);
+
   /* Chat prompts use purple instead of teal */
   --chat-prompt: #7b61ff;  /* fulcra-purple for chat instructions */
   --chat-prompt-success: #7b61ff;
   --violet-tint: rgba(123, 97, 255, 0.12);
+  --selected-tint: rgba(59, 130, 246, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
@@ -48,8 +50,8 @@
 }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
-.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
-#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
+.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; margin-top: 12px; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-bottom: 0; border-radius: 12px 12px 0 0; }
 /* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
 #connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
 #connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
@@ -67,7 +69,7 @@
 body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
 body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
 body .thread-button { padding: 12px 8px; gap: 4px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--violet-tint); }
+body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--selected-tint); }
 .thread-button .thread-text { display: contents; }
 .thread-name { grid-column: 1; grid-row: 1; }
 .thread-time { grid-column: 2; grid-row: 1; }
@@ -109,7 +111,7 @@ body .section-tag, body .list-intro { display: none; }
 body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
 body .row-avatar-wrap { display: contents; }
 /* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
-body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #f0506b; font-size: 0; color: transparent; }
+body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #3b82f6; font-size: 0; color: transparent; }
 body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
 body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
 body .pending-row .thread-text { min-width: 0; }
@@ -154,9 +156,10 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 .app-dialog .dialog-actions { margin-top: 6px; }
 .app-dialog .dialog-actions .dialog-ghost { margin-right: auto; }
 /* Secondary path: hand the invite to the agent in chat, set apart from Create. */
-.app-dialog .dialog-alt { border-top: 1px solid var(--divider); margin-top: 18px; padding-top: 16px; display: grid; gap: 10px; }
+.app-dialog .dialog-alt { margin-top: 14px; display: grid; gap: 10px; }
 .app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-.app-dialog .dialog-alt-action { justify-self: start; min-height: 0; padding: 7px 11px; font-size: 12px; }
+/* Confirmation after copying the invitation: green so it clearly stands out. */
+.dialog-copied.copy-success { color: var(--teal); font-weight: 500; }
 .app-dialog button:active:not(:disabled) { transform: scale(.98); }
 #invite-template { font-size: 13px; margin-bottom: 8px; }
 button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
@@ -174,7 +177,11 @@ main {
     calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
     calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
 }
-.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.brand { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+/* "Copy open invitation" sits top-right, aligned with the title, styled like the
+   composer's gray secondary button (a touch larger than the rail CTAs). */
+#open-invite { flex: none; background: var(--raised); color: #fff; font-weight: 500; }
+#open-invite:hover:not(:disabled) { background: #2d2d34; }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
 .brand img { flex: none; }
@@ -262,11 +269,17 @@ textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
 ul, ol { list-style: none; padding: 0; margin: 0; }
 #connections > li, #pending-connections > li, #legacy-connections > li { padding: 10px 8px; }
 #connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
+/* Subtle divider between rows in each section. */
+#connections > li + li, #pending-connections > li + li, #legacy-connections > li + li { border-top: 1px solid rgba(255, 255, 255, .06); }
 /* Pending rows match legacy rows: text column, then a right-aligned action. */
 .pending-row { display: flex; align-items: center; gap: 8px; }
 #pending-connections .pending-label { font-weight: 500; }
 .pending-assist { flex: none; }
-#connections-empty p { margin: 0 0 12px; font-size: 13px; }
+/* Empty state echoes an auto-selected contact row (selected tint + name/preview)
+   so the rail keeps its shape before any contacts exist. */
+.empty-card { padding: 12px 8px; border-radius: 8px; background: var(--selected-tint); }
+.empty-card-title { margin: 0; font-size: 15px; font-weight: 500; color: #fff; }
+.empty-card-detail { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
 #pending-connections p { margin: 2px 0 0; }
 #connections > li:hover { background: var(--row-hover); }
 /* Legacy rows aren't clickable as a whole (the Convert button is the action), so
@@ -356,7 +369,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
 .contact-headings { min-width: 0; flex: 1; }
 .contact-name { display: flex; align-items: center; gap: 4px; }
-.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #6a6a71; transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
 .identity-info:hover:not(:disabled), .identity-info[aria-expanded='true'] { background: var(--raised); color: #fff; }
 .identity-info:active:not(:disabled) { transform: scale(.92); filter: none; }
 .contact-headings h2 { margin: 0; }
@@ -397,12 +410,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 /* Unread indicator: a small badge on the avatar's upper-left corner, ringed in
    the row background so it reads as a notification dot. Hidden (not removed) so
    row layout never shifts. */
-.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #f0506b; border: 2px solid var(--surface); visibility: hidden; }
+.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #3b82f6; border: 2px solid var(--surface); visibility: hidden; }
 .unread-dot.on { visibility: visible; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 /* The flex footer is always pinned, including short and empty histories. */
-#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-radius: 16px; padding: 12px 14px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */
@@ -482,7 +495,7 @@ html { overflow-anchor: none; }
 @media (prefers-contrast: more) {
   :root { --muted: #c5c5cc; --divider: #8a8a8e; }
   #contact-identity { background: var(--surface); backdrop-filter: none; border-color: #fff; }
-  .thread-button[aria-current='true'] { outline: 1px solid var(--lavender); outline-offset: -1px; }
+  .thread-button[aria-current='true'] { outline: 1px solid #60a5fa; outline-offset: -1px; }
   .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
 }
 
@@ -499,15 +512,20 @@ html { overflow-anchor: none; }
 
 /* A quiet explanation, not a simulated conversation or another card. */
 .app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 72px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
 .welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
 #welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
-.welcome-content > p.welcome-note { font-size: 12px; margin-top: 12px; color: #6a6a71; }
-#invite-welcome { min-height: 44px; }
+/* Each welcome CTA gets its own block with a short, plain-language description. */
+.welcome-actions { display: flex; flex-direction: column; gap: 18px; }
+.welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#invite-welcome, #open-invite-welcome { min-height: 44px; }
+.welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }
+#standing-template { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c7c7cc; }
+.app-dialog .dialog-field-label { margin-bottom: -6px; }
 @media (hover: hover) and (pointer: fine) {
   #invite-welcome:active { transform: scale(.97); }
 }

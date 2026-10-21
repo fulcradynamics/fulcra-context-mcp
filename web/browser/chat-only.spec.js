@@ -14,11 +14,12 @@ test('chat-only replaces controls with copyable instructions and keeps context',
   await expect(ui.locator('#thread-composer textarea')).toHaveCount(0);
   await expect(instruction('Ask synthetic to reply to Weekend')).toBeVisible();
   await expect(instruction('Ask synthetic to invite someone’s agent').first()).toBeVisible();
+  await expect(instruction('Ask synthetic to show my open invitation').first()).toBeVisible();
   await expect(instruction('Ask synthetic to set up automatic checking').first()).toBeVisible();
-  // Monospace and teal, but not a button.
+  // Monospace and purple, but not a button.
   const style = await instruction('reply to Weekend').evaluate(el => ({
     font: getComputedStyle(el).fontFamily, color: getComputedStyle(el).color, role: el.getAttribute('role') }));
-  expect(style.font).toMatch(/mono/i); expect(style.color).toBe('rgb(86, 214, 183)'); expect(style.role).toBeNull();
+  expect(style.font).toMatch(/mono/i); expect(style.color).toBe('rgb(123, 97, 255)'); expect(style.role).toBeNull();
 
   // The copy button copies the request without "Ask <host> to".
   const reply = instruction('reply to Weekend');

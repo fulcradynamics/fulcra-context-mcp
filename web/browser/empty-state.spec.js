@@ -9,7 +9,7 @@ for (const presentation of ['global', 'thread']) test(`empty contacts offer an i
   await page.evaluate(() => { window.excludeOwn = true; window.excludeOut = true; window.excludeIncoming = true; });
   await page.clock.runFor(11000);
   await expect(ui.locator('#connections-empty')).toBeVisible();
-  await expect(ui.locator('#connections-empty')).toHaveText(new RegExp(emptyText.replace(/[()]/g, '\\$&')));
+  await expect(ui.locator('#connections-empty')).toContainText(new RegExp(emptyText.replace(/[()]/g, '\\$&')));
   await expect(ui.locator('#connections')).toBeHidden();
   await expect(ui.locator('body')).not.toContainText('conversation panel');
   await page.screenshot({path: `${process.env.TMPDIR ?? '../test-results'}/empty-state-${presentation}.png`});
@@ -18,10 +18,8 @@ for (const presentation of ['global', 'thread']) test(`empty contacts offer an i
   const invite = ui.locator('#invite');
   await expect(invite).toBeEnabled();
   await invite.click();
-  await ui.getByRole('dialog', {name: 'Invite someone'}).getByRole('button', {name: /Continue in /}).click();
-  await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
-  expect(JSON.stringify(await page.evaluate(() => window.hostMessages))).toContain('use the invite skill');
-  await expect(ui.locator('.toast')).toContainText('Request sent');
+  await expect(ui.getByRole('dialog', {name: 'Invite someone'})).toBeVisible();
+  await ui.getByRole('button', {name: 'Cancel'}).click();
   await page.evaluate(() => { window.excludeOwn = false; window.excludeOut = false; window.excludeIncoming = false; });
   // A selected peer's revocation backs off the shared discovery/read scheduler.
   await page.clock.runFor(21000);

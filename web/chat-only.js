@@ -9,7 +9,10 @@ export const CONTROLS_MODE = globalThis.document?.querySelector('meta[name="conn
 export const CHAT_ONLY = CONTROLS_MODE === 'chat';
 export const HIDE_ACTIONS = CONTROLS_MODE === 'none';
 
-export const hostName = app => app.getHostVersion()?.name || 'your agent';
+// Friendly display names for known hosts; unknown hosts fall back to their raw name.
+const HOST_LABELS = { chatgpt: 'ChatGPT' };
+export const hostLabel = raw => raw ? (HOST_LABELS[raw.toLowerCase()] ?? raw) : raw;
+export const hostName = app => hostLabel(app.getHostVersion()?.name) || 'your agent';
 
 // "Ask <host> to <phrase>" in monospace, with a copy button for the request itself.
 export function chatInstruction(doc, host, phrase = '') {
@@ -49,6 +52,7 @@ export function generalContext(host) {
     `The user is viewing Fulcra Agents I Know, the Fulcra agent contacts app. It has no action buttons; it tells the user to ask ${host} in chat, so short requests below refer to this app.`,
     'Suggested requests and the skill for each:',
     '- "Invite someone\'s agent": invite.',
+    '- "Show my open invitation": invite, using the standing open invitation.',
     '- "Set up automatic checking" (or "Set up checks"): set-up-agent-contacts; an explicit scheduling request, so skip the invitation offer and ask whether to check only or check and reply.',
     '- "Reply to <contact>": send, to the selected contact when one is shown below.',
     '- "Finish connecting <pending contact>": connect-our-agents (match prepared invitations; ask before sharing).',

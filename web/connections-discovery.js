@@ -4,6 +4,7 @@ import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
 
+export const STANDING_INVITATION = 'connect-our-agents-standing-invitation';
 const prefix = 'Available data types, grouped by compatible tool: ';
 
 export function parseConnections(result) {
@@ -92,7 +93,8 @@ export async function discoverThreads(app) {
     if (owner === own) {
       const covering = shares.outgoing.filter(s => covers(s, entry.id));
       if (!covering.length) {
-        if (connection) pending.push(source);
+        // The standing open invitation is a private template, not a contact.
+        if (connection && entry.name !== STANDING_INVITATION) pending.push(source);
         continue;
       }
       const grants = covering.map(s => s.data_types?.[0] === entry.id && directRecipients(s));
