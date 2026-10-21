@@ -218,12 +218,12 @@ async def test_expired_fulcra_token_is_refreshed_before_use(hosted, monkeypatch)
 
     fake_api.refresh_access_token.side_effect = refresh_ok
 
-    def fake_ctor(**kwargs):
+    def fake_ctor(grant_id, **kwargs):
         fake_api.refresh_callback = kwargs["refresh_callback"]
         assert kwargs["credentials"] is creds
         return fake_api
 
-    monkeypatch.setattr(credentials_module, "FulcraAPI", fake_ctor)
+    monkeypatch.setattr(credentials_module, "GrantFulcraAPI", fake_ctor)
 
     assert credentials_module.get_fulcra_object() is fake_api
     assert creds.access_token == "auth0-access-v2"
@@ -236,7 +236,7 @@ async def test_failed_fulcra_refresh_raises_actionable_error(hosted, monkeypatch
     use_token(monkeypatch, tokens.access_token)
     fake_api = create_autospec(FulcraAPI, instance=True)
     fake_api.refresh_access_token.return_value = False
-    monkeypatch.setattr(credentials_module, "FulcraAPI", lambda **kw: fake_api)
+    monkeypatch.setattr(credentials_module, "GrantFulcraAPI", lambda grant_id, **kw: fake_api)
 
     with pytest.raises(ToolError, match="Reconnect the Fulcra connector"):
         credentials_module.get_fulcra_object()
@@ -332,7 +332,7 @@ async def test_expired_cache_picks_up_grant_refreshed_elsewhere(hosted, monkeypa
 
     fake_api = create_autospec(FulcraAPI, instance=True)
     fake_api.refresh_access_token.return_value = False
-    monkeypatch.setattr(credentials_module, "FulcraAPI", lambda **kw: fake_api)
+    monkeypatch.setattr(credentials_module, "GrantFulcraAPI", lambda grant_id, **kw: fake_api)
 
     assert credentials_module.get_fulcra_object() is fake_api
     fake_api.refresh_access_token.assert_not_called()
@@ -357,11 +357,11 @@ async def test_near_expiry_refreshes_up_front(hosted, monkeypatch):
 
     fake_api.refresh_access_token.side_effect = refresh_ok
 
-    def fake_ctor(**kwargs):
+    def fake_ctor(grant_id, **kwargs):
         fake_api.refresh_callback = kwargs["refresh_callback"]
         return fake_api
 
-    monkeypatch.setattr(credentials_module, "FulcraAPI", fake_ctor)
+    monkeypatch.setattr(credentials_module, "GrantFulcraAPI", fake_ctor)
 
     credentials_module.get_fulcra_object()
     fake_api.refresh_access_token.assert_called_once()
@@ -432,3 +432,58 @@ async def test_a_rotated_refresh_token_is_refused_to_another_client(state_path):
     other = CLIENT.model_copy(update={"client_id": "client-2"})
 
     assert await provider.load_refresh_token(other, first.refresh_token) is None
+
+
+# --- expiry timestamps from either fulcra-api release ---------------------------
+
+
+def test_needs_refresh_accepts_naive_and_aware_expirations():
+    from datetime import UTC
+
+    for now in (datetime.now(), datetime.now(UTC)):
+        soon = FulcraCredentials(
+            access_token="t", access_token_expiration=now + timedelta(seconds=30)
+        )
+        later = FulcraCredentials(
+            access_token="t", access_token_expiration=now + timedelta(hours=1)
+        )
+        assert credentials_module._needs_refresh(soon)
+        assert not credentials_module._needs_refresh(later)
+
+
+def test_is_newer_compares_naive_with_aware():
+    from datetime import UTC
+
+    from fulcra_mcp.provider import _is_newer
+
+    old = FulcraCredentials(
+        access_token="a", access_token_expiration=datetime.now()
+    )
+    new = FulcraCredentials(
+        access_token="b",
+        access_token_expiration=datetime.now(UTC) + timedelta(hours=1),
+    )
+    assert _is_newer(new, old)
+    assert not _is_newer(old, new)
+
+
+@pytest.mark.skipif(
+    not hasattr(FulcraAPI, "refresh_credentials"),
+    reason="fulcra-api before PLAT-829 has no refresh_credentials",
+)
+async def test_mid_request_refresh_adopts_a_grant_refreshed_elsewhere(hosted, monkeypatch):
+    """A refresh fulcra-api starts itself (a 401) holds the grant lock and
+    reuses a token another instance already wrote, instead of spending the
+    rotated-out refresh token."""
+    tokens = await login(hosted, fresh_creds("v1"))
+    grant_id, creds = hosted.credentials_for_token(tokens.access_token)
+    api = credentials_module.GrantFulcraAPI(grant_id, credentials=creds)
+
+    # another instance refreshed and wrote the grant file
+    hosted._grant_path(grant_id).write_text(fresh_creds("v2").to_json())
+
+    api.oidc = create_autospec(type(api.oidc), instance=True)
+    api.refresh_credentials()
+
+    api.oidc.refresh_credentials.assert_not_called()
+    assert api.fulcra_credentials.access_token == "auth0-access-v2"
