@@ -1,5 +1,5 @@
 import { icon, X } from './icons.js';
-import { hostLabel } from './chat-only.js';
+import { hostLabel } from './host-label.js';
 
 // A small vanilla toast, in the spirit of Sonner (the emil-design-eng skill):
 // good defaults, CSS transitions (not keyframes) so stacking/removal stay smooth,

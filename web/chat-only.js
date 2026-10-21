@@ -4,15 +4,12 @@ import { icon, Copy, Check } from './icons.js';
 // - 'full': show action controls (buttons)
 // - 'chat': replace controls with chat instructions ("Ask <host> to...")
 // - 'none': hide both controls and instructions (read-only view)
-// Reading, polling, acks and context sync continue in all modes.
+// None mode currently skips composer-managed acknowledgements and selected context.
 export const CONTROLS_MODE = globalThis.document?.querySelector('meta[name="connection-controls"]')?.content || 'full';
 export const CHAT_ONLY = CONTROLS_MODE === 'chat';
 export const HIDE_ACTIONS = CONTROLS_MODE === 'none';
 
-// Friendly display names for known hosts; unknown hosts fall back to their raw name.
-const HOST_LABELS = { chatgpt: 'ChatGPT' };
-export const hostLabel = raw => raw ? (HOST_LABELS[raw.toLowerCase()] ?? raw) : raw;
-export const hostName = app => hostLabel(app.getHostVersion()?.name) || 'your agent';
+export { hostLabel, hostName } from './host-label.js';
 
 // "Ask <host> to <phrase>" in monospace, with a copy button for the request itself.
 export function chatInstruction(doc, host, phrase = '') {

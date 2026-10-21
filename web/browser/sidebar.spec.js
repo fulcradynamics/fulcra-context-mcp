@@ -23,7 +23,8 @@ test('a successful handoff shows a host-named toast', async ({ page }) => {
 test('sidebar uses explicit unread badges without avatars on narrow screens', async ({ page }) => {
   const ui = await open(page, 390, { listOnly: true });
   await expect(ui.locator('.unread-dot.on')).toHaveText('Unread');
-  await expect(ui.locator('.row-avatar').first()).toBeHidden();
+  await expect(ui.locator('.row-avatar, .row-avatar-wrap')).toHaveCount(0);
+  await expect(ui.locator('.unread-dot.on')).toBeVisible();
   await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
   await expect(ui.locator('#connection-list')).toBeVisible();
   expect(await ui.locator('body').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);

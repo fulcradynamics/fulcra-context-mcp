@@ -108,8 +108,7 @@ body .section-tag, body .list-intro { display: none; }
 @keyframes copy-check { from { transform: scale(.8); } to { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
 * { box-sizing: border-box; }
-body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
-body .row-avatar-wrap { display: contents; }
+body .contact-avatar, body .bubble-avatar { display: none; }
 /* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
 body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #3b82f6; font-size: 0; color: transparent; }
 body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
@@ -286,14 +285,8 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
    the row itself doesn't highlight on hover. */
 .legacy-convert { flex: none; }
 
-/* Gradient initial avatar leading each contact row (matches the detail header),
-   wrapped so the unread badge can anchor to its corner. */
-.row-avatar-wrap { position: relative; flex: none; display: inline-flex; }
-.row-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--avatar-gradient); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; line-height: 1; }
-
-/* Thread rows: a full-width clickable button — a leading unread dot (reserving
-   its slot so avatars stay aligned), the gradient avatar, then a text column
-   (name, monospace peer id, latest-message preview). */
+/* Thread rows: a full-width clickable button with an unread badge and text
+   column (name, monospace peer id, latest-message preview). */
 .thread-button {
   display: flex;
   align-items: center;
@@ -407,9 +400,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 .composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .send-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
 .send-badge .send-spinner { flex: none; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
-/* Unread indicator: a small badge on the avatar's upper-left corner, ringed in
-   the row background so it reads as a notification dot. Hidden (not removed) so
-   row layout never shifts. */
+/* Unread visibility; the sidebar overrides positioning and sizing above. */
 .unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #3b82f6; border: 2px solid var(--surface); visibility: hidden; }
 .unread-dot.on { visibility: visible; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }

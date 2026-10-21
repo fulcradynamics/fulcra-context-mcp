@@ -14,8 +14,8 @@ MENU_ICONS = [
          mimeType="image/svg+xml", sizes=["any"], theme=theme)
     for theme in ("light", "dark")
 ]
-UI_URI = "ui://fulcra/contacts/v71.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v71.html"
+UI_URI = "ui://fulcra/contacts/v73.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v73.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 

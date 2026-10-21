@@ -44,9 +44,12 @@ test('Invite someone pre-fills the saved name', async ({page}) => {
   await expect(ui.getByRole('dialog', {name: 'Invite someone'}).getByLabel('Your name')).toHaveValue('Leif');
 });
 
-test('empty state shows both invite actions', async ({page}) => {
+test('welcome offers open and personal invitations with their explanations', async ({page}) => {
   const ui = await standing(page, {listOnly: true, autoSelect: false});
   const invite = ui.locator('#invite-welcome'), openInvite = ui.locator('#open-invite-welcome');
   await expect(openInvite).toBeVisible();
   await expect(invite).toBeVisible();
+  await expect(ui.locator('.welcome-action').filter({has: openInvite})).toContainText('each person who uses it connects with you');
+  await openInvite.click();
+  await expect(ui.getByRole('dialog', {name: 'Share this with anyone'})).toBeVisible();
 });
