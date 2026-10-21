@@ -70,8 +70,11 @@ def fulcra_open() -> dict[str, str]:
 def contacts_html_bundle() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
     html = files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")
-    if settings.fulcra_contacts_controls == "chat":
+    # Replace the meta tag content for "chat" or "none" modes
+    if settings.fulcra_contacts_controls != "full":
         html = html.replace('<meta name="connection-controls" content="full">',
-                            '<meta name="connection-controls" content="chat">', 1)
-    return html.replace('<meta name="connection-debug" content="true">',
+                            f'<meta name="connection-controls" content="{settings.fulcra_contacts_controls}">', 1)
+    # Apply debug mode setting
+    html = html.replace('<meta name="connection-debug" content="true">',
                         f'<meta name="connection-debug" content="{str(settings.fulcra_contacts_debug).lower()}">', 1)
+    return html

@@ -76,8 +76,14 @@ createServer(async (req, res) => {
       return res.end(hostBundle);
     }
     if (url === '/contacts.html') {
-      const html = (await readFile(appHtmlPath, 'utf8'))
+      let html = (await readFile(appHtmlPath, 'utf8'))
         .replace('</head>', `<style>:root{background:${DEV_BG} !important}</style></head>`);
+      // Respect FULCRA_CONTACTS_CONTROLS env var for dev testing ("full", "chat", or "none")
+      const mode = process.env.FULCRA_CONTACTS_CONTROLS;
+      if (mode === 'chat' || mode === 'none') {
+        html = html.replace('<meta name="connection-controls" content="full">',
+                           `<meta name="connection-controls" content="${mode}">`);
+      }
       res.writeHead(200, { 'content-type': 'text/html' });
       return res.end(html);
     }
