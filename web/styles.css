@@ -28,7 +28,7 @@
   --lavender: #9c88ff;     /* fulcra-lavender-75 */
   --teal-tint: rgba(86, 214, 183, 0.1);
   --teal-tint-hover: rgba(86, 214, 183, 0.18);
-  --violet-tint: rgba(123, 97, 255, 0.12);
+  --selected-tint: rgba(59, 130, 246, 0.12);
   --row-hover: rgba(0, 0, 0, 0.25);
   --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
   --avatar-gradient: linear-gradient(135deg, #227a66, #4a34ad); /* darkened fulcra-teal → fulcra-purple */
@@ -46,7 +46,7 @@
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
 .contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; }
-#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border-radius: 12px; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-radius: 12px; }
 /* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
 #connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
 #connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
@@ -64,7 +64,7 @@
 body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
 body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
 body .thread-button { padding: 12px 8px; gap: 4px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--violet-tint); }
+body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--selected-tint); }
 .thread-button .thread-text { display: contents; }
 .thread-name { grid-column: 1; grid-row: 1; }
 .thread-time { grid-column: 2; grid-row: 1; }
@@ -106,7 +106,7 @@ body .section-tag, body .list-intro { display: none; }
 body .row-avatar, body .contact-avatar, body .bubble-avatar { display: none; }
 body .row-avatar-wrap { display: contents; }
 /* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
-body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #f0506b; font-size: 0; color: transparent; }
+body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #3b82f6; font-size: 0; color: transparent; }
 body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
 body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
 body .pending-row .thread-text { min-width: 0; }
@@ -268,7 +268,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .pending-assist { flex: none; }
 /* Empty state echoes an auto-selected contact row (selected tint + name/preview)
    so the rail keeps its shape before any contacts exist. */
-.empty-card { padding: 12px 8px; border-radius: 8px; background: var(--violet-tint); }
+.empty-card { padding: 12px 8px; border-radius: 8px; background: var(--selected-tint); }
 .empty-card-title { margin: 0; font-size: 15px; font-weight: 500; color: #fff; }
 .empty-card-detail { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
 #pending-connections p { margin: 2px 0 0; }
@@ -360,7 +360,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
 .contact-headings { min-width: 0; flex: 1; }
 .contact-name { display: flex; align-items: center; gap: 4px; }
-.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #6a6a71; transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
 .identity-info:hover:not(:disabled), .identity-info[aria-expanded='true'] { background: var(--raised); color: #fff; }
 .identity-info:active:not(:disabled) { transform: scale(.92); filter: none; }
 .contact-headings h2 { margin: 0; }
@@ -401,12 +401,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 /* Unread indicator: a small badge on the avatar's upper-left corner, ringed in
    the row background so it reads as a notification dot. Hidden (not removed) so
    row layout never shifts. */
-.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #f0506b; border: 2px solid var(--surface); visibility: hidden; }
+.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #3b82f6; border: 2px solid var(--surface); visibility: hidden; }
 .unread-dot.on { visibility: visible; }
 #thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
 
 /* The flex footer is always pinned, including short and empty histories. */
-#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid var(--divider); border-radius: 16px; padding: 12px 14px; }
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-radius: 16px; padding: 12px 14px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */
@@ -486,7 +486,7 @@ html { overflow-anchor: none; }
 @media (prefers-contrast: more) {
   :root { --muted: #c5c5cc; --divider: #8a8a8e; }
   #contact-identity { background: var(--surface); backdrop-filter: none; border-color: #fff; }
-  .thread-button[aria-current='true'] { outline: 1px solid var(--lavender); outline-offset: -1px; }
+  .thread-button[aria-current='true'] { outline: 1px solid #60a5fa; outline-offset: -1px; }
   .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
 }
 
