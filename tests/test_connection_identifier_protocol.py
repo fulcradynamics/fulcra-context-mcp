@@ -29,7 +29,7 @@ async def test_contact_identifier_http_auth_and_contract(tmp_path, monkeypatch):
     fake.fulcra_api.side_effect = transport
     creds = FulcraCredentials(access_token='synthetic', access_token_expiration=datetime.now() + timedelta(hours=1))
     monkeypatch.setattr(settings, 'fulcra_environment', 'test')
-    monkeypatch.setattr(credentials, 'FulcraAPI', lambda **kwargs: fake)
+    monkeypatch.setattr(credentials, 'GrantFulcraAPI', lambda grant_id, **kwargs: fake)
     monkeypatch.setattr(oauth_provider, 'credentials_for_token', lambda token: ('synthetic', creds) if token == 'mcp_test' else None)
     call = {'name': 'set_contact_identifier', 'arguments': {'data_type': type_id, 'identifier': 'Travel'}}
     async with mcp_client(tmp_path) as http:
