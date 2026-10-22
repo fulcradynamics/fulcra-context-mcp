@@ -159,7 +159,7 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 .app-dialog .dialog-actions .dialog-copied:not(:empty) { display: inline-flex; align-items: center; gap: 4px; }
 .dialog-copied.copy-success { color: #34c759; font-weight: 500; }
 .app-dialog button:active:not(:disabled) { transform: scale(.98); }
-#invite-template { font-size: 13px; margin-bottom: 8px; }
+#invite-template { font-size: 13px; margin-bottom: 12px; }
 button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
 button.danger:hover:not(:disabled) { background: #ff8a802e; }
 #end-contact { align-self: flex-start; }

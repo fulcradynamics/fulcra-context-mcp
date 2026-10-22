@@ -115,10 +115,11 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
     const copied = doc.createElement('p'); copied.className = 'meta dialog-copied'; copied.setAttribute('role', 'status');
     const done = doc.createElement('div'); done.className = 'dialog-actions';
     const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
-    const finish = doc.createElement('button'); finish.type = 'button'; finish.textContent = 'Done';
+    copy.prepend(icon(Copy, 'btn-icon'));
+    const finish = doc.createElement('button'); finish.type = 'button'; finish.className = 'dialog-ghost'; finish.textContent = 'Done';
     copy.addEventListener('click', () => copyTemplate(doc, area, copied));
     finish.addEventListener('click', close);
-    done.append(copied, finish, copy);
+    done.append(finish, copied, copy);
     form.replaceWith(note, area, done);
     copy.focus();
   }
