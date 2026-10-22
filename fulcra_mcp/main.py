@@ -120,6 +120,12 @@ async def menu_icon_dark() -> Response:
     return FileResponse(STATIC_DIR / "menu-dark.svg", media_type="image/svg+xml")
 
 
+@app.get("/favicon.png", include_in_schema=False)
+async def favicon() -> Response:
+    """Serve favicon.png from repo root for menu thumbnails."""
+    return FileResponse(Path(__file__).parent.parent / "favicon.png", media_type="image/png")
+
+
 # The MCP Server Card (SEP-2127): static metadata a client can read before
 # connecting, at the location the spec reserves (<streamable-http-url>/server-card).
 # Built from server.json. An explicit route, so it's matched before the /mcp mount.

@@ -8,11 +8,10 @@ from mcp.types import Icon
 from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
-# MCP Icon.theme names the host background, independent of the app's dark UI.
+# Use favicon.png for menu thumbnails (works on both light and dark backgrounds)
 MENU_ICONS = [
-    Icon(src=f"https://mcp.fulcradynamics.com/menu-{theme}.svg",
-         mimeType="image/svg+xml", sizes=["any"], theme=theme)
-    for theme in ("light", "dark")
+    Icon(src="https://mcp.fulcradynamics.com/favicon.png",
+         mimeType="image/png", sizes=["512x512"])
 ]
 UI_URI = "ui://fulcra/contacts/v75.html"
 THREAD_UI_URI = "ui://fulcra/contacts/thread/v75.html"
