@@ -3,7 +3,7 @@ import { open, readOnlyThread } from './harness.js';
 
 for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
   test(`debug display preserves explicit selection and pane ownership at ${width}x${height}`, async ({ page }) => {
-    const ui = await open(page, width, readOnlyThread);
+    const ui = await open(page, width, { ...readOnlyThread, debug: true });
     await page.locator('iframe').evaluate((el, h) => el.style.height = `${h}px`, height);
     await expect(ui.locator('#messages li')).toHaveCount(6);
     const row = ui.locator('.thread-button[aria-current="true"]');
@@ -46,7 +46,7 @@ for (const [width, height] of [[900, 700], [390, 600], [320, 600]]) {
     expect(bounds.railBottom).toBe(height);
     expect(Math.abs(bounds.composerBottom - height / 2)).toBeLessThan(1);
     expect(bounds.messageBottom).toBeLessThanOrEqual(bounds.composerTop);
-    await page.screenshot({ path: `${process.env.TMPDIR}/plat808-debug-${width}.png` });
+    await page.screenshot({ path: `test-results/debug-${width}.png` });
     await ui.locator('#advanced-toggle').click();
     await ui.getByRole('button', { name: 'Reset to live', exact: true }).click();
     await expect(ui.locator('#messages li')).toHaveCount(6);

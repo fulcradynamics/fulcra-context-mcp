@@ -29,15 +29,15 @@ selected. A user's own click always wins over a late launch result.
 ## Debug menu configuration
 
 `FULCRA_CONTACTS_DEBUG` controls only **Advanced → Debug**.
-It defaults to **true (visible)**. Like other typed
+It defaults to **false (hidden)**; set it to `true` to opt in. Like other typed
 server settings, it uses Pydantic boolean parsing: `1`, `true`, `on`, `yes`, `y`,
 `t` enable it; `0`, `false`, `off`, `no`, `n`, `f` disable it (case-insensitive).
 Invalid values, including an empty string, fail settings validation at startup.
 Restart the server and reopen the app after changing the environment.
 
 All three contact resources carry a `connection-debug` meta value of `true` or
-`false`. The frontend omits Debug controls only for `false`; a standalone bundle
-or missing meta keeps previews available. Other Advanced controls, the dark UI,
+`false`. The frontend shows Debug controls only for `true`; a standalone bundle
+or missing meta hides them. Other Advanced controls, the dark UI,
 and authoritative live actions/context are unchanged. This is a display setting,
 not an authorization boundary.
 
