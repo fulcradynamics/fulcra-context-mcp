@@ -2,7 +2,7 @@ import { getContextLifecycle } from './native-context.js';
 import { invitationTemplate } from './invite-template.js';
 import { spinButton, showToast } from './toast.js';
 import { hostLabel } from './host-label.js';
-import { icon, Copy } from './icons.js';
+import { icon, Copy, Check } from './icons.js';
 
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
@@ -118,8 +118,8 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
     const finish = doc.createElement('button'); finish.type = 'button'; finish.textContent = 'Done';
     copy.addEventListener('click', () => copyTemplate(doc, area, copied));
     finish.addEventListener('click', close);
-    done.append(finish, copy);
-    form.replaceWith(note, area, copied, done);
+    done.append(copied, finish, copy);
+    form.replaceWith(note, area, done);
     copy.focus();
   }
   dialog.showModal(); inviter.focus();
@@ -135,7 +135,7 @@ async function copyTemplate(doc, area, status) {
   try { await doc.defaultView.navigator.clipboard.writeText(area.value); ok = true; } catch { /* try fallback */ }
   if (!ok) { try { area.focus(); area.select(); ok = doc.execCommand('copy'); } catch { ok = false; } }
   status.classList.toggle('copy-success', ok);
-  if (ok) status.textContent = 'Copied';
+  if (ok) { status.textContent = 'Copied'; status.prepend(icon(Check, 'btn-icon', 14)); }
   else { area.focus(); area.select(); status.textContent = 'Could not copy. Select and copy the text manually.'; }
 }
 
@@ -180,8 +180,8 @@ export async function openStandingInvitation(app, doc, status, button) {
   const done = doc.createElement('button'); done.type = 'button'; done.className = 'dialog-ghost'; done.textContent = 'Done';
   const copy = doc.createElement('button'); copy.type = 'button'; copy.className = 'primary'; copy.textContent = 'Copy invitation';
   copy.prepend(icon(Copy, 'btn-icon'));
-  actions.append(done, copy);
-  form.append(nameLabel, areaLabel, area, note, error, actions);
+  actions.append(done, note, copy);
+  form.append(nameLabel, areaLabel, area, error, actions);
   dialog.append(title, intro, form); doc.body.append(dialog);
   const close = () => { dialog.close(); dialog.remove(); if (button.isConnected) button.focus(); };
   dialog.addEventListener('cancel', e => { e.preventDefault(); close(); });
