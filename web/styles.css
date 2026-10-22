@@ -508,7 +508,7 @@ html { overflow-anchor: none; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
 /* Each welcome CTA gets its own block with a short, plain-language description. */
-.welcome-actions { display: flex; flex-direction: column; gap: 24px; padding-top: 10px; }
+.welcome-actions { display: flex; flex-direction: column; gap: 24px; }
 .welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #invite-welcome, #open-invite-welcome { min-height: 44px; }
 .welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }
