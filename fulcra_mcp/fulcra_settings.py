@@ -110,7 +110,7 @@ def get_fulcra_settings() -> dict:
 
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations={
-    "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+    "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 def update_fulcra_settings(set: dict) -> dict:
     """Save global contact preferences the user chose, including checking_preferences text.
 
@@ -145,7 +145,7 @@ def get_contact_preferences(data_type: str, peer_userid: str, expected_peer_user
         raise ToolError('Contact preferences unavailable; do not reply, acknowledge or change status for this connection.') from None
 
 
-@settings_mcp.tool(app={"visibility": ["app"]}, annotations={'readOnlyHint': False, 'destructiveHint': False})
+@settings_mcp.tool(app={"visibility": ["app"]}, annotations={'readOnlyHint': False, 'destructiveHint': True, 'openWorldHint': False})
 def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
                             expected_peer_userids: list[str] | None = None) -> dict:
     """Replace this contact's preference overrides at the user's request; {} restores the global values.

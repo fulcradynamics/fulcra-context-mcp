@@ -123,7 +123,7 @@ class AnnotationType(Enum):
     Scale = "scale"
 
 
-@tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_workouts(
     start_time: AwareDatetime,
@@ -211,7 +211,7 @@ def _slim_v1_spec(spec: dict) -> dict:
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Create Data Type", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Data Type", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def create_data_type(
     base_type: Literal["event", "metric", "moment", "duration", "boolean", "numeric", "scale"],
@@ -355,7 +355,7 @@ def _check_metadata_privacy(api, base, name, entry=None):
 
 
 @tools_mcp.tool(annotations={"title": "Update Data Type", "readOnlyHint": False,
-                            "destructiveHint": True, "idempotentHint": False})
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
 async def update_data_type(
     data_type: str, name: str | None = None, description: str | None = None,
     expected_description: str | None = None,
@@ -420,7 +420,7 @@ async def update_data_type(
 
 @tools_mcp.tool(app={"visibility": ["app"]},
                 annotations={"title": "Send Agent Contact Message", "readOnlyHint": False,
-                             "destructiveHint": False, "idempotentHint": False})
+                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
 async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
                     recipients: list[str] | None = None,
                     kind: Literal["message", "reply", "ack"] = "message",
@@ -459,7 +459,7 @@ async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str,
 
 @tools_mcp.tool(app={"visibility": ["app"]},
                 annotations={"title": "End Agent Contact", "readOnlyHint": False,
-                             "destructiveHint": True, "idempotentHint": True})
+                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": True})
 async def end_agent_contact(data_type: str, peer_userid: str, archive: bool = False) -> dict:
     """Stop sharing an owned single-peer Event channel and verify no grant remains;
     optionally archive it (restore_data_type undoes). Their share is unchanged.
@@ -510,7 +510,7 @@ def _legacy_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={"title": "Set Agent Contact Identifier", "readOnlyHint": False,
-                            "destructiveHint": False, "idempotentHint": True})
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": True})
 @_friendly_http_errors
 async def set_contact_identifier(data_type: str, identifier: str) -> str:
     """Label your own Event channel or legacy outbox; changes only the description
@@ -576,7 +576,7 @@ async def set_contact_identifier(data_type: str, identifier: str) -> str:
 
 
 @tools_mcp.tool(annotations={"title": "Set Contact Status", "readOnlyHint": False,
-                            "destructiveHint": False, "idempotentHint": False},
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": False},
                 app={"visibility": ["app"]})
 async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
     """Save a peer-visible Status pill on your own Event connection, only with
@@ -649,7 +649,7 @@ def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | 
     )
 
 
-@tools_mcp.tool(annotations={"title": "Archive Data Type", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Archive Data Type", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def archive_data_type(data_type: str) -> str:
     """Archive (soft-delete) a user-defined data type.
@@ -683,7 +683,7 @@ async def archive_data_type(data_type: str) -> str:
     )
 
 
-@tools_mcp.tool(annotations={"title": "Restore Data Type", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Restore Data Type", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_data_type(data_type: str) -> str:
     """Restore an archived user-defined data type.
@@ -735,7 +735,7 @@ def _recordable_fields(properties: dict) -> list[str]:
     return sorted(k for k in properties if k not in RECORD_PLUMBING_FIELDS)
 
 
-@tools_mcp.tool(annotations={"title": "Record Data", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def record_data(
     data_type: str,
@@ -898,7 +898,7 @@ async def record_data(
 MAX_DELETE_RECORDS = 500
 
 
-@tools_mcp.tool(annotations={"title": "Delete Records", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete Records", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_records(data_type: str, record_ids: list[str]) -> str:
     """Delete records from one of the user's own v1 data types.
@@ -961,7 +961,7 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
-    "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
+    "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 async def prepare_agent_invitation(data_type: str, open_invitation: bool = False) -> dict:
     """Prepare an invitation code at the user's request; authorizes only its matched
     return share. Include own_userid/code in the invite. The accepting agent's FIRST
@@ -980,7 +980,7 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
-    "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": False})
+    "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def create_agent_invitation(inviter_name: str, recipient_name: str,
                                   recipient_userid: str | None = None) -> dict:
     """Create a new outbox labeled <recipient>'s agent and prepare its single-person
@@ -1001,7 +1001,7 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
-    "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": False})
+    "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> dict:
     """Get the user's standing open invitation (created on first use; private,
     never shared). Responders each get their own outbox via matching.
@@ -1019,7 +1019,7 @@ async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> 
 
 
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
-    "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": False})
+    "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def match_agent_invitations() -> dict:
     """Match unambiguous FIRST-message codes for user-prepared invitations using
     authenticated incoming-share owners, not sender claims. Verify the return grant
@@ -1032,7 +1032,7 @@ async def match_agent_invitations() -> dict:
     return await asyncio.to_thread(match, get_fulcra_object())
 
 
-@tools_mcp.tool(annotations={"title": "Send Agent Message", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def send_agent_message(
     connection: str,
@@ -1303,7 +1303,7 @@ def _creation_fields_schema(entry: dict, full_schema: dict | None) -> dict | Non
     return result
 
 
-@tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_data_catalog(
     data_type: str | None = None,
@@ -1414,7 +1414,7 @@ async def get_data_catalog(
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
 
-@tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_time_series(
     data_type: str,
@@ -1487,7 +1487,7 @@ async def get_time_series(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_records(
     data_type: str,
@@ -1615,7 +1615,7 @@ def _collect_updates(
     return updates
 
 
-@tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_data_updates(
     start_time: AwareDatetime,
@@ -1666,7 +1666,7 @@ async def get_data_updates(
     return f"Data updates{whose} from {start_time} to {end_time}: " + json.dumps(updates)
 
 
-@tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_sleep(
     start_time: AwareDatetime,
@@ -1727,7 +1727,7 @@ def _own_time_zone(fulcra) -> str:
     return preferences.get("timezone") or "UTC"
 
 
-@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_location(
     time: AwareDatetime | None = None,
@@ -1874,7 +1874,7 @@ def _slim_event(
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_calendar_events(
     start_time: AwareDatetime | None = None,
@@ -1973,7 +1973,7 @@ def _not_shared_message(path: str, fulcra_userid: str) -> str:
     )
 
 
-@tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def list_files(
     path: str = "/",
@@ -2048,7 +2048,7 @@ def _list_file_entries(fulcra, path: str, fulcra_userid: str | None = None) -> d
     return result
 
 
-@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def read_file(
     path: str,
@@ -2162,7 +2162,7 @@ async def read_file(
     return f"Content of {path}: {text}"
 
 
-@tools_mcp.tool(annotations={"title": "Write File", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def write_file(
     path: str,
@@ -2263,7 +2263,7 @@ async def write_file(
     return f"Wrote {path}: " + json.dumps(_slim_file(result.get("file", result)))
 
 
-@tools_mcp.tool(annotations={"title": "Delete File", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete File", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_file(path: str) -> str:
     """Delete a file stored in the user's Fulcra account.
@@ -2285,7 +2285,7 @@ async def delete_file(path: str) -> str:
     return f"Deleted {path} (version {file_record['id']})."
 
 
-@tools_mcp.tool(annotations={"title": "Restore File Version", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
@@ -2448,7 +2448,7 @@ def _data_type_not_shared_message(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Create Share", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 @_friendly_http_errors
 async def create_share(
     name: str,
@@ -2529,7 +2529,7 @@ async def create_share(
     return "Created share: " + json.dumps(_slim_share(result.get("datashare", result)))
 
 
-@tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both") -> str:
     """List what this user shares with others and what others share with them.
@@ -2566,7 +2566,7 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
     return "Shares: " + json.dumps(result)
 
 
-@tools_mcp.tool(annotations={"title": "Delete Share", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete Share", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_share(share_id: str) -> str:
     """End a share: delete one this user made, revoking every recipient's access,
@@ -2664,7 +2664,7 @@ def _group_http_error(e: urllib.error.HTTPError, group_id: str) -> str | None:
     return None
 
 
-@tools_mcp.tool(annotations={"title": "Get Groups", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Groups", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def get_groups(group_id: str | None = None, subscribed_only: bool = False) -> str:
     """List Fulcra groups, or get one group's full details.
@@ -2696,7 +2696,7 @@ async def get_groups(group_id: str | None = None, subscribed_only: bool = False)
     return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
 
 
-@tools_mcp.tool(annotations={"title": "Join Group", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 @_friendly_http_errors
 async def join_group(group_id: str) -> str:
     """Join a Fulcra group on the user's behalf, at their explicit request.
@@ -2719,7 +2719,7 @@ async def join_group(group_id: str) -> str:
     return f"Joined group {group_id}: " + json.dumps(membership)
 
 
-@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 @_friendly_http_errors
 async def leave_group(group_id: str, delete: bool = False) -> str:
     """Leave a Fulcra group on the user's behalf, at their explicit request.
@@ -2757,7 +2757,7 @@ async def leave_group(group_id: str, delete: bool = False) -> str:
     return f"The user is no longer a member of group {group_id}."
 
 
-@tools_mcp.tool(annotations={"title": "Create Group", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Group", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def create_group(
     title: str,
@@ -2865,7 +2865,7 @@ if settings.fulcra_environment == "stdio":
 USER_INFO_HIDDEN_FIELDS = ("status", "tier", "service_status", "intercom_token")
 
 
-@tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_user_info() -> str:
     """Return general info about the Fulcra user.
