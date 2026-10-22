@@ -39,7 +39,7 @@ async def test_public_references_cover_model_additions_not_app_tools():
     model, app = await discovered_tools()
     added = model - RELEASED_MODEL_TOOLS - LOCAL_TOOLS
     assert added  # Do not silently pass after a discovery failure.
-    for path in ("README.md", "docs/model-tools.md"):
+    for path in ("README.md", "AGENTS.md", "docs/model-tools.md"):
         text = (ROOT / path).read_text()
         for name in added:
             assert f"`{name}`" in text, (path, name)
