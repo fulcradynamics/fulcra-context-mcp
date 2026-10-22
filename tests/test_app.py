@@ -7,7 +7,7 @@ from fulcra_mcp import server_info
 from fulcra_mcp.main import mcp
 
 
-@pytest.mark.parametrize("value, enabled", [(None, True), ("on", True), ("off", False), ("TRUE", True), ("0", False)])
+@pytest.mark.parametrize("value, enabled", [(None, False), ("false", False), ("true", True), ("on", True), ("off", False), ("TRUE", True), ("0", False)])
 async def test_contacts_debug_resource_env(monkeypatch, value, enabled):
     from fulcra_mcp import apps
     from fulcra_mcp.settings import Settings
@@ -36,8 +36,8 @@ async def test_app_tools_advertise_navigation_icons():
 
 async def test_direct_contacts_resource_contract():
     async with Client(mcp) as client:
-        direct = (await client.read_resource("ui://fulcra/contacts/thread/v74.html?startup=resource"))[0]
-        normal = (await client.read_resource("ui://fulcra/contacts/thread/v74.html"))[0]
+        direct = (await client.read_resource("ui://fulcra/contacts/thread/v75.html?startup=resource"))[0]
+        normal = (await client.read_resource("ui://fulcra/contacts/thread/v75.html"))[0]
         assert direct.mimeType == "text/html;profile=mcp-app"
         assert direct.meta["openai/ui"] == {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}
         assert direct.text == normal.text.replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
@@ -60,7 +60,7 @@ async def test_thread_entrypoint():
         tools = {tool.name: tool for tool in await client.list_tools()}
         tool = tools["open_agent_contacts"]
         assert tool.title == "Agent Contacts"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v74.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v75.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
         assert tool.annotations.readOnlyHint is True
@@ -84,7 +84,7 @@ async def test_contacts_app():
         tool = tools["open_agent_contacts_home"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "global"}]
         assert tool.title == "Agents I Know"
-        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v74.html"
+        assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v75.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -92,7 +92,7 @@ async def test_contacts_app():
         result = await client.call_tool("open_agent_contacts_home", {})
         assert not result.is_error
         assert result.data == {"message": "Agents I Know is ready."}
-        resources = await client.read_resource("ui://fulcra/contacts/v74.html")
+        resources = await client.read_resource("ui://fulcra/contacts/v75.html")
         assert resources[0].mimeType == "text/html;profile=mcp-app"
         assert "<h1>Agents I Know</h1>" in resources[0].text
         assert "data:font/woff2;base64," in resources[0].text
@@ -112,7 +112,7 @@ async def test_contacts_app():
         assert resources[0].text.index('id="messages"') < resources[0].text.index('Load more history</button>') < resources[0].text.index('id="thread-composer"')
         assert 'get_records' in resources[0].text
         assert '<meta name="connection-presentation" content="global">' in resources[0].text
-        thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v74.html")
+        thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v75.html")
         assert thread_resource[0].text == resources[0].text.replace(
             '<meta name="connection-presentation" content="global">',
             '<meta name="connection-presentation" content="thread">', 1)

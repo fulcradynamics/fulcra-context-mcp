@@ -93,7 +93,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     .replace('</head>', resourceStartup ? '<meta name="connection-startup" content="resource"></head>' : '</head>')
     .replace('</head>', autoSelect ? '</head>' : '<script>window.__fulcraDevNoAutoSelect=true;</script></head>')
     .replace(/<meta name="connection-debug"[^>]*>/, debug === null ? '$&' : '')
-    .replace('</head>', debug === null ? '</head>' : `<meta name="connection-debug" content="${debug}"></head>`);
+    .replace('</head>', debug === null || debug === 'missing' ? '</head>' : `<meta name="connection-debug" content="${debug}"></head>`);
  },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }

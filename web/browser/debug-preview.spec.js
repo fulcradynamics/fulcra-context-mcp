@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
-test('disabled debug leaves Advanced and live conversation usable', async ({ page }) => {
-  const ui = await open(page, 900, { debug: false });
+for (const debug of [null, false, 'missing']) {
+test(`hidden debug (${debug}) leaves Advanced and live conversation usable`, async ({ page }) => {
+  const ui = await open(page, 900, { debug });
   await ui.locator('#advanced-toggle').click();
   await expect(ui.locator('#advanced-panel')).toBeVisible();
   await expect(ui.locator('#thread-help')).toBeVisible();
@@ -18,6 +19,7 @@ test('disabled debug leaves Advanced and live conversation usable', async ({ pag
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'send_agent_contact_message' && c.arguments.body === 'Live reply without debug').length)).toBe(1);
 });
+}
 
 async function debug(ui) {
   await ui.locator('#advanced-toggle').click();
@@ -25,7 +27,7 @@ async function debug(ui) {
 }
 
 test('debug contact states are display-only, survive polling, and reset to latest live data', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { debug: true });
   await debug(ui);
   const before = await page.evaluate(() => ({ calls: calls.length, contexts: contexts.length, messages: hostMessages.length }));
   await ui.getByLabel('Unread state', { exact: true }).selectOption('read');
@@ -51,7 +53,7 @@ test('debug contact states are display-only, survive polling, and reset to lates
 });
 
 test('message, loading and acknowledgement previews never enter sends or host context', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { debug: true });
   await debug(ui);
   const before = await page.evaluate(() => calls.length);
   await ui.getByLabel('Messages', { exact: true }).selectOption('outgoing');
@@ -92,7 +94,7 @@ test('message, loading and acknowledgement previews never enter sends or host co
 });
 
 test('forced loading remains visible while live poll reads are held', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { debug: true });
   await debug(ui);
   await ui.getByLabel('Messages', { exact: true }).selectOption('loading');
   await expect(ui.locator('#message-loading')).toBeVisible();
@@ -109,7 +111,7 @@ test('forced loading remains visible while live poll reads are held', async ({ p
 });
 
 test('debug changes and reset retain the latest topic from receipt-only acknowledgements', async ({ page }) => {
-  const ui = await open(page, 900, { ownRecords: [{
+  const ui = await open(page, 900, { debug: true, ownRecords: [{
     id: 'live-receipt', kind: 'ack', body: 'ack', sender: 'chatgpt',
     topic: 'Live ack topic', start_time: '2026-10-13T11:03:00Z',
   }] });
@@ -127,7 +129,7 @@ test('debug changes and reset retain the latest topic from receipt-only acknowle
 });
 
 test('list loading and text previews stay scoped across contact navigation', async ({ page }) => {
-  const ui = await open(page);
+  const ui = await open(page, 900, { debug: true });
   await debug(ui);
   await ui.getByLabel('List preview', { exact: true }).selectOption('loading');
   const row = ui.locator('.thread-button').filter({ hasText: 'Weekend' });
@@ -166,7 +168,7 @@ test('list loading and text previews stay scoped across contact navigation', asy
 });
 
 test('previews cannot restore revoked permissions and remain usable at narrow widths', async ({ page }) => {
-  const ui = await open(page, 390);
+  const ui = await open(page, 390, { debug: true });
   await debug(ui);
   await ui.getByLabel('Messages', { exact: true }).selectOption('incoming');
   await ui.getByLabel('Relationship', { exact: true }).selectOption('connected');

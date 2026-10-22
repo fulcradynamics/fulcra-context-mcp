@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     state_bucket: str | None = None
     oidc_server_url: str = "http://localhost:4499"
     fulcra_environment: str = "stdio"
-    fulcra_contacts_debug: bool = True
+    fulcra_contacts_debug: bool = False
     port: int = 4499
     oidc_client_id: str | None = None
     fulcra_oidc_domain: str | None = None

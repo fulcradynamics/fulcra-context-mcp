@@ -4,6 +4,12 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.18.4 release notes
+
+- Hide the contacts Debug menu by default, including when frontend metadata is
+  missing. Set `FULCRA_CONTACTS_DEBUG=true` to enable display-only previews.
+- Ship contacts UI v75; other Advanced controls and live actions are unchanged.
+
 ## 1.17.0 release notes
 
 - Add [owned Event/Metric metadata updates](docs/data-type-metadata.md) with
