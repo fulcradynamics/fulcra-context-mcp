@@ -24,12 +24,12 @@ const text = t => ({ content: [{ type: 'text', text: t }] });
 function toolResult(name, args = {}) {
   if (scenario.fail?.includes(name)) return { isError: true };
   if (name === 'match_agent_invitations') return { structuredContent: { results: [] } };
-  if (name === 'standing_agent_invitation') {
+  if (name === 'prepare_standing_agent_invitation') {
     if (args.inviter_name !== undefined) standingName = args.inviter_name;
     return { structuredContent: { status: 'prepared', own_userid: own,
       topic: 'open_invitation ' + 'f'.repeat(32), inviter_name: standingName } };
   }
-  if (name === 'fulcra_check_status') return { structuredContent: checkStatus };
+  if (name === 'get_message_check_status') return { structuredContent: checkStatus };
   if (name === 'get_data_catalog') {
     let catalog = scenario.catalog;
     if (args.data_type) catalog = catalog.filter(e => e.id === args.data_type && (e.fulcra_userid || own) === (args.fulcra_userid || own));
@@ -40,7 +40,7 @@ function toolResult(name, args = {}) {
     const rows = scenario.rows[`${args.fulcra_userid ?? own}/${args.data_type}`] ?? [];
     return text(`Records for ${args.data_type} from a to b: ${JSON.stringify(rows)}`);
   }
-  if (name === 'agent_connection_send') {
+  if (name === 'send_agent_contact_message') {
     const rows = scenario.rows[`${own}/${args.outbox}`];
     if (!rows) return { isError: true, ...text('Unknown mock outbox') };
     let record = rows.find(row => row.id === args.mid);

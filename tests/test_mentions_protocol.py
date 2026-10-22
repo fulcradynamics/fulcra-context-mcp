@@ -65,14 +65,14 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
 
         initialized = (await rpc("initialize", INITIALIZE["params"] | {"protocolVersion": requested}))["result"]
         assert initialized["protocolVersion"] == negotiated
-        assert initialized["capabilities"]["experimental"]["openai/mentions"] == {"searchTool": "agent_contacts_search"}
+        assert initialized["capabilities"]["experimental"]["openai/mentions"] == {"searchTool": "search_agent_contacts"}
         listed = (await rpc("tools/list"))["result"]["tools"]
-        tool = next(t for t in listed if t["name"] == "agent_contacts_search")
+        tool = next(t for t in listed if t["name"] == "search_agent_contacts")
         assert "openai/extensions" not in tool["_meta"]
         assert tool["_meta"]["ui"] == {"visibility": ["app"]}
         templates = (await rpc("resources/templates/list"))["result"]["resourceTemplates"]
         assert any(t["uriTemplate"] == "contacts://threads/id-{peer}" for t in templates)
-        call = {"name": "agent_contacts_search", "arguments": {"query": ""}}
+        call = {"name": "search_agent_contacts", "arguments": {"query": ""}}
         result = (await rpc("tools/call", call))["result"]
         assert result["content"] == []
         assert not result.get("isError")
@@ -83,11 +83,11 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
         descriptor, = (await rpc("resources/read", direct_read))["result"]["contents"]
         assert descriptor["uri"] == item["uri"]
         assert descriptor["mimeType"] == item["mimeType"]
-        assert json.loads(descriptor["text"])["open_tool"] == {"name": "agent_contact_open", "arguments": {}}
+        assert json.loads(descriptor["text"])["open_tool"] == {"name": "open_agent_contacts", "arguments": {}}
         # Discovery failures must not masquerade as an empty peer list.
         factory.side_effect = RuntimeError("backend offline")
         for query in ["anyquery", "Agent Contacts", "unmatched"]:
-            assert (await rpc("tools/call", {"name": "agent_contacts_search", "arguments": {"query": query}}))["result"]["isError"]
+            assert (await rpc("tools/call", {"name": "search_agent_contacts", "arguments": {"query": query}}))["result"]["isError"]
         factory.side_effect = lambda grant_id, **kwargs: fake if kwargs["credentials"] is creds else other
         # Old references continue to resolve only with current account authorization.
         read = {"uri": "contacts://threads/id-peer%2F%252F"}
@@ -95,7 +95,7 @@ async def test_mentions_http_protocol(tmp_path, monkeypatch, requested, negotiat
         assert resource["mimeType"] == "application/json"
         assert json.loads(resource["text"]) == {
             "peer_fulcra_userid": "peer/%2F", "title": "peer/%2F",
-            "open_tool": {"name": "agent_contact_open", "arguments": {"peer_fulcra_userid": "peer/%2F"}}}
+            "open_tool": {"name": "open_agent_contacts", "arguments": {"peer_fulcra_userid": "peer/%2F"}}}
 
         # A new account context on the next request must not inherit discovery.
         http.headers["Authorization"] = "Bearer mcp_other"

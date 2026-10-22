@@ -39,7 +39,7 @@ test('untargeted launch stays instructional through polls and invites without fo
   await expect(ui.locator('#connection-detail')).toBeHidden();
   await page.clock.runFor(11000);
   await expect(ui.locator('#selection-empty')).toBeVisible();
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toHaveLength(0);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toHaveLength(0);
   await ui.locator('#invite-welcome').click();
   await expect(ui.getByRole('dialog')).toBeVisible();
 });

@@ -175,14 +175,14 @@ def test_unconfirmed_or_rejected_send_preserves_status(api, failure):
     assert api.description == before and api.updates == []
 
 
-@pytest.mark.parametrize('tool', ['agent_connection_send', 'send_agent_message'])
+@pytest.mark.parametrize('tool', ['send_agent_contact_message', 'send_agent_message'])
 async def test_ui_and_agent_sends_remove_status_without_changing_other_metadata(api, monkeypatch, tool):
     from fulcra_mcp import tools
     _with_status(api, False)
     api.description += '\n[mesh_identifier: "Alex"]'
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     args = dict(sender='test', body='hello')
-    if tool == 'agent_connection_send':
+    if tool == 'send_agent_contact_message':
         args.update(peer_userid=PEER, outbox=OUT, mid=MID)
     else:
         args.update(connection=OUT, record_id=MID)

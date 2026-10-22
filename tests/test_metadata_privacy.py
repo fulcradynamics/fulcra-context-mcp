@@ -12,7 +12,7 @@ async def test_private_metadata_refuses_covering_grants(call, fake_fulcra, priva
     fake_fulcra.v1_catalog.return_value = [{**ENTRY, 'name': private_name}]
     fake_fulcra.get_datashares.return_value = [
         {'share_all_data': selector is None, 'fulcra_data_types': [selector] if selector else []}]
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'secret'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'secret'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
 
@@ -21,7 +21,7 @@ async def test_private_metadata_cannot_be_renamed_to_evade_sharing_guard(call, f
     fake_fulcra.v1_catalog.side_effect = [[{**ENTRY, 'name': 'Fulcra Agent Invitations'}],
                                         [{**ENTRY, 'name': 'Public'}]]
     fake_fulcra.get_datashares.return_value = []
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'name': 'Public'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'name': 'Public'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
 
@@ -38,7 +38,7 @@ async def test_metadata_unexpected_errors_do_not_leak_private_content(call, fake
         fake_fulcra.update_data_type.side_effect = secret
     else:
         fake_fulcra.v1_catalog.side_effect = [[ENTRY], secret]
-    text = await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'})
+    text = await call('update_data_type', {'data_type': TYPE, 'description': 'new'})
     result = json.loads(text)
     assert result['status'] == ('rejected' if stage in ('identity', 'catalog') else 'uncertain')
     assert 'private payload' not in text
@@ -61,7 +61,7 @@ async def test_private_metadata_update_interoperates_and_rechecks_privacy(call, 
     after = {**before, 'description': description}
     fake_fulcra.v1_catalog.side_effect = [[before], [after]]
     fake_fulcra.get_datashares.return_value = []
-    result = json.loads(await call('update_data_type_metadata', {
+    result = json.loads(await call('update_data_type', {
         'data_type': TYPE, 'description': description, 'expected_description': before['description']}))
     assert result['verified'] is True
     assert _parse(after)['global_preferences'] == {'notifications': 'none'}
@@ -72,7 +72,7 @@ async def test_private_metadata_new_grant_during_write_is_uncertain(call, fake_f
     before = {**ENTRY, 'name': 'Fulcra Agent Invitations'}
     fake_fulcra.v1_catalog.side_effect = [[before], [{**before, 'description': 'new'}]]
     fake_fulcra.get_datashares.side_effect = [[], [{'share_all_data': True, 'fulcra_data_types': []}]]
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'new'}))
     assert result['status'] == 'uncertain'
     assert fake_fulcra.update_data_type.call_count == 1
 
@@ -83,7 +83,7 @@ async def test_private_metadata_incomplete_grants_fail_closed(call, fake_fulcra,
     before = {**ENTRY, 'name': 'Fulcra Agent Invitations'}
     fake_fulcra.v1_catalog.side_effect = [[before], [{**before, 'description': 'new'}]]
     fake_fulcra.get_datashares.return_value = grants
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'new'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
 
@@ -91,7 +91,7 @@ async def test_private_metadata_incomplete_grants_fail_closed(call, fake_fulcra,
 async def test_renaming_shared_type_into_private_storage_is_rejected(call, fake_fulcra):
     fake_fulcra.v1_catalog.return_value = [ENTRY]
     fake_fulcra.get_datashares.return_value = [{'share_all_data': False, 'fulcra_data_types': [TYPE]}]
-    result = json.loads(await call('update_data_type_metadata', {
+    result = json.loads(await call('update_data_type', {
         'data_type': TYPE, 'name': 'Fulcra Agent Invitations', 'description': 'secret'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()

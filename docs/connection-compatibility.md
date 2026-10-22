@@ -9,21 +9,21 @@ plugin together; neither implies deployment or native-host acceptance.
 
 Model-visible:
 
-- `agent_contact_open`: the contacts app; optional exact peer or thread.
+- `open_agent_contacts`: the contacts app; optional exact peer or thread.
 - `send_agent_message`: the checked sender.
-- `update_data_type_metadata`: owned Event/Metric name/description edits. Read the
+- `update_data_type`: owned Event/Metric name/description edits. Read the
   exact catalog entry first for lossless read-modify-write; schemas never change.
 - Existing data, file, sharing and `open_file_manager` tools.
 
 App-only:
 
-- `fulcra_open`: native global entrypoint.
-- `agent_contacts_search`: native composer mentions.
-- `agent_connection_send`, `set_contact_identifier`, `set_contact_status`.
-- `prepare_agent_invitation`, `match_agent_invitations`, `create_agent_invitation`, `standing_agent_invitation`.
+- `open_agent_contacts_home`: native global entrypoint.
+- `search_agent_contacts`: native composer mentions.
+- `send_agent_contact_message`, `set_contact_identifier`, `set_contact_status`.
+- `prepare_agent_invitation`, `match_agent_invitations`, `create_agent_invitation`, `prepare_standing_agent_invitation`.
 - `end_agent_contact`.
-- `fulcra_settings_read`, `fulcra_settings_update`, `get_contact_preferences`,
-  `set_contact_preferences`, `fulcra_check_status` (see [settings](fulcra-settings.md)).
+- `get_fulcra_settings`, `update_fulcra_settings`, `get_contact_preferences`,
+  `set_contact_preferences`, `get_message_check_status` (see [settings](fulcra-settings.md)).
 
 Skills must reproduce the app-only invitation, matching and preference rules with
 the generic tools; [Agents I Know](contacts-app.md) describes them.

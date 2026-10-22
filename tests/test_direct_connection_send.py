@@ -35,11 +35,11 @@ def backend(fake_fulcra, monkeypatch):
 
 async def test_verified_post_and_duplicate_readback(call, backend):
     fake, rows = backend
-    result = json.loads(await call('agent_connection_send', ARGS))
+    result = json.loads(await call('send_agent_contact_message', ARGS))
     assert result['status'] == 'posted' and result['peer_acknowledged'] is False
     assert result['mid'] == MID and result['outbox'] == OUTBOX
     assert rows[0] == ENV
-    again = json.loads(await call('agent_connection_send', ARGS))
+    again = json.loads(await call('send_agent_contact_message', ARGS))
     assert again['status'] == 'posted'
     assert fake.record_data_type.call_count == 1
     fake.create_datashare.assert_not_called()
@@ -59,7 +59,7 @@ async def test_all_covering_grants_checked(call, backend, change):
     fake, _ = backend
     extra = {**deepcopy(fake.get_datashares.return_value[0]), **change}
     fake.get_datashares.return_value.append(extra)
-    result = json.loads(await call('agent_connection_send', ARGS))
+    result = json.loads(await call('send_agent_contact_message', ARGS))
     assert result['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
 
@@ -79,7 +79,7 @@ async def test_refuses_unsafe_or_ambiguous_target(call, backend, case):
     if case == 'malformed': args['outbox'] += ' '
     if case == 'blank': args['body'] = ' \n'
     if case == 'conflict': rows.append({**ENV, 'body': 'different'})
-    assert json.loads(await call('agent_connection_send', args))['status'] == 'rejected'
+    assert json.loads(await call('send_agent_contact_message', args))['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
 
 
@@ -94,7 +94,7 @@ async def test_uncertainty_never_claims_posted_or_delivered(call, backend, monke
             if isinstance(value, Exception): raise value
             return value
         monkeypatch.setattr(tools.records, 'get_records', read)
-    result = json.loads(await call('agent_connection_send', ARGS))
+    result = json.loads(await call('send_agent_contact_message', ARGS))
     assert result['status'] == 'uncertain'
     assert result['peer_acknowledged'] is False
     assert result['mid'] == MID
@@ -102,7 +102,7 @@ async def test_uncertainty_never_claims_posted_or_delivered(call, backend, monke
 
 
 async def test_registration_visible_to_model_and_app(client):
-    tool = next(t for t in await client.list_tools() if t.name == 'agent_connection_send')
+    tool = next(t for t in await client.list_tools() if t.name == 'send_agent_contact_message')
     assert tool.meta['ui']['visibility'] == ['app']
     assert tool.annotations.readOnlyHint is False
     assert tool.annotations.idempotentHint is False
@@ -116,11 +116,11 @@ async def test_rechecks_immediately_before_write(call, backend, change):
         original = deepcopy(fake.get_datashares.return_value)
         altered = [] if change == 'revoked' else [{**original[0], 'share_all_data': True}]
         fake.get_datashares.side_effect = [original, altered]
-    assert json.loads(await call('agent_connection_send', ARGS))['status'] == 'rejected'
+    assert json.loads(await call('send_agent_contact_message', ARGS))['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
 
 
 async def test_unrelated_grant_does_not_block_send(call, backend):
     fake, _ = backend
     fake.get_datashares.return_value.append(dict(share_all_data=False, fulcra_data_types=['StepCount'], permissions=[dict(allowed_fulcra_userid=OTHER)]))
-    assert json.loads(await call('agent_connection_send', ARGS))['status'] == 'posted'
+    assert json.loads(await call('send_agent_contact_message', ARGS))['status'] == 'posted'

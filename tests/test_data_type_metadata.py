@@ -22,7 +22,7 @@ async def test_metadata_uses_real_sdk(call, fake_fulcra, monkeypatch):
     sdk.fulcra_credentials.is_expired.return_value = False
     fake_fulcra.update_data_type.side_effect = sdk.update_data_type
     fake_fulcra.v1_catalog.side_effect = [[copy.deepcopy(ENTRY)], [{**ENTRY, 'description': 'new'}]]
-    result = json.loads(await call('update_data_type_metadata', {
+    result = json.loads(await call('update_data_type', {
         'data_type': TYPE, 'description': 'new', 'expected_description': 'old'}))
     assert result['verified'] is True
     transport.assert_called_once()
@@ -40,14 +40,14 @@ async def test_metadata_uses_real_sdk(call, fake_fulcra, monkeypatch):
 ])
 async def test_metadata_rejects_ineligible_type(call, fake_fulcra, change):
     fake_fulcra.v1_catalog.return_value = [{**ENTRY, **change}]
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'new'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
 
 
 async def test_metadata_stale_description_does_not_write(call, fake_fulcra):
     fake_fulcra.v1_catalog.return_value = [ENTRY]
-    result = json.loads(await call('update_data_type_metadata', {
+    result = json.loads(await call('update_data_type', {
         'data_type': TYPE, 'description': 'new', 'expected_description': 'stale'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
@@ -56,7 +56,7 @@ async def test_metadata_stale_description_does_not_write(call, fake_fulcra):
 @pytest.mark.parametrize('after', [ENTRY, {**ENTRY, 'description': 'new', 'name': 'changed'}])
 async def test_metadata_unverified_readback_is_uncertain(call, fake_fulcra, after):
     fake_fulcra.v1_catalog.side_effect = [[ENTRY], [after]]
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'new'}))
     assert result['status'] == 'uncertain'
     assert result['verified'] is False
     assert fake_fulcra.update_data_type.call_count == 1
@@ -66,14 +66,14 @@ async def test_metadata_unverified_readback_is_uncertain(call, fake_fulcra, afte
 async def test_metadata_name_only_preserves_description(call, fake_fulcra, base):
     entry = {**ENTRY, 'id': TYPE.replace('Event/', base + '/')}
     fake_fulcra.v1_catalog.side_effect = [[entry], [{**entry, 'name': 'Renamed'}]]
-    result = json.loads(await call('update_data_type_metadata', {'data_type': entry['id'], 'name': 'Renamed'}))
+    result = json.loads(await call('update_data_type', {'data_type': entry['id'], 'name': 'Renamed'}))
     assert result['verified'] is True
     fake_fulcra.update_data_type.assert_called_once_with(base, TYPE.split('/')[1], {'name': 'Renamed'})
 
 
 @pytest.mark.parametrize('data_type', ['Event', 'Event/not-a-uuid', TYPE.replace('-', ''), TYPE.replace('Event/', 'MomentAnnotation/')])
 async def test_metadata_invalid_or_legacy_id_never_writes(call, fake_fulcra, data_type):
-    result = json.loads(await call('update_data_type_metadata', {'data_type': data_type, 'name': 'Renamed'}))
+    result = json.loads(await call('update_data_type', {'data_type': data_type, 'name': 'Renamed'}))
     assert result['status'] == 'rejected'
     fake_fulcra.update_data_type.assert_not_called()
     fake_fulcra.fulcra_api.assert_not_called()
@@ -82,7 +82,7 @@ async def test_metadata_invalid_or_legacy_id_never_writes(call, fake_fulcra, dat
 async def test_metadata_write_transport_failure_is_uncertain(call, fake_fulcra):
     fake_fulcra.v1_catalog.return_value = [ENTRY]
     fake_fulcra.update_data_type.side_effect = OSError('transport failed')
-    result = json.loads(await call('update_data_type_metadata', {'data_type': TYPE, 'description': 'new'}))
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'description': 'new'}))
     assert result['status'] == 'uncertain'
     assert result['verified'] is False
     assert fake_fulcra.update_data_type.call_count == 1

@@ -1,6 +1,6 @@
 # Owned data-type metadata
 
-`update_data_type_metadata(data_type, name=None, description=None,
+`update_data_type(data_type, name=None, description=None,
 expected_description=None)` changes only the requested metadata of an active,
 owned, recordable v1 `Event/<uuid>` or `Metric/<uuid>` type. Identifiers must be
 canonical. No schema, records, grants or legacy annotation replacements occur.

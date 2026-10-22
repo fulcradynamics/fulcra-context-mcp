@@ -10,7 +10,7 @@ for (const width of [390, 1100]) test(`pending incoming and unshared channels ha
   await expect(ui.locator('#pending-connections')).toContainText('Not connected yet. Invitation sent');
   await expect(ui.locator('#pending-connections')).toContainText('Incoming — awaiting connection');
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
-  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'agent_connection_send'].includes(c.name)))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'send_agent_contact_message'].includes(c.name)))).toBe(false);
   await page.screenshot({path:`${process.env.TMPDIR ?? '../test-results'}/invitation-pending-${width}.png`,fullPage:true});
   // Inspect the explicit assistance, not prior passive contact snapshots.
   await page.evaluate(() => { window.contexts = []; });
@@ -40,7 +40,7 @@ for (const outgoing of [false, true]) test(`incoming assistance remains availabl
   const context = await page.evaluate(() => JSON.stringify(window.contexts));
   expect(context).toContain(other);
   expect(context).toContain('Incoming');
-  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'agent_connection_send'].includes(c.name)))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'send_agent_contact_message'].includes(c.name)))).toBe(false);
 });
 
 test('outgoing-only stays pending, matched result still needs independently discovered two-way grants', async ({page}) => {

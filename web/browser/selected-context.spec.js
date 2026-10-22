@@ -4,7 +4,7 @@ import { open, readOnlyThread, own, peer, out } from './harness.js';
 const latest = page => page.evaluate(() => window.contexts.at(-1)?.content?.[0]?.text ?? '');
 const quiet = async page => {
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
 };
 
 test('context-only host gets loading identity then displayed context without a turn', async ({ page }) => {
@@ -154,7 +154,7 @@ test('initial source removal stays filtered when temporary ownership ends before
   expect(await latest(page)).toContain(remaining);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
   // The explicit click can now acknowledge through the newest eligible outbox.
-  const sends = await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send').map(c => c.arguments));
+  const sends = await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').map(c => c.arguments));
   expect(sends).toHaveLength(1);
   expect(sends[0].kind).toBe('ack');
   expect(sends[0].outbox).toBe(remaining);

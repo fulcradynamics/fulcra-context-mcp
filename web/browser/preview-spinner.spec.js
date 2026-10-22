@@ -18,6 +18,6 @@ for (const held of ['incoming', 'outgoing', 'history']) {
     await expect(row.locator('.thread-time .refresh-spinner')).toHaveCount(0);
     await expect(row.locator('.thread-preview')).toHaveText('You: Newest content');
     await expect(row.locator('.unread-dot')).toBeHidden();
-    expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+    expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
   });
 }

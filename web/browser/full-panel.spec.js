@@ -10,7 +10,7 @@ for (const launch of ['global', 'thread', 'resource']) {
     await expect(ui.locator('#connection-detail')).toBeVisible();
     await expect(ui.locator('body')).not.toContainText('Waiting for the initial conversation result');
     await page.clock.runFor(11000);
-    expect(await page.evaluate(() => window.calls.filter(c => c.name === 'agent_connection_send'))).toEqual([]);
+    expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
     await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
     await expect(ui.locator('#connection-detail')).toBeVisible();
     await ui.locator('.composer-input').fill('Preserve my draft');

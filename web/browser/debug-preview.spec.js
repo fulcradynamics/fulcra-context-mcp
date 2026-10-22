@@ -16,7 +16,7 @@ test('disabled debug leaves Advanced and live conversation usable', async ({ pag
   await expect.poll(() => page.evaluate(() => JSON.stringify(contexts))).toContain('Broadcast message');
   await ui.locator('.composer-input').fill('Live reply without debug');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'agent_connection_send' && c.arguments.body === 'Live reply without debug').length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'send_agent_contact_message' && c.arguments.body === 'Live reply without debug').length)).toBe(1);
 });
 
 async function debug(ui) {
@@ -79,8 +79,8 @@ test('message, loading and acknowledgement previews never enter sends or host co
   expect(attached).not.toContain('PREVIEW ONLY');
   await ui.locator('.composer-input').fill('Real reply');
   await ui.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'agent_connection_send' && c.arguments.body === 'Real reply').length)).toBe(1);
-  const sent = await page.evaluate(() => calls.find(c => c.name === 'agent_connection_send' && c.arguments.body === 'Real reply').arguments);
+  await expect.poll(() => page.evaluate(() => calls.filter(c => c.name === 'send_agent_contact_message' && c.arguments.body === 'Real reply').length)).toBe(1);
+  const sent = await page.evaluate(() => calls.find(c => c.name === 'send_agent_contact_message' && c.arguments.body === 'Real reply').arguments);
   expect(sent.kind).toBe('reply');
   expect(sent.in_reply_to).not.toContain('debug');
   await expect(ui.locator('#messages .bubble-body')).toHaveText('PREVIEW ONLY <script>');
@@ -160,7 +160,7 @@ test('list loading and text previews stay scoped across contact navigation', asy
   await row.click();
   await expect(ui.locator('#messages .bubble-body')).toHaveText('Preview message');
   await expect(ui.locator('.composer-input')).toBeEnabled();
-  const acknowledgements = await page.evaluate(() => calls.filter(c => c.name === 'agent_connection_send' && c.arguments.kind === 'ack'));
+  const acknowledgements = await page.evaluate(() => calls.filter(c => c.name === 'send_agent_contact_message' && c.arguments.kind === 'ack'));
   expect(acknowledgements.length).toBeGreaterThan(0);
   for (const call of acknowledgements) expect(call.arguments.in_reply_to).not.toContain('debug');
 });

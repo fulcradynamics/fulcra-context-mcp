@@ -10,7 +10,7 @@ export const startPrompt = 'Please use the set-up-agent-contacts skill to start 
   + 'This is an explicit scheduling request: skip the invitation offer and ask whether I want checks only or checks with replies.';
 
 const call = async (app, args) => {
-  const result = await app.callServerTool({ name: 'fulcra_check_status', arguments: args }, { timeout: 30000 });
+  const result = await app.callServerTool({ name: 'get_message_check_status', arguments: args }, { timeout: 30000 });
   if (result.isError) throw new Error('Check status unavailable');
   return result.structuredContent;
 };

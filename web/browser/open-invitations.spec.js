@@ -31,5 +31,5 @@ test('open invitation matcher completion rediscovers grants without sharing the 
   await expect(ui.locator('#pending-connections')).toContainText('Not connected yet. Invitation sent');
   expect(await page.evaluate(() => window.excludeOut)).toBe(true);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
-  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'create_data_type', 'agent_connection_send'].includes(c.name)))).toBe(false);
+  expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'create_data_type', 'send_agent_contact_message'].includes(c.name)))).toBe(false);
 });

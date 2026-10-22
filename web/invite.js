@@ -141,7 +141,7 @@ async function copyTemplate(doc, area, status) {
 }
 
 async function standingInvitation(app, inviterName) {
-  const result = await app.callServerTool({ name: 'standing_agent_invitation',
+  const result = await app.callServerTool({ name: 'prepare_standing_agent_invitation',
     arguments: inviterName === undefined ? {} : { inviter_name: inviterName } }, { timeout: 30000 });
   const value = result.structuredContent;
   if (result.isError || value?.status !== 'prepared') throw new Error(result.content?.find(c => c.type === 'text')?.text || 'Invitation not verified.');

@@ -68,7 +68,7 @@ for (const width of [320, 900]) test(`Advanced expansion reveals its beginning a
   await beginningVisible();
   expect(await ui.locator('#connection-list').evaluate(el => el.scrollTop)).toBe(railScroll);
   expect(await ui.locator('html').evaluate(el => el.scrollTop === 0 && el.scrollHeight === el.clientHeight)).toBe(true);
-  expect(await page.evaluate(() => window.calls.filter(call => call.name === 'agent_connection_send'))).toEqual([]);
+  expect(await page.evaluate(() => window.calls.filter(call => call.name === 'send_agent_contact_message'))).toEqual([]);
   expect(await page.evaluate(() => window.hostMessages)).toEqual([]);
 });
 

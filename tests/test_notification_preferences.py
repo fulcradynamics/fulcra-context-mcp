@@ -9,7 +9,7 @@ async def test_notification_labels_group_and_new_contact_defaults(fake_fulcra):
     fake_fulcra.v1_catalog.return_value = []
     fake_fulcra.get_datashares.return_value = []
     async with Client(mcp) as client:
-        result = (await client.call_tool('fulcra_settings_read', {})).structured_content
+        result = (await client.call_tool('get_fulcra_settings', {})).structured_content
     for key in ['attention_new_unmatched_contact', 'attention_new_matched_contact']:
         assert result['values'][key] is True
         assert policy.DEFAULTS[key] is True
