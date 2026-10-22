@@ -1,7 +1,6 @@
 # Owned data-type metadata
 
-`update_data_type` is model-facing; see the [public tool reference](model-tools.md)
-for the hosted inventory and consent requirements. At least one replacement is
+`update_data_type` is model-facing. At least one replacement is
 required; names must be nonblank, and an empty description clears it. Omitted
 values preserve the corresponding field.
 

@@ -6,9 +6,8 @@ built from `web/`. Model-driven contact work (inviting, checking, replying) live
 the paired OpenAI plugin's skills; see [compatibility](connection-compatibility.md)
 and [private settings](fulcra-settings.md).
 
-For model-facing signatures, consent boundaries and the hosted tool inventory,
-see the [model tool reference](model-tools.md). App-only tools below describe the
-native implementation, not a public model-callable interface.
+App-only tools below describe the native implementation, not a public
+model-callable interface.
 
 ## Entrypoints
 
