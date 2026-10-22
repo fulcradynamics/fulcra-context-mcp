@@ -49,6 +49,7 @@ from .credentials import current_grant_id
 from .file_manager_ui import FILE_MANAGER_HTML
 from .settings import settings
 from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
+from .user_agent import user_agent
 
 logger = structlog.getLogger(__name__)
 
@@ -536,7 +537,11 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
         url,
         data=data,
         method="PUT",
-        headers={"Content-Length": str(len(data)), "Content-Range": content_range},
+        headers={
+            "Content-Length": str(len(data)),
+            "Content-Range": content_range,
+            "User-Agent": user_agent(),
+        },
     )
     try:
         with urllib.request.urlopen(request):

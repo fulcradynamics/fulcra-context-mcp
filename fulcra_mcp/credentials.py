@@ -13,6 +13,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 
 from .provider import aware, oauth_provider
 from .settings import settings
+from .user_agent import fulcra_api_kwargs
 
 
 class SynchronizedFulcraAPI(FulcraAPI):
@@ -130,6 +131,7 @@ def get_fulcra_object() -> FulcraAPI:
             stdio_fulcra = SynchronizedFulcraAPI(
                 credentials=creds,
                 refresh_callback=on_refresh,
+                **fulcra_api_kwargs(),
             )
             return stdio_fulcra
 
@@ -144,7 +146,7 @@ def get_fulcra_object() -> FulcraAPI:
                 file=sys.stderr,
             )
 
-        stdio_fulcra = SynchronizedFulcraAPI()
+        stdio_fulcra = SynchronizedFulcraAPI(**fulcra_api_kwargs())
         stdio_fulcra.fulcra_credentials = stdio_fulcra.oidc.authorize_via_device_flow(
             prompt_callback=_stderr_prompt
         )
@@ -237,6 +239,7 @@ def fulcra_for_grant(
         oidc_audience=settings.fulcra_api,
         credentials=creds,
         refresh_callback=on_refresh,
+        **fulcra_api_kwargs(),
     )
 
     # fulcra-api refreshes lazily inside each request and swallows Auth0
