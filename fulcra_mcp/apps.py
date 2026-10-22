@@ -1,6 +1,8 @@
 """Agents I Know MCP App; host navigation stays in registration metadata."""
 
 from importlib.resources import files
+from pathlib import Path
+from urllib.parse import quote
 
 from fastmcp import FastMCP
 
@@ -8,10 +10,16 @@ from mcp.types import Icon
 from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
-# Use favicon.png for menu thumbnails (works on both light and dark backgrounds)
+# Embed SVG icons as data URIs (like Bits and Bolts) for instant loading
+STATIC_DIR = Path(__file__).parent / "static"
 MENU_ICONS = [
-    Icon(src="https://mcp.fulcradynamics.com/favicon.png",
-         mimeType="image/png", sizes=["512x512"])
+    Icon(
+        src="data:image/svg+xml," + quote((STATIC_DIR / f"menu-{theme}.svg").read_text(encoding="utf-8")),
+        mimeType="image/svg+xml",
+        sizes=["any"],
+        theme=theme
+    )
+    for theme in ("light", "dark")
 ]
 UI_URI = "ui://fulcra/contacts/v75.html"
 THREAD_UI_URI = "ui://fulcra/contacts/thread/v75.html"
