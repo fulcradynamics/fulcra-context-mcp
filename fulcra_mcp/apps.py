@@ -10,16 +10,14 @@ from mcp.types import Icon
 from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
-# Embed SVG icons as data URIs (like Bits and Bolts) for instant loading
+# Embed SVG icon as data URI (like Bits and Bolts) for instant loading
 STATIC_DIR = Path(__file__).parent / "static"
 MENU_ICONS = [
     Icon(
-        src="data:image/svg+xml," + quote((STATIC_DIR / f"menu-{theme}.svg").read_text(encoding="utf-8")),
+        src="data:image/svg+xml," + quote((STATIC_DIR / "menu-icon.svg").read_text(encoding="utf-8")),
         mimeType="image/svg+xml",
-        sizes=["any"],
-        theme=theme
+        sizes=["any"]
     )
-    for theme in ("light", "dark")
 ]
 UI_URI = "ui://fulcra/contacts/v75.html"
 THREAD_UI_URI = "ui://fulcra/contacts/thread/v75.html"
