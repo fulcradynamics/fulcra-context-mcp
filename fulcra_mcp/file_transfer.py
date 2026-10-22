@@ -385,7 +385,7 @@ def _raising_http_errors(func):
 
 
 @tools_mcp.tool(
-    annotations={"title": "Open File Manager", "readOnlyHint": True},
+    annotations={"title": "Open File Manager", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI),
 )
 @_friendly_http_errors
@@ -445,7 +445,7 @@ def _require_grant() -> str:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Start File Upload", "destructiveHint": False},
+    annotations={"title": "Start File Upload", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.
@@ -551,7 +551,7 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Upload File Chunk", "destructiveHint": False},
+    annotations={"title": "Upload File Chunk", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.
