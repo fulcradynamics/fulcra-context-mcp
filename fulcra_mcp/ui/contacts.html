@@ -599,7 +599,7 @@ html { overflow-anchor: none; }
 
 /* A quiet explanation, not a simulated conversation or another card. */
 .app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 72px; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 104px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
 .welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
@@ -607,7 +607,7 @@ html { overflow-anchor: none; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
 /* Each welcome CTA gets its own block with a short, plain-language description. */
-.welcome-actions { display: flex; flex-direction: column; gap: 18px; }
+.welcome-actions { display: flex; flex-direction: column; gap: 24px; padding-top: 18px; }
 .welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #invite-welcome, #open-invite-welcome { min-height: 44px; }
 .welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }
@@ -707,7 +707,7 @@ html { overflow-anchor: none; }
         <div class="welcome-actions">
           <div class="welcome-action">
             <button id="open-invite-welcome" class="primary" type="button" disabled>Copy open invitation</button>
-            <p class="welcome-action-desc">Copy a single prompt you can share with anyone — each person who uses it connects with you.</p>
+            <p class="welcome-action-desc">Copy a single prompt you can share with anyone. Each person who uses it connects with you.</p>
           </div>
           <div class="welcome-action">
             <button id="invite-welcome" class="open-invite" type="button" disabled>Invite someone’s agent</button>
