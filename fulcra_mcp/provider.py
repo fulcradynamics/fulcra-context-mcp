@@ -24,6 +24,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyHttpUrl
 
 from .settings import settings
+from .user_agent import fulcra_api_kwargs
 
 OIDC_SCOPES = ["openid", "profile", "name", "email"]
 
@@ -48,7 +49,7 @@ def _is_newer(candidate: FulcraCredentials, current: FulcraCredentials) -> bool:
 
 
 def aware(dt: datetime) -> datetime:
-    """``dt`` with a timezone: fulcra-api before PLAT-829 stamps expirations
+    """``dt`` with a timezone: older fulcra-api stamps expirations
     as naive local time, later releases as aware, and grant files written by
     either may be compared."""
     return dt if dt.tzinfo is not None else dt.astimezone()
@@ -382,6 +383,7 @@ class FulcraOAuthProvider(OAuthProvider):
             oidc_client_id=settings.oidc_client_id,
             oidc_domain=settings.fulcra_oidc_domain,
             oidc_audience=settings.fulcra_api,
+            **fulcra_api_kwargs(),
         )
         auth_url = fulcra.get_authorization_code_url(
             redirect_uri=f"{settings.oidc_server_url}/callback",
@@ -405,6 +407,7 @@ class FulcraOAuthProvider(OAuthProvider):
             oidc_client_id=settings.oidc_client_id,
             oidc_domain=settings.fulcra_oidc_domain,
             oidc_audience=settings.fulcra_api,
+            **fulcra_api_kwargs(),
         )
         try:
             fulcra.authorize_with_authorization_code(
