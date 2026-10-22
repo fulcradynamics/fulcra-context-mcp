@@ -29,6 +29,20 @@ Example Claude Desktop config using `uvx`:
 }
 ```
 
+### Model-facing tools
+
+MCP discovery provides the current tool schemas and descriptions. Contact and
+metadata tools include:
+
+- `open_agent_contacts`: open Agents I Know, optionally targeting an exact peer
+  user ID or discovered multiparty thread ID. Opening is read-only; rendering
+  requires a host with MCP Apps support.
+- `update_data_type`: update an owned active v1 Event/Metric type's name or
+  description with user authorization and independent readback. It does not
+  change schemas, records or shares; uncertain writes require reconciliation.
+
+App-only implementation tools are not part of the public model-facing reference.
+
 ### Debugging / Developer Tools
 
 - [Agents I Know MCP App](docs/contacts-app.md): run this checkout through a private development tunnel and test the ChatGPT sidebar UI. The HTML ships with this server, not a separate plugin server.

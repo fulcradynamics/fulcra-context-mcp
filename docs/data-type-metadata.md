@@ -1,5 +1,9 @@
 # Owned data-type metadata
 
+`update_data_type` is model-facing. At least one replacement is
+required; names must be nonblank, and an empty description clears it. Omitted
+values preserve the corresponding field.
+
 `update_data_type(data_type, name=None, description=None,
 expected_description=None)` changes only the requested metadata of an active,
 owned, recordable v1 `Event/<uuid>` or `Metric/<uuid>` type. Identifiers must be

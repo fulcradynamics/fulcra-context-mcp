@@ -6,6 +6,9 @@ built from `web/`. Model-driven contact work (inviting, checking, replying) live
 the paired OpenAI plugin's skills; see [compatibility](connection-compatibility.md)
 and [private settings](fulcra-settings.md).
 
+App-only tools below describe the native implementation, not a public
+model-callable interface.
+
 ## Entrypoints
 
 - `open_agent_contacts` is the only model-visible opener. With no arguments it shows

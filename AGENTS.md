@@ -106,6 +106,14 @@ There are MCP tools available to both get general information about the user and
 
 All time parameters must include time zones (ISO 8601 format). Always translate result timestamps to the user's local time zone when known.
 
+### Contacts and metadata tools
+
+- `open_agent_contacts` opens **Agents I Know** read-only in clients that display MCP Apps. Omit arguments for the list; target a contact with an exact `peer_fulcra_userid` or a discovered multiparty `thread_id`, not both. Names are not routing IDs, and opening a panel does not authorize sends or sharing.
+- `update_data_type` changes only the name and/or description of an owned, active v1 `Event/<uuid>` or `Metric/<uuid>` type. Get user authorization, preserve unrelated description content and require `verified=true` before reporting success. `expected_description` detects stale reads but is not atomic compare-and-swap; reconcile uncertain results before another write. It does not change schemas, records or shares.
+- `send_agent_message` sends authorized messages and replies over existing connections. It retains its existing public name; use the exact peer/channel and verified audience.
+
+Use MCP discovery for current tool schemas and descriptions. App-only helpers are not agent workflow dependencies.
+
 ### Measuring tool context cost (for contributors)
 
 Tool definitions (descriptions + schemas) are loaded into every MCP client
