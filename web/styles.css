@@ -129,7 +129,7 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 #end-contact-dialog h2, .app-dialog h2 { margin: 0 0 8px; font-size: 16px; }
 #end-contact-dialog label { display: flex; gap: 8px; align-items: center; margin: 12px 0; color: #fff; font-size: 14px; }
 #end-contact-dialog input[type=checkbox] { flex: none; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--teal); }
-.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .app-dialog .dialog-form { display: grid; gap: 12px; }
 .app-dialog .dialog-form p, .app-dialog > p { margin: 0 0 8px; }
 /* Friendly invite dialog: a warm header, plain intro, and themed inputs instead
@@ -152,10 +152,14 @@ body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
 /* Secondary path: hand the invite to the agent in chat, set apart from Create. */
 .app-dialog .dialog-alt { margin-top: 14px; display: grid; gap: 10px; }
 .app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-/* Confirmation after copying the invitation: green so it clearly stands out. */
-.dialog-copied.copy-success { color: var(--teal); font-weight: 500; }
+/* Confirmation after copying the invitation lives in the button row itself, so
+   showing "Copied" never shifts the layout (the row height is set by the
+   buttons). Green so it clearly stands out. */
+.app-dialog .dialog-actions .dialog-copied { margin: 0; font-size: 12px; }
+.app-dialog .dialog-actions .dialog-copied:not(:empty) { display: inline-flex; align-items: center; gap: 4px; }
+.dialog-copied.copy-success { color: #34c759; font-weight: 500; }
 .app-dialog button:active:not(:disabled) { transform: scale(.98); }
-#invite-template { font-size: 13px; margin-bottom: 8px; }
+#invite-template { font-size: 13px; margin-bottom: 12px; }
 button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
 button.danger:hover:not(:disabled) { background: #ff8a802e; }
 #end-contact { align-self: flex-start; }
@@ -496,7 +500,7 @@ html { overflow-anchor: none; }
 
 /* A quiet explanation, not a simulated conversation or another card. */
 .app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 72px; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 104px; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
 .welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
@@ -504,7 +508,7 @@ html { overflow-anchor: none; }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
 /* Each welcome CTA gets its own block with a short, plain-language description. */
-.welcome-actions { display: flex; flex-direction: column; gap: 18px; }
+.welcome-actions { display: flex; flex-direction: column; gap: 24px; }
 .welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #invite-welcome, #open-invite-welcome { min-height: 44px; }
 .welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }

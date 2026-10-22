@@ -13,15 +13,21 @@
       box-shadow: 0 10px 40px rgba(0, 0, 0, .5);
     }
     iframe#app { width: 100%; height: 100%; border: 0; display: block; }
-    /* Simulated ChatGPT composer so footer clearance can be eyeballed. Its
-       height matches the bottom safe-area inset reported by the mock host. */
+    /* Simulated ChatGPT composer so footer clearance can be eyeballed: a
+       floating rounded input (~50px tall, ~550px wide, ~14px above the bottom
+       edge). The 50px height + 14px gap match the bottom safe-area inset the
+       mock host reports. */
     #composer {
-      position: absolute; left: 0; right: 0; bottom: 0; height: 56px;
-      background: #1d1d22; border-top: 1px solid #2a2a30;
-      display: flex; align-items: center; padding: 0 16px; gap: 10px;
-      color: #6f6f78; font-size: 14px; pointer-events: none;
+      position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+      width: min(550px, calc(100% - 32px)); height: 50px; box-sizing: border-box;
+      background: #2a2a2e; border: 1px solid #3a3a40; border-radius: 25px;
+      display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px;
+      color: #8e8e96; font-size: 15px; pointer-events: none;
     }
-    #composer .pill { flex: 1; height: 34px; border-radius: 18px; background: #0b0b0f; border: 1px solid #2a2a30; display: flex; align-items: center; padding: 0 14px; }
+    #composer .plus { font-size: 22px; line-height: 1; color: #c7c7cf; }
+    #composer .placeholder { flex: 1; }
+    #composer .mic { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #8e8e96; box-sizing: border-box; }
+    #composer .send { width: 34px; height: 34px; border-radius: 50%; background: #5a5a62; color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center; }
   </style>
 </head>
 <body>
@@ -31,7 +37,12 @@
   </div>
   <div class="frame-wrap">
     <iframe id="app" sandbox="allow-scripts" title="Agents I Know"></iframe>
-    <div id="composer" aria-hidden="true"><span class="pill">Simulated host composer</span></div>
+    <div id="composer" aria-hidden="true">
+      <span class="plus">+</span>
+      <span class="placeholder">Work with ChatGPT</span>
+      <span class="mic"></span>
+      <span class="send">↑</span>
+    </div>
   </div>
   <script type="module" src="/host.js"></script>
   <script>try { new EventSource('/events').onmessage = () => location.reload(); } catch {}</script>

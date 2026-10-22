@@ -66,10 +66,11 @@ addEventListener('message', ({ data: r, source }) => {
       protocolVersion: '2026-01-26',
       hostInfo: { name: 'ChatGPT', version: '1' }, // simulate the real host name
       hostCapabilities: { message: { text: {} }, updateModelContext: { text: {} }, sampling: {} },
-      // bottom inset matches the simulated composer bar in host.html so footer
-      // clearance can be eyeballed the way ChatGPT would report it.
+      // bottom inset matches the floating composer in host.html (50px tall,
+      // 14px above the bottom edge) so footer clearance can be eyeballed the
+      // way ChatGPT would report it.
       hostContext: { displayMode: 'fullscreen', availableDisplayModes: ['fullscreen', 'pip'],
-        safeAreaInsets: { top: 0, right: 0, bottom: 56, left: 0 } },
+        safeAreaInsets: { top: 0, right: 0, bottom: 64, left: 0 } },
     });
   } else if (r.method === 'tools/call') {
     const name = r.params?.name, args = r.params?.arguments ?? {};
