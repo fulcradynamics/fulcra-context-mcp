@@ -69,7 +69,9 @@ addEventListener('message', ({ data: r, source }) => {
       // bottom inset matches the floating composer in host.html (50px tall,
       // 14px above the bottom edge) so footer clearance can be eyeballed the
       // way ChatGPT would report it.
+      // state=dark / state=light simulate the host's appearance setting.
       hostContext: { displayMode: 'fullscreen', availableDisplayModes: ['fullscreen', 'pip'],
+        ...(states.has('dark') ? { theme: 'dark' } : states.has('light') ? { theme: 'light' } : {}),
         safeAreaInsets: { top: 0, right: 0, bottom: 64, left: 0 } },
     });
   } else if (r.method === 'tools/call') {

@@ -11,6 +11,8 @@ const app = new App({ name: 'Agents I Know', version: '0.1.0' }, { availableDisp
 // SDK 1.7.5: safeAreaInsets are optional pixel values, not host composer height.
 function applySafeArea(context) {
   if (context?.displayMode) document.documentElement.dataset.displayMode = context.displayMode;
+  // Reflect the host's appearance setting so theme-dependent styles can respond.
+  if (context?.theme) document.documentElement.dataset.theme = context.theme;
   if (!context?.safeAreaInsets) return;
   for (const side of ['top', 'right', 'bottom', 'left']) {
     document.documentElement.style.setProperty(`--host-safe-${side}`, `${Math.max(0, context.safeAreaInsets[side])}px`);
