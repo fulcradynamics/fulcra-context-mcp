@@ -22,6 +22,8 @@
   --raised: #222227;       /* fulcra-black-50 */
   --divider: #38383a;      /* fulcra-black-20 */
   --muted: #8a8a8e;        /* fulcra-gray */
+  --text-primary: #fff;    /* primary heading/text color; themeable (vs. hardcoded white) */
+  /* Primary titles turn black when the host appearance is light (see :root[data-theme='light']). */
   --teal: #56d6b7;         /* fulcra-teal */
   --teal-soft: #abebdb;    /* fulcra-teal-50 */
   --violet: #7b61ff;       /* fulcra-lavender-100 / fulcra-purple */
@@ -43,6 +45,11 @@
      input can be scrolled up to about the middle of the screen when wanted. */
   --message-scroll-clearance: 50dvh;
 }
+
+/* When the host reports a light appearance, the three primary titles ("Agents I
+   Know", the selected contact name, and the welcome title) render black; dark
+   keeps the default white. */
+:root[data-theme='light'] { --text-primary: #000; }
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
 .contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; margin-top: 12px; }
@@ -183,7 +190,7 @@ main {
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
 .brand img { flex: none; }
-h1 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 0; font-size: 24px; }
+h1 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 0; font-size: 24px; color: var(--text-primary); }
 h2 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 20px 0 12px; font-size: 20px; }
 p { margin: 12px 0; }
 .meta, [role='status'], #messages .message-date, #thread-composer > p { color: var(--muted); font-size: 12px; }
@@ -362,7 +369,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 .identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #6a6a71; transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
 .identity-info:hover:not(:disabled), .identity-info[aria-expanded='true'] { background: var(--raised); color: #fff; }
 .identity-info:active:not(:disabled) { transform: scale(.92); filter: none; }
-.contact-headings h2 { margin: 0; }
+.contact-headings h2 { margin: 0; color: var(--text-primary); }
 .contact-topic { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .contact-subtitle { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a71; overflow-wrap: anywhere; }
 
@@ -504,7 +511,7 @@ html { overflow-anchor: none; }
 .welcome-content { max-width: 440px; margin-inline: auto; }
 .welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
 .welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
-#welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; }
+#welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; color: var(--text-primary); }
 .welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
 .welcome-next { margin-bottom: 24px; }
 /* Each welcome CTA gets its own block with a short, plain-language description. */
