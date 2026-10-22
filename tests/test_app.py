@@ -1,5 +1,8 @@
 """The app is served by the real server without touching account data."""
 
+from importlib.resources import files
+from urllib.parse import unquote
+
 import pytest
 from fastmcp import Client
 
@@ -23,14 +26,13 @@ async def test_contacts_debug_resource_env(monkeypatch, value, enabled):
 
 
 async def test_app_tools_advertise_navigation_icons():
+    menu_icon = files("fulcra_mcp").joinpath("static/menu-icon.svg").read_text(encoding="utf-8")
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         for name in ("open_agent_contacts_home", "open_agent_contacts"):
-            assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
-                {"src": f"https://mcp.fulcradynamics.com/menu-{theme}.svg",
-                 "mimeType": "image/svg+xml", "sizes": ["any"], "theme": theme}
-                for theme in ("light", "dark")
-            ]
+            [icon] = [icon.model_dump(exclude_none=True) for icon in tools[name].icons]
+            assert unquote(icon.pop("src").removeprefix("data:image/svg+xml,")) == menu_icon
+            assert icon == {"mimeType": "image/svg+xml", "sizes": ["any"]}
             assert tools[name].icons != server_info.icons()
 
 
