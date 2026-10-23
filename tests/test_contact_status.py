@@ -117,13 +117,13 @@ async def test_invalid_or_peer_metadata_never_writes(backend, change):
     assert not backend['writes']
 
 
-async def test_schema_and_all_covering_grants(backend):
+async def test_schema_required_but_broad_access_does_not_block_status(backend):
     backend['schema'] = {'properties': {}}
     assert (await assess())['verified'] is False
     backend.pop('schema')
     backend['shares'].append(dict(share_all_data=True, fulcra_data_types=[], permissions=[]))
-    assert (await assess())['verified'] is False
-    assert not backend['writes']
+    assert (await assess())['verified'] is True
+    assert len(backend['writes']) == 1
 
 
 @pytest.mark.parametrize('option', [dict(persist=False), dict(mutation={'description': None}), dict(denied=True)])

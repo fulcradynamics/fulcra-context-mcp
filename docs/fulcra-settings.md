@@ -2,9 +2,9 @@
 
 The server advertises native `openai/settings`. Settings are configuration, not
 instructions: saving never sends messages, changes checkpoints or schedules
-anything. Every tool here is app-only. Skills edit the same private document with
+anything. Every tool here is app-only. Skills edit the same owned document with
 exact catalog reads and `update_data_type`, preserving unrelated values
-and verifying privacy and readback.
+and verifying ownership and readback. Existing broader shares may expose it.
 
 ## Tools
 
@@ -47,10 +47,12 @@ description:
 ```
 
 Reads never create it; the first save does. Missing fields inherit defaults, then
-global values. Reads and saves fail closed on a malformed document or any covering
-outgoing share (`share_all_data`, `Event`, `Event/*`, `*`, or the type itself), and
-`create_share` refuses to share it. Saves are serialized per worker and verified by
-readback, but there is no compare-and-swap across workers.
+global values. Reads and saves fail closed on a malformed document or an explicit
+single-type outgoing grant targeting this storage. Existing share-all, wildcard
+and mixed-type grants do not block use; they may expose preferences, and are not
+changed by the app. Generic `create_share` does not enforce app storage privacy.
+Saves are serialized per worker and verified by readback, but there is no
+compare-and-swap across workers.
 
 The plugin reloads settings on every `check-messages` / `reply-to-messages` run;
 only the latter replies, subject to pauses and task restrictions.

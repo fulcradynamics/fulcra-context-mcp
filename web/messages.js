@@ -76,10 +76,10 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!choice || thread !== selected) return;
     endButton.disabled = true; status.textContent = `Ending contact with ${name}…`;
     try {
-      await endContact(app, thread, choice.archive);
+      const ended = await endContact(app, thread, choice.archive);
       if (thread !== selected) return;
       onBack();
-      doc.querySelector('#status').textContent = `Ended contact with ${name}.`;
+      doc.querySelector('#status').textContent = `Ended contact with ${name}.` + (ended.broaderAccessRemains ? ' Broader shares remain and may still allow access to these messages.' : '');
     } catch (error) {
       if (thread === selected) status.textContent = `Could not end contact with ${name}: ${error.message}`;
     } finally { endButton.disabled = false; requestRefresh(); }

@@ -7,12 +7,12 @@ import { icon, Copy, Check } from './icons.js';
 export const invitationPrompt = 'I want to invite another user to connect our agents through Fulcra. '
   + 'Please use the invite skill to help me prepare the invitation. '
   + 'First offer a single-person invitation or an open invitation I can share with a group. For a single-person invitation, ask for my name and the name of the person I am inviting. '
-  + 'Follow the skill’s private invitation procedure using available generic tools. Without secure code execution, the native Invite someone dialog supports single-person only; new open invitations are unavailable on this host. Reuse verified existing prepared open codes and matching when available. Do not loop back to the dialog for open mode or silently downgrade it. Never invent a random code. Show me a copyable invitation prompt for the other person to give their agent, '
+  + 'Follow the skill’s invitation procedure using available generic tools. Without secure code execution, the native Invite someone dialog supports single-person only; new open invitations are unavailable on this host. Reuse verified existing prepared open codes and matching when available. Do not loop back to the dialog for open mode or silently downgrade it. Never invent a random code. Show me a copyable invitation prompt for the other person to give their agent, '
   + 'using my verified Fulcra user ID and persisted code and the connection skill URL. Their agent must share its own channel with me and its FIRST message topic must be exactly handshake followed by one space and the code. Do not ask for the other user\'s ID; if I already gave it, share the prepared outbox with exactly that user after preparing the code. '
-  + 'This request authorizes you to prepare a dedicated unshared outbox with the identifier <their name>\'s agent (for example Sura Novi\'s agent) and the original setup session URL when available, without another confirmation. '
+  + 'This request authorizes you to prepare a dedicated outbox without targeted grants with the identifier <their name>\'s agent (for example Sura Novi\'s agent) and the original setup session URL when available, without another confirmation. '
   + 'Then ask whether I want to add optional context about what the invite is for, so you can personalize the prompt and draft an outgoing message. '
-  + 'For a single-person invitation, this request authorizes the skill’s verified matching procedure to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Keep it unshared until that match; unmatched sharing needs my explicit consent. '
-  + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Follow the skill’s open-invitation procedure; use the topic exactly: open_invitation followed by one space and the code, NOT handshake. The template is never shared; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
+  + 'For a single-person invitation, this request authorizes the skill’s verified matching procedure to share only that prepared outbox back to the authenticated incoming-share owner after a unique first-message code match and independent grant readback. Add no targeted grants until that match; unmatched sharing needs my explicit consent. '
+  + 'For an open invitation, ask for my name and a meaningful invitation identifier instead of a recipient name. Follow the skill’s open-invitation procedure; use the topic exactly: open_invitation followed by one space and the code, NOT handshake. Never add grants to the template; matching creates a separate one-to-one outbox per authenticated responder. Use <sender> via <open invitation identifier> as display-only fallback, never for routing. Do not post messages merely to complete matching; response content remains subject to my preferences.';
 
 // Sends one user request to the chat after clearing any attached thread context.
 // opts.button: show a spinner on the triggering button instead of an inline
@@ -63,7 +63,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   const title = doc.createElement('h2'); title.id = 'invite-title'; title.textContent = 'Invite someone';
   head.append(title);
   const intro = doc.createElement('p'); intro.className = 'dialog-intro';
-  intro.textContent = 'Send an invitation so your agents can message each other. It sets up a private connection just for the two of you.';
+  intro.textContent = 'Send an invitation so your agents can message each other. It sets up a connection for the two of you; existing broader shares still apply.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [inviterLabel, inviter] = field(doc, 'Your name', 'inviter_name', { placeholder: 'e.g. Jordan' });
   const [recipientLabel, recipient] = field(doc, 'Their name', 'recipient_name', { placeholder: 'e.g. Alex' });
@@ -162,7 +162,7 @@ export async function openStandingInvitation(app, doc, status, button) {
   dialog.setAttribute('aria-labelledby', 'standing-title');
   const title = doc.createElement('h2'); title.id = 'standing-title'; title.textContent = 'Share this with anyone';
   const intro = doc.createElement('p'); intro.className = 'dialog-intro';
-  intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets their own private connection with you.';
+  intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets a separate connection with you. Existing broader shares still apply.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [nameLabel, name] = field(doc, 'Your name in this invitation', 'inviter_name', { optional: true, placeholder: 'Optional' });
   name.value = value.inviter_name ?? '';

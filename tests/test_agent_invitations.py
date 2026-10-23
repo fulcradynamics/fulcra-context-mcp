@@ -121,7 +121,7 @@ def test_failure_diagnostics_do_not_expose_exception_data(api, caplog, failure, 
     api.create_datashare.assert_not_called()
 
 
-@pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'broad'])
+@pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'targeted'])
 def test_unsafe_evidence_never_shares(api, mode):
     code = invitations.prepare(api, OUT)['code']
     handshake(api, code)
@@ -140,7 +140,7 @@ def test_unsafe_evidence_never_shares(api, mode):
         api.catalog.append(channel(IN, OTHER)); api.get_shared_datasets.return_value.append(incoming(OTHER)); handshake(api, code, OTHER)
     if mode == 'schema': api.v1_catalog_schema.return_value = {}
     if mode == 'read_failure': api.get_shared_datasets.side_effect = TimeoutError
-    if mode == 'broad': api.get_datashares.return_value = [dict(share_all_data=True, fulcra_data_types=[])]
+    if mode == 'targeted': api.get_datashares.return_value = [dict(share_all_data=False, fulcra_data_types=[OUT])]
     assert not any(r['status'] == 'matched' for r in invitations.match(api)['results'])
     api.create_datashare.assert_not_called()
 

@@ -1,17 +1,19 @@
 // Ends a single-peer contact like the connection skill: the server deletes our
-// covering shares and verifies none remain; archiving is the user's choice.
+// narrow grants and verifies none remain; broader shares are untouched.
 export async function endContact(app, thread, archive) {
   const outgoing = thread.sources.filter(s => s.direction === 'Outgoing');
   let archived = 0;
+  let broaderAccessRemains = false;
   for (const source of outgoing) {
     const result = await app.callServerTool({ name: 'end_agent_contact',
       arguments: { data_type: source.id, peer_userid: thread.peer, archive } }, { timeout: 30000 });
     const value = result.structuredContent;
     if (result.isError || !value?.ended) throw new Error(value?.reason || 'Ending not verified.');
-    if (archive && !value.archived) throw new Error(`Sharing stopped, but archiving was not verified. ${value.reason ?? ''}`.trim());
+    if (archive && !value.archived) throw new Error(`Narrow contact grants removed; broader shares are unchanged, but archiving was not verified. ${value.reason ?? ''}`.trim());
     archived += value.archived ? 1 : 0;
+    broaderAccessRemains ||= value.broader_access_remains === true;
   }
-  return { archived };
+  return { archived, ...(broaderAccessRemains ? { broaderAccessRemains } : {}) };
 }
 
 // Resolves { archive } on confirmation, or null when cancelled.
@@ -21,7 +23,7 @@ export function confirmEndContact(doc, name, returnFocus) {
   dialog.setAttribute('aria-labelledby', 'end-contact-title');
   const title = doc.createElement('h2'); title.id = 'end-contact-title'; title.textContent = `End contact with ${name}?`;
   const text = doc.createElement('p');
-  text.textContent = `${name} will no longer be able to read your messages. They may already have read earlier ones. What they share with you is not changed.`;
+  text.textContent = `Remove the narrow grants for this contact. Broader shares remain unchanged and may still allow access to your messages. They may already have read earlier ones. What they share with you is not changed.`;
   const label = doc.createElement('label');
   const archive = doc.createElement('input'); archive.type = 'checkbox'; archive.id = 'end-contact-archive';
   label.append(archive, ' Also archive your messages (kept and restorable)');

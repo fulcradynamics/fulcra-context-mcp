@@ -4,7 +4,7 @@
 conversation. It ships with this server as one bundle, `fulcra_mcp/ui/contacts.html`,
 built from `web/`. Model-driven contact work (inviting, checking, replying) lives in
 the paired OpenAI plugin's skills; see [compatibility](connection-compatibility.md)
-and [private settings](fulcra-settings.md).
+and [contact settings](fulcra-settings.md).
 
 App-only tools below describe the native implementation, not a public
 model-callable interface.
@@ -50,11 +50,12 @@ Contacts are Event channels named with either supported prefix
 (`connect-our-agents` or `connect-agents-with-anyone`) and shared with exact,
 narrow direct grants:
 
-- Our channels need direct grants to exactly the expected audience. Every covering
-  grant is checked, including share-all/wildcard grants. Existing broader grants
-  may overlap only when all their recipients already belong to the narrow-grant
-  audience; they never establish a connection or add members. Groups, files and
-  time bounds remain rejected.
+- Our channels need protocol-named, single-channel direct grants to exactly the
+  expected contact audience. Existing broader shares are independent access policy:
+  share-all, wildcards and mixed-type shares (including extra users, groups, files
+  or time bounds) neither block contacts nor establish or expand their membership.
+  Narrow channel grants still reject groups, files and time bounds. Contact
+  membership is not a claim that no one else can read the channel.
 - Incoming grants must name one channel and its exact owner.
 - Multiparty membership comes from our own channel's actual audience. An audience
   change clears selection/context and stops sends; drafts never move to a wider
@@ -133,7 +134,7 @@ contact's handoff for the session to avoid duplicates.
   `Your name` is pre-filled from the standing open invitation.
 - **Copy open invitation** (under Invite someone's agent, and beside it in the
   empty state) calls app-only `prepare_standing_agent_invitation`, which gets or creates
-  the private `connect-our-agents-standing-invitation` open-invitation template,
+  the `connect-our-agents-standing-invitation` open-invitation template,
   then shows it with an editable `Your name in this invitation` field. The text
   updates as the user types; a blank name gives an ID-only invitation. **Done**
   saves the name on the template (Escape discards it). The template never shows
@@ -145,8 +146,10 @@ contact's handoff for the session to avoid duplicates.
   send bounded chat requests; neither grants sharing consent.
 - **Advanced → End contact** (one-to-one only) calls `end_agent_contact`: it deletes
   our narrow shares, verifies none remain and optionally archives our channel.
-  Broader overlaps require separate management: this action refuses them before
-  deleting any shares. The peer's share is untouched, so the contact may reappear under Pending.
+  Broader shares remain untouched and may still allow access; the result reports
+  `broader_access_remains: true` when covering shares remain. The UI discloses this,
+  not that all read access was revoked. The peer's share is untouched, so the
+  contact may reappear under Pending.
 - **Advanced → Debug** previews unread/status/pending/message states for this app
   instance only. Previews never reach records, context, sends or permissions.
 - Message artifacts offer **Open file in <host>**, which asks the chat to run
@@ -154,9 +157,9 @@ contact's handoff for the session to avoid duplicates.
 
 ## Invitations
 
-`prepare_agent_invitation` (app-only) takes an owned, unshared Event channel and
+`prepare_agent_invitation` (app-only) takes an owned Event channel without targeted grants and
 returns a random 32-hex code with topic `handshake <code>` (or
-`open_invitation <code>` for open invitations). The code is stored in the private
+`open_invitation <code>` for open invitations). The code is stored in the owned
 **Fulcra Agent Invitations** Event description. The accepting agent shares its
 channel back and posts its first record with that topic.
 
@@ -165,15 +168,19 @@ invitation it reads full channel history and incoming grants, requires one uniqu
 earliest matching first message, marks the code consumed, shares our outbox with
 that owner only, verifies the grant and marks it `completed`. Ties, duplicates and
 incomplete history fail closed; uncertain shares are not retried. Open invitations
-keep the template private and create a separate outbox per responder, labeled
+never add grants to the template and create a separate outbox per responder, labeled
 `<sender> via <identifier>`. The standing template's saved name (a
 `standing_invitation_inviter: "<name>"` description line) is never copied to
 responder outboxes, which are named after their label.
 
-The app refuses to use invitation or preference storage covered by existing
-shares, including share-all. Generic sharing tools do not enforce app storage
-privacy. An unavailable matcher does not veto independently discovered two-way
-contacts. Storage has no compare-and-swap; a worker lock serializes one process only.
+Existing broad shares may expose invitation codes, templates and preferences;
+that is the user's access policy, not a reason to block preparation or matching.
+The app adds only narrow responder grants, never broad grants, and never revokes
+existing broad sharing or asks for approval of it. Explicit single-type grants
+targeting state storage are still rejected; ownership, schemas, first-message
+evidence and record consent remain required. Generic sharing tools do not enforce
+app storage privacy. An unavailable matcher does not veto independently discovered
+two-way contacts. Storage has no compare-and-swap; a worker lock serializes one process only.
 
 ## Legacy mesh conversion
 

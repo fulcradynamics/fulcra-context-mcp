@@ -8,7 +8,7 @@ import pytest
 
 from fulcra_mcp.tools import _slim_share
 from fulcra_mcp.mentions import _thread_labels, CHANNEL_SCHEMA
-from fulcra_mcp.contact_preferences import _check_private
+from fulcra_mcp.contact_preferences import _check_state_shares
 
 ROOT = Path(__file__).resolve().parents[1]
 OWN = '00000000-0000-4000-8000-000000000001'
@@ -59,4 +59,4 @@ def test_non_event_grants_do_not_block_discovery(selectors, valid):
 def test_raw_private_checker_accepts_non_event_grants(selectors):
     api = Mock()
     api.get_datashares.return_value = [dict(share_all_data=False, fulcra_data_types=selectors)]
-    _check_private(api, {'id': TYPE})
+    _check_state_shares(api, {'id': TYPE})

@@ -19,8 +19,8 @@ MENU_ICONS = [
         sizes=["any"]
     )
 ]
-UI_URI = "ui://fulcra/contacts/v77.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v77.html"
+UI_URI = "ui://fulcra/contacts/v78.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v78.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 

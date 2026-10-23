@@ -55,10 +55,10 @@ function parseShares(result) {
   return shares;
 }
 
-// Only single-channel direct grants establish outgoing recipients. Inspect ALL
-// covering grants, not just narrow ones.
+// Only single-channel direct grants establish outgoing recipients.
+// Broader access policy neither establishes nor expands a contact.
 function directRecipients(share) {
-  return !share.group_id && !share.time_start && !share.time_end
+  return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
     && Array.isArray(share.with_user_ids) && share.with_user_ids.length > 0
     && share.with_user_ids.every(p => typeof p === 'string' && p)
@@ -93,19 +93,18 @@ export async function discoverThreads(app) {
     if (owner === own) {
       const covering = shares.outgoing.filter(s => covers(s, entry.id));
       if (!covering.length) {
-        // The standing open invitation is a private template, not a contact.
+        // The standing open invitation is a template, not a contact.
         if (connection && entry.name !== STANDING_INVITATION) pending.push(source);
         continue;
       }
-      const narrow = covering.filter(s => s.share_all_data === false
-        && s.data_types?.length === 1 && s.data_types[0] === entry.id);
+      const narrow = covering.filter(s => s.share_all_data !== true
+        && s.data_types?.length === 1 && s.data_types[0] === entry.id
+        && !s.file_paths?.length && !s.file_history_paths?.length);
       const grants = narrow.map(directRecipients);
       const recipients = [...new Set(grants.flat())].sort();
       if (!recipients.length || recipients.some(p => !p || p === own) || recipients.length > 32
         || (!connection && (recipients.length !== 1 || narrow.length !== covering.length))
-        || (connection && !narrow.every(namedShare))
-        || !covering.every(s => [true, false].includes(s.share_all_data)
-          && directRecipients(s) && directRecipients(s).every(p => recipients.includes(p)))) {
+        || (connection && !narrow.every(namedShare))) {
         omitted++;
         continue;
       }

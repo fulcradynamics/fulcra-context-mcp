@@ -108,7 +108,7 @@ test('unsupported chat hosts retain pending contacts without automatic messages'
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(0);
 });
 
-test('same-peer share-all overlap stays connected but an extra recipient fails closed', async ({page}) => {
+test('share-all extra recipients leave the narrow contact connected', async ({page}) => {
   const ui = await open(page, 900, {listOnly:true, autoSelect:false});
   await page.evaluate(({peer, out}) => {
     window.audience = [peer];
@@ -121,8 +121,8 @@ test('same-peer share-all overlap stays connected but an extra recipient fails c
   await expect(ui.locator('#pending-connections > li')).toHaveCount(1);
   await page.evaluate(other => { window.extraOutgoing[0].with_user_ids.push(other); }, other);
   await page.clock.runFor(11000);
-  await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
-  await expect(ui.locator('#pending-connections > li')).toHaveCount(2);
+  await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
+  await expect(ui.locator('#pending-connections > li')).toHaveCount(1);
   expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'delete_share', 'send_agent_contact_message'].includes(c.name)))).toBe(false);
 });
 

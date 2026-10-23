@@ -27,7 +27,7 @@ for (const prefix of ['connect-agents-with-anyone', 'connect-our-agents']) {
     const incoming = { grant_type: 'user', sharing_fulcra_userid: peer,file_paths:[],file_history_paths:[],data_types: [id], datashare_name: `${prefix}: test` };
     assert.equal((await discoverThreads(app([{ ...channel, fulcra_userid: peer }], [], [incoming]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [{ ...share, datashare_name: `${prefix}: test` }]))).threads.length, 1);
-    assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 0);
+    assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 1);
     assert.equal((await discoverThreads(app([{ ...channel, fields: {} }]))).threads.length, 0);
   });
 }
@@ -49,7 +49,7 @@ test('same-peer broad overlap retains both directions without changing the audie
   }
 });
 
-test('broad overlaps cannot establish a contact or add recipients, groups or time bounds', async () => {
+test('broad access policy neither establishes nor expands a contact', async () => {
   const broad = { ...share, share_all_data: true, data_types: [], datashare_name: 'Personal sharing' };
   assert.equal((await discoverThreads(app([entry], [broad]))).threads.length, 0);
   for (const change of [
@@ -57,7 +57,10 @@ test('broad overlaps cannot establish a contact or add recipients, groups or tim
     { with_group_ids: ['group'] }, { group_id: 'group' },
     { time_start: '2026-01-01T00:00:00Z' }, { time_end: '2027-01-01T00:00:00Z' },
   ]) {
-    assert.equal((await discoverThreads(app([entry], [share, { ...broad, ...change }]))).threads.length, 0);
+    const result = await discoverThreads(app([entry], [share, { ...broad, ...change }]));
+    assert.equal(result.threads.length, 1);
+    assert.equal(result.threads[0].peer, peer);
+    assert.equal(result.threads[0].expectedPeerUserids, undefined);
   }
   const multi = { ...share, with_user_ids: [peer, 'another-peer'] };
   const result = await discoverThreads(app([entry], [multi, broad]));
@@ -65,7 +68,7 @@ test('broad overlaps cannot establish a contact or add recipients, groups or tim
 });
 
 test('all covering grants and channel schema are checked', async () => {
-  assert.equal((await discoverThreads(app([entry],[share,{share_all_data:true}]))).threads.length,0);
+  assert.equal((await discoverThreads(app([entry],[share,{share_all_data:true}]))).threads.length,1);
   assert.equal((await discoverThreads(app([{...entry,fields:{}}]))).threads.length,0);
 });
 test('legacy group-only entries are excluded and owned provenance suppresses repeat conversion', async () => {

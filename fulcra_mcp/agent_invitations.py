@@ -16,7 +16,7 @@ from fulcra_api import connections
 
 from .connection import UUID_PATTERN, _uuid, channel_entry, _authorize
 from .connection_compatibility import SHARE_NAME_PREFIX
-from .contact_preferences import _check_private
+from .contact_preferences import _check_state_shares
 
 NAME = 'Fulcra Agent Invitations'
 STANDING_NAME = 'connect-our-agents-standing-invitation'
@@ -95,7 +95,7 @@ def _state(api):
     if len(entries) > 1:
         raise ValueError('Ambiguous invitation storage.')
     entry = entries[0] if entries else None
-    _check_private(api, entry)
+    _check_state_shares(api, entry)
     document = json.loads(entry['description']) if entry else {'version': 1, 'invitations': {}}
     if document.get('version') != 1 or not isinstance(document.get('invitations'), dict):
         raise ValueError('Invalid invitation storage.')
@@ -135,7 +135,7 @@ def _save(api, own, entry, document):
     description = json.dumps(document, separators=(',', ':'))
     if api.get_fulcra_userid() != own:
         raise ValueError('Account changed.')
-    _check_private(api, entry)
+    _check_state_shares(api, entry)
     if entry:
         api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
     else:
@@ -146,9 +146,10 @@ def _save(api, own, entry, document):
     return current
 
 
-def _covering(api, channel):
+def _targeted(api, channel):
+    # Explicit channel grants, not independent broad access policy.
     return [share for share in api.get_datashares()
-            if share.get('share_all_data') or set(share.get('fulcra_data_types') or []) & {channel, 'Event', 'Event/*', '*'}]
+            if not share.get('share_all_data') and share.get('fulcra_data_types') == [channel]]
 
 
 def prepare(api, data_type, open_invitation=False):
@@ -159,8 +160,8 @@ def prepare(api, data_type, open_invitation=False):
                for binding in invitation.get('responses', {}).values()):
             raise ValueError('Individual outbox already bound to an open invitation.')
         _channel(api, own, data_type, own=True)
-        if _covering(api, data_type):
-            raise ValueError('Prepare an unshared channel; no audience changes are authorized.')
+        if _targeted(api, data_type):
+            raise ValueError('Prepare a channel without targeted grants; no audience changes are authorized.')
         invite = document['invitations'].get(data_type)
         prefix = 'open_invitation' if open_invitation else 'handshake'
         if invite and invite.get('prefix', 'handshake') != prefix:
@@ -249,7 +250,7 @@ def _match_open(api, own, document, template, invite):
                 current_own, entry, current = _state(api)
                 if (current_own != own or current != document
                         or _open_peer(api, own, invite['code'], peer) != pair
-                        or _covering(api, template)):
+                        or _targeted(api, template)):
                     raise ValueError('Open invitation evidence changed.')
                 return entry
 
@@ -281,7 +282,7 @@ def _match_open(api, own, document, template, invite):
                 if data_type == template or data_type in document['invitations']:
                     raise ValueError('New individual outbox required.')
                 _channel(api, own, data_type, own=True)
-                if _covering(api, data_type):
+                if _targeted(api, data_type):
                     raise ValueError('New outbox already shared.')
                 entry = verify()
                 binding.update(data_type=data_type, state='prepared')
@@ -291,7 +292,7 @@ def _match_open(api, own, document, template, invite):
             data_type = binding['data_type']
             result.update(data_type=data_type, identifier=binding['identifier'])
             _channel(api, own, data_type, own=True)
-            covering = _covering(api, data_type)
+            covering = _targeted(api, data_type)
             if covering:
                 _authorize(api, own, peer, data_type)
             elif binding['state'] == 'consumed':
@@ -301,7 +302,7 @@ def _match_open(api, own, document, template, invite):
                 binding['state'] = 'consumed'
                 _save(api, own, entry, document)
                 verify()
-                if _covering(api, data_type):
+                if _targeted(api, data_type):
                     _authorize(api, own, peer, data_type)
                 else:
                     api.create_datashare(datashare_name='connect-our-agents invitation',
@@ -345,7 +346,7 @@ def match(api):
                 result.update(peer_userid=peer, incoming_data_type=incoming)
                 try:
                     _channel(api, own, data_type, own=True)
-                    covering = _covering(api, data_type)
+                    covering = _targeted(api, data_type)
                     if covering:
                         _authorize(api, own, peer, data_type)
                     if not covering and invite['state'] == 'consumed':
@@ -364,7 +365,7 @@ def match(api):
                                 or _evidence(api, own).get(invite['code']) != pair
                                 or _state(api)[2] != document):
                             raise ValueError('Sharing evidence changed.')
-                        if _covering(api, data_type):
+                        if _targeted(api, data_type):
                             _authorize(api, own, peer, data_type)
                         else:
                             api.create_datashare(datashare_name='connect-our-agents invitation',
@@ -409,7 +410,7 @@ def _standing_inviter(description):
 
 
 def _without_inviter(description):
-    # Responder outboxes copy the template description; the name stays private.
+    # Responder outboxes do not copy the template's saved inviter name.
     marker = _inviter_marker(description)
     if not marker:
         return description
@@ -428,7 +429,7 @@ def _standing_entry(api, own):
 
 def standing(api, inviter_name=None):
     """Return the user's standing open invitation, creating it on first use.
-    A given inviter_name ('' clears it) is saved on the private template."""
+    A given inviter_name ('' clears it) is saved on the template, subject to existing shares."""
     from fulcra_api import data_type_management
     from .contact_identifier import write_contact_identifier, validate_identifier
 
