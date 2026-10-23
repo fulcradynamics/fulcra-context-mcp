@@ -27,11 +27,16 @@ export function createMessageList(list, renderRow) {
   }
   // Default resting position leaves 1/8 of the viewport below the input; the pane
   // keeps extra bottom room (padding) so the user can still scroll it further up.
+  // Short panes give up that gap before hiding the latest message, but never the composer.
   function follow() {
     const last = scroller.lastElementChild;
     if (!last) { scroller.scrollTop = scroller.scrollHeight; return; }
-    const target = scroller.getBoundingClientRect().bottom - win.innerHeight / 8;
-    scrollBy(last.getBoundingClientRect().bottom - target);
+    const { bottom: paneBottom } = scroller.getBoundingClientRect();
+    const composer = last.getBoundingClientRect();
+    let delta = composer.bottom - (paneBottom - win.innerHeight / 8);
+    const latest = list.lastElementChild;
+    if (latest) delta = Math.min(delta, latest.getBoundingClientRect().top - top());
+    scrollBy(Math.max(delta, composer.bottom - paneBottom));
   }
   let paneHeight = scroller.clientHeight;
   const onScroll = () => {
