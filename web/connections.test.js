@@ -9,7 +9,7 @@ const own = '00000000-0000-4000-8000-000000000001', peer = '00000000-0000-4000-8
 const id = 'Event/00000000-0000-4000-8000-000000000003';
 const old = 'MomentAnnotation/00000000-0000-4000-8000-000000000004';
 const entry = { id, name:'Agent connection', description:'connect-agents-with-anyone channel', ...schema };
-const share = { datashare_name:'connect-agents-with-anyone: synthetic', share_all_data:false, selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[id], with_user_ids:[peer] };
+const share = { datashare_name:'connect-agents-with-anyone: synthetic', share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id], with_user_ids:[peer] };
 function app(catalog, outgoing=[share], incoming=[]) {
   return { callServerTool: async ({name, arguments: args}) => ({content:[{type:'text',text:name === 'get_data_catalog'
     ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':catalog.filter(e => !args.data_type || e.id === args.data_type)})
@@ -17,14 +17,14 @@ function app(catalog, outgoing=[share], incoming=[]) {
 }
 test('discovers Event contacts and isolates legacy without reading records', async () => {
   const result = await discoverThreads(app([entry,{id:old,name:'Mesh Outbox old',fulcra_userid:peer}],[share],
-    [{grant_type:'user',sharing_fulcra_userid:peer,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[old]}]));
+    [{grant_type:'user',sharing_fulcra_userid:peer,file_paths:[],file_history_paths:[],data_types:[old]}]));
   assert.equal(result.threads.length,1); assert.equal(result.legacy.length,1);
   assert.deepEqual(result.threads[0].sources.map(s=>s.id),[id]);
 });
 for (const prefix of ['connect-agents-with-anyone', 'connect-our-agents']) {
   test(`discovers ${prefix} channels and preserves grant checks`, async () => {
     const channel = { ...entry, description: `${prefix} channel` };
-    const incoming = { grant_type: 'user', sharing_fulcra_userid: peer, selectors_complete:true,file_paths:[],file_history_paths:[],data_types: [id], datashare_name: `${prefix}: test` };
+    const incoming = { grant_type: 'user', sharing_fulcra_userid: peer,file_paths:[],file_history_paths:[],data_types: [id], datashare_name: `${prefix}: test` };
     assert.equal((await discoverThreads(app([{ ...channel, fulcra_userid: peer }], [], [incoming]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [{ ...share, datashare_name: `${prefix}: test` }]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 0);
@@ -37,14 +37,14 @@ test('all covering grants and channel schema are checked', async () => {
 });
 test('legacy group-only entries are excluded and owned provenance suppresses repeat conversion', async () => {
   const legacy={id:old,name:'Mesh Outbox old',fulcra_userid:peer};
-  const grant={grant_type:'user',sharing_fulcra_userid:peer,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[old]};
+  const grant={grant_type:'user',sharing_fulcra_userid:peer,file_paths:[],file_history_paths:[],data_types:[old]};
   assert.equal((await discoverThreads(app([legacy],[],[{...grant,grant_type:'group'}]))).legacy.length,0);
   const description=entry.description+'\nconverted_from_mesh: '+JSON.stringify([{id:old,fulcra_userid:peer}]);
   assert.equal((await discoverThreads(app([{...entry,description},legacy],[share],[grant]))).legacy.length,0);
 });
 test('a two-way contact with the same peer hides its legacy connection', async () => {
   const legacy={id:old,name:'Mesh Outbox old',fulcra_userid:peer};
-  const grant={grant_type:'user',sharing_fulcra_userid:peer,selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[old]};
+  const grant={grant_type:'user',sharing_fulcra_userid:peer,file_paths:[],file_history_paths:[],data_types:[old]};
   const theirs={...entry,id:'Event/00000000-0000-4000-8000-000000000005',fulcra_userid:peer};
   const incoming={...grant,data_types:[theirs.id],datashare_name:'connect-our-agents: test'};
   assert.equal((await discoverThreads(app([entry,theirs,legacy],[share],[grant,incoming]))).legacy.length,0);

@@ -142,14 +142,17 @@ def test_ignores_foreign_and_archived_types_and_detects_unverified_save(storage)
         policy.update(api, {'notifications': 'none'})
 
 
-async def test_create_share_refuses_preferences_type(storage):
+async def test_user_can_share_preferences_and_app_then_refuses_them(storage):
     api, _ = storage
     policy.update(api, {'notifications': 'none'})
+    api.create_datashare.return_value = {'datashare': {'datashare_id': 'd1'}}
     async with Client(mcp) as client:
         result = await client.call_tool('create_share', {
             'name': 'x', 'with_user_ids': [PEER], 'data_types': [PREFS]})
-    assert 'private' in result.content[0].text
-    api.create_datashare.assert_not_called()
+    assert result.content[0].text.startswith('Created share')
+    api.get_datashares.return_value = [{'share_all_data': False, 'fulcra_data_types': [PREFS]}]
+    with pytest.raises(ValueError, match='may be shared'):
+        policy.read(api)
 
 
 def test_real_sdk_create_then_update_description(monkeypatch):

@@ -152,6 +152,15 @@ def test_posted_message_or_reply_clears_all_status(api, kind, attention):
     assert '[contact_status:' not in api.description
 
 
+def test_status_clears_from_whitespace_folded_description(api):
+    import re
+    _with_status(api, True)
+    api.description = re.sub(r'\s+', ' ', api.description + '\n[mesh_identifier: "Alex"]')
+    result = send(api)
+    assert result['status_cleared'] is True
+    assert api.description == 'connect-agents-with-anyone channel [mesh_identifier: "Alex"]'
+
+
 def test_ack_leaves_status_alone(api):
     _with_status(api, True)
     result = send(api, kind='ack', body='ack', in_reply_to=TARGET)
@@ -188,4 +197,4 @@ async def test_ui_and_agent_sends_remove_status_without_changing_other_metadata(
         args.update(connection=OUT, record_id=MID)
     result = await getattr(tools, tool)(**args)
     assert result['status'] == 'posted' and result['status_cleared'] is True
-    assert api.description == 'connect-agents-with-anyone channel\n\n[mesh_identifier: "Alex"]'
+    assert api.description == 'connect-agents-with-anyone channel\n[mesh_identifier: "Alex"]'

@@ -53,7 +53,7 @@ async def test_verified_post_and_duplicate_readback(call, backend):
     {'permissions': [{'allowed_fulcra_userid': PEER}, {'allowed_fulcra_userid': OTHER}]},
     {'group_permissions': [{'allowed_group_id': OTHER}]}, {'group_id': OTHER},
     {'time_start': '2026-01-01T00:00:00Z'}, {'time_end': '2027-01-01T00:00:00Z'},
-    {'file_paths': ['/private/']}, {'files': ['private']}, {'share_all_data': None},
+    {'file_paths': ['/private/']}, {'files': ['private']},
 ])
 async def test_all_covering_grants_checked(call, backend, change):
     fake, _ = backend

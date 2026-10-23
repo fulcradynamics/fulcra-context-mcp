@@ -47,7 +47,7 @@ def catalog(entry):
 def shares():
     return dict(own_fulcra_userid=OWN, outgoing=[], incoming=[dict(
         sharing_fulcra_userid=PEER, grant_type='user',
-        datashare_name='connect-agents-with-anyone: test', selectors_complete=True,
+        datashare_name='connect-agents-with-anyone: test',
         file_paths=[], file_history_paths=[], data_types=[OUT])])
 
 

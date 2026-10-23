@@ -75,24 +75,26 @@ def test_uncertain_attempt_does_not_accept_expanded_audience(api):
     api.create_datashare.assert_called_once()
 
 
-@pytest.mark.parametrize('private_name', [invitations.NAME, 'Fulcra Contact Preferences'])
 @pytest.mark.parametrize('grant', [
     {'share_all_data': True}, {'data_types': ['Event']},
     {'data_types': ['Event/*']}, {'data_types': ['*']}, {'data_types': [STATE]},
 ])
-async def test_public_covering_shares_cannot_disclose_private_storage(api, monkeypatch, private_name, grant):
+async def test_shared_invitation_storage_stops_invitation_work(api, monkeypatch, grant):
     from fastmcp import Client
     from fulcra_mcp import tools
     from fulcra_mcp.main import mcp
     invitations.prepare(api, OUT)
-    api.catalog[-1]['name'] = private_name
     api.create_datashare.side_effect = None
     api.create_datashare.return_value = {}
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     async with Client(mcp) as client:
-        result = await client.call_tool('create_share', {'name': 'private test', 'with_user_ids': [PEER], **grant})
-    assert 'private and cannot be shared' in result.content[0].text
-    api.create_datashare.assert_not_called()
+        result = await client.call_tool('create_share', {'name': 'mine', 'with_user_ids': [PEER], **grant})
+    assert result.content[0].text.startswith('Created share')
+    api.create_datashare.assert_called_once()
+    api.get_datashares.return_value.append({'share_all_data': 'share_all_data' in grant,
+                                            'fulcra_data_types': grant.get('data_types', [])})
+    with pytest.raises(ValueError, match='may be shared'):
+        invitations.prepare(api, OUT)
 
 
 @pytest.mark.parametrize('grant', [{'data_types': [OUT]}, {'file_paths': ['/shared/']}])

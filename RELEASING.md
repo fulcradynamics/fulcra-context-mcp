@@ -4,6 +4,22 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.18.7 release notes
+
+- Generic tools carry no contacts policy again: `create_share` and
+  `create_data_type` no longer refuse the contacts app's private stores, and
+  `update_data_type` has no store-name rules. The app still stops using a store
+  that a user has shared.
+- `list_shares` and `get_data_catalog` return main's projections: no
+  `selectors_complete`, forced empty selector arrays, raw `metadata`,
+  `creation_fields_schema` or extra schema fetches for connection channels.
+  Catalog descriptions are whitespace-folded for every type;
+  `update_data_type`'s `expected_description` compares the same way.
+- Open-invitation responder outboxes use the standard channel schema.
+- `get_records(latest=true)` stays strictly opt-in; ranged reads still require
+  both dates.
+- Ship contacts UI v76 (description markers parse from folded descriptions).
+
 ## 1.18.4 release notes
 
 - Hide the contacts Debug menu by default, including when frontend metadata is
