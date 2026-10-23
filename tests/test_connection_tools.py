@@ -1,5 +1,5 @@
 """Tools an agent needs to run a private channel with another user's agent
-(PLAT-668): record ids from record_data, delete_records, delete_share on an
+record ids from record_data, delete_records, delete_share on an
 incoming share, and telling an ended share apart from a wrong data type ID."""
 
 from uuid import UUID

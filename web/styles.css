@@ -1,0 +1,534 @@
+@font-face {
+  font-family: Rubik;
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('./assets/rubik-latin-wght-normal.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: dark;
+  font-family: Rubik, system-ui, sans-serif;
+  /* Grayscale antialiasing so text renders the same (lighter) weight in a plain
+     browser as it does inside the host webview, which defaults to it. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #fff;
+  background: #000;
+  /* Palette shared with the Portal web app (fulcra-* tokens). */
+  --surface: #16161d;      /* fulcra-black */
+  --raised: #222227;       /* fulcra-black-50 */
+  --divider: #38383a;      /* fulcra-black-20 */
+  --muted: #8a8a8e;        /* fulcra-gray */
+  --text-primary: #fff;    /* primary heading/text color; themeable (vs. hardcoded white) */
+  /* Primary titles turn black when the host appearance is light (see :root[data-theme='light']). */
+  --teal: #56d6b7;         /* fulcra-teal */
+  --teal-soft: #abebdb;    /* fulcra-teal-50 */
+  --violet: #7b61ff;       /* fulcra-lavender-100 / fulcra-purple */
+  --lavender: #9c88ff;     /* fulcra-lavender-75 */
+  --teal-tint: rgba(86, 214, 183, 0.1);
+  --teal-tint-hover: rgba(86, 214, 183, 0.18);
+  --selected-tint: rgba(59, 130, 246, 0.12);
+  --row-hover: rgba(0, 0, 0, 0.25);
+  --outgoing: #5a3fd0;     /* your sent chat bubble: Fulcra purple (#7b61ff), darkened for white-text contrast */
+
+  /* Bottom clearance is a floor, not an addition: use our own spacing when the
+     host reports no bottom inset (native input minimized), but when the host
+     chrome is up its reported inset already reserves the room — don't stack ours
+     on top of it. max() also de-dupes the device safe area (env vs host). */
+  --composer-clearance: 36px;
+  --footer-clearance: max(var(--composer-clearance), env(safe-area-inset-bottom, 0px), var(--host-safe-bottom, 0px));
+  scroll-padding-bottom: var(--footer-clearance);
+  /* Bottom scroll room below the conversation: half the viewport so the message
+     input can be scrolled up to about the middle of the screen when wanted. */
+  --message-scroll-clearance: 50dvh;
+}
+
+/* When the host reports a light appearance, the three primary titles ("Agents I
+   Know", the selected contact name, and the welcome title) render black; dark
+   keeps the default white. */
+:root[data-theme='light'] { --text-primary: #000; }
+
+/* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
+.contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; margin-top: 12px; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-bottom: 0; border-radius: 12px 12px 0 0; }
+/* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
+#connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
+#connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
+#connection-list::-webkit-scrollbar-thumb, #message-area::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+#connection-list:hover::-webkit-scrollbar-thumb, #message-area:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); background-clip: padding-box; }
+.rail-content { padding: 12px 12px var(--footer-clearance); }
+.conversation-pane, #connection-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
+/* The composer scrolls with the conversation (it's the last child here), so the
+   bottom padding gives generous room to scroll it clear of the host's bottom chrome
+   (doubled to survive an extra host-chrome row). No horizontal padding on the
+   scroll container itself, so the scrollbar sits flush with the edge (the small
+   side gap lives on the content instead). */
+#message-area { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 var(--message-scroll-clearance); }
+#message-area > * { margin-inline: 4px; }
+body main { max-width: 1200px; height: 100dvh; display: flex; flex-direction: column; }
+body .contact-header { position: relative; z-index: 3; flex: none; background: transparent; padding: 8px 0 12px; margin: 0; }
+body .thread-button { padding: 12px 8px; gap: 4px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+body .thread-button[aria-current='true'], body .thread-button[aria-current='true']:hover { background: var(--selected-tint); }
+.thread-button .thread-text { display: contents; }
+.thread-name { grid-column: 1; grid-row: 1; }
+.thread-time { grid-column: 2; grid-row: 1; }
+/* Always reserve the unread dot's slot so a row that gets acknowledged doesn't
+   reflow the preview (spatial consistency over reclaiming 12px). */
+.thread-preview { grid-column: 1 / -1; grid-row: 2; padding-right: 12px; }
+.status-badge { grid-column: 1 / -1; grid-row: 3; }
+body #invite { margin: 0; width: 100%; justify-content: start; }
+body .section-tag, body .list-intro { display: none; }
+@media (max-width: 520px) {
+  body main { padding-left: calc(8px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px))); padding-right: calc(8px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))); }
+  .contacts-layout { gap: 10px; grid-template-columns: minmax(105px, 32%) minmax(0, 1fr); }
+  .rail-content { padding-right: 6px; }
+  body .section-header { gap: 4px; flex-wrap: wrap; }
+
+  .composer-input { --composer-lines: 2; }
+  body #thread-composer:not(:empty) { padding: 6px; }
+  #thread-composer .composer-actions { margin-top: 4px; gap: 4px; flex-wrap: nowrap; }
+  #thread-composer .composer-actions button { min-height: 32px; padding: 4px; font-size: 12px; gap: 3px; }
+  #thread-composer .composer-actions .btn-icon { width: 14px; height: 14px; }
+  #thread-composer .composer-hint { margin-top: 4px; font-size: 11px; line-height: 1.3; }
+  body .contact-header { gap: 4px; padding-block: 4px; }
+  .contact-headings h2 { font-size: 18px; }
+  body .section-header h2 { padding: 3px; letter-spacing: 0; }
+}
+
+#contact-identity { position: absolute; left: 0; top: 100%; width: min(340px, 100%); max-height: 55vh; overflow-y: auto; background: rgba(34, 34, 39, .96); backdrop-filter: blur(16px); border: 1px solid var(--divider); border-radius: 12px; padding: 12px; z-index: 5; box-shadow: 0 8px 24px #0004; }
+#contact-identity > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-top: 8px; }
+#contact-identity [role='status'] { grid-column: 1 / -1; margin: 0; }
+.identity-id { min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #d0d0d6; overflow-wrap: anywhere; user-select: all; }
+.identity-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-copy:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.identity-copy:active:not(:disabled) { transform: scale(.92); filter: none; }
+.identity-copy.copy-success { color: var(--teal); }
+.copy-success { animation: copy-check .2s ease-out; }
+@keyframes copy-check { from { transform: scale(.8); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .copy-success { animation: none; } }
+* { box-sizing: border-box; }
+
+/* Unread: a small red dot pinned to the right edge of the preview line (4px gap). */
+body .unread-dot { display: none; position: static; width: 8px; height: 8px; border: 0; padding: 0; border-radius: 50%; background: #3b82f6; font-size: 0; color: transparent; }
+body .unread-dot.on { display: block; grid-column: 1 / -1; grid-row: 2; justify-self: end; align-self: center; z-index: 1; }
+body .pending-row { flex-wrap: wrap; padding: 12px 8px; }
+body .pending-row .thread-text { min-width: 0; }
+body .thread-text { min-width: 0; flex-basis: 100%; }
+body .thread-name { white-space: normal; overflow: visible; }
+
+body #connections > li, body #pending-connections > li, body #legacy-connections > li { padding: 0; }
+body #legacy-connections .thread-button { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+/* Legacy text stacks as a tight block (name, then an optional Fulcra User ID
+   label + monospace id) rather than spreading into the row grid. */
+body #legacy-connections .thread-text { display: block; min-width: 0; }
+.legacy-id-label { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+.legacy-convert { grid-column: 1; justify-self: start; }
+.legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
+.legacy-help { color: #6a6a71; font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
+body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
+#host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: white; }
+#host-guidance::backdrop { background: #0009; }
+#end-contact-dialog, .app-dialog { width: min(440px, 90vw); box-sizing: border-box; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: white; }
+#end-contact-dialog::backdrop, .app-dialog::backdrop { background: #0009; }
+#end-contact-dialog h2, .app-dialog h2 { margin: 0 0 8px; font-size: 16px; }
+#end-contact-dialog label { display: flex; gap: 8px; align-items: center; margin: 12px 0; color: #fff; font-size: 14px; }
+#end-contact-dialog input[type=checkbox] { flex: none; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--teal); }
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.app-dialog .dialog-form { display: grid; gap: 12px; }
+.app-dialog .dialog-form p, .app-dialog > p { margin: 0 0 8px; }
+/* Friendly invite dialog: a warm header, plain intro, and themed inputs instead
+   of a clinical default-styled form. */
+.app-dialog { padding: 22px; box-shadow: 0 16px 48px #0008; }
+.app-dialog .dialog-head { margin-bottom: 10px; }
+.app-dialog .dialog-head h2 { margin: 0; font-size: 18px; }
+.app-dialog .dialog-intro { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog .dialog-form label { gap: 6px; font-size: 13px; color: #fff; font-weight: 500; }
+.app-dialog .dialog-form input[type=text] { min-height: 44px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 10px; background: var(--raised); color: #fff; font-weight: 400; }
+.app-dialog .dialog-form input[type=text]::placeholder { color: #6a6a71; }
+.app-dialog .dialog-form input[type=text]:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; border-color: transparent; }
+.app-dialog .field-help { font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.4; }
+.app-dialog .dialog-form .dialog-error { margin: 0; color: #ff8a80; font-size: 13px; line-height: 1.4; }
+.app-dialog .dialog-error:empty { display: none; }
+.app-dialog .dialog-ghost { background: transparent; }
+.app-dialog .dialog-ghost:hover:not(:disabled) { background: var(--raised); }
+.app-dialog .dialog-actions { margin-top: 6px; }
+.app-dialog .dialog-actions .dialog-ghost { margin-right: auto; }
+/* Secondary path: hand the invite to the agent in chat, set apart from Create. */
+.app-dialog .dialog-alt { margin-top: 14px; display: grid; gap: 10px; }
+.app-dialog .dialog-alt-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+/* Confirmation after copying the invitation lives in the button row itself, so
+   showing "Copied" never shifts the layout (the row height is set by the
+   buttons). Green so it clearly stands out. */
+.app-dialog .dialog-actions .dialog-copied { margin: 0; font-size: 12px; }
+.app-dialog .dialog-actions .dialog-copied:not(:empty) { display: inline-flex; align-items: center; gap: 4px; }
+.dialog-copied.copy-success { color: #34c759; font-weight: 500; }
+.app-dialog button:active:not(:disabled) { transform: scale(.98); }
+#invite-template { font-size: 13px; margin-bottom: 12px; }
+button.danger:not(:disabled) { color: #ff8a80; border-color: #ff8a8055; background: #ff8a801a; }
+button.danger:hover:not(:disabled) { background: #ff8a802e; }
+#end-contact { align-self: flex-start; }
+[hidden] { display: none !important; }
+body { margin: 0; overflow-wrap: anywhere; }
+/* Edge spacing lives on <main>, not <body>: some hosts reset body padding,
+   which left content flush against the top of the viewport. max() avoids
+   double-counting the device safe area (env() vs the host context var). */
+main {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: calc(24px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px)))
+    calc(24px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))) 0
+    calc(24px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px)));
+}
+.brand { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+/* "Copy open invitation" sits top-right, aligned with the title, styled like the
+   composer's gray secondary button (a touch larger than the rail CTAs). */
+#open-invite { flex: none; background: var(--raised); color: #fff; font-weight: 500; }
+#open-invite:hover:not(:disabled) { background: #2d2d34; }
+.brand-identity { display: flex; align-items: center; gap: 12px; }
+#invite { margin-left: auto; }
+.brand img { flex: none; }
+h1 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 0; font-size: 24px; color: var(--text-primary); }
+h2 { font-weight: 500; line-height: 1.3; letter-spacing: -.02em; margin: 20px 0 12px; font-size: 20px; }
+p { margin: 12px 0; }
+.meta, [role='status'], #messages .message-date, #thread-composer > p { color: var(--muted); font-size: 12px; }
+[role='status'] { font-variant-numeric: tabular-nums; }
+[role='status']:empty { display: none; }
+
+/* Weight and spacing separate sections without another layer of badges. */
+.section-header { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
+.section-header h2 { margin: 0; font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--muted); }
+.section-rule { display: none; }
+.section-tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: rgba(86, 214, 183, .7); }
+
+button, input, textarea, select { font: inherit; max-width: 100%; min-width: 0; }
+/* Soft tinted pill — Portal's default action affordance. */
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal-tint);
+  color: var(--teal);
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+button:hover:not(:disabled) { background: var(--teal-tint-hover); }
+button:active:not(:disabled) { filter: brightness(1.2); }
+button:disabled { color: var(--muted); background: rgba(255, 255, 255, .04); cursor: default; }
+.btn-icon { flex: none; }
+/* Primary actions get a solid fill with dark text. */
+button.primary:not(:disabled) { background: var(--teal); color: #000; }
+button.primary:hover:not(:disabled) { background: var(--teal-soft); }
+button.primary:disabled { background: rgba(255, 255, 255, .04); }
+:where(button, input, textarea, select, summary):focus-visible { outline: 2px solid var(--teal); outline-offset: 4px; }
+::selection { background: var(--violet); color: #fff; }
+label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+input, textarea, select { color: #fff; background: var(--surface); border: 1px solid var(--divider); border-radius: 8px; padding: 10px 12px; }
+select { width: fit-content; }
+
+#debug-preview { margin-top: 12px; border-top: 1px solid var(--divider); padding-top: 12px; }
+.debug-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px 12px; margin-bottom: 12px; }
+.debug-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.debug-fields input, .debug-fields select { width: 100%; box-sizing: border-box; padding: 6px 8px; }
+#debug-preview-active { color: var(--lavender); font-size: 12px; }
+.relationship-state { grid-column: 1 / -1; justify-self: start; }
+input { width: 100%; min-height: 42px; }
+textarea { display: block; width: 100%; resize: vertical; font-size: 16px; }
+/* Compact, rounded reply input (native-chat feel); grows with content (JS-capped). */
+/* The input is borderless/transparent; the border + rounding live on the whole
+   floating composer area. min-height keeps it ~1 line (no squish on load). */
+.composer-input { border: 0; background: transparent; padding: 8px 10px; resize: none; overflow-y: hidden; line-height: 1.45; min-height: 40px; }
+.composer-input::placeholder { color: #6a6a70; }
+.composer-input:focus-visible { outline-width: 1px; outline-offset: 2px; }
+#message-history { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 8px 0 16px; }
+#message-through { margin: 0; color: #6a6a70; }
+.message-status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-block: 20px; }
+/* No status text (the normal reading state) means an empty row — drop its margin
+   so it doesn't pad the top of the "Showing messages through" label below it. */
+.message-status-row:has(#message-status:empty) { margin-block: 0; }
+#message-status { margin: 0; }
+/* Borderless teal inline retry, matching the quiet "Load more history" link. */
+.retry-now { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 0 2px; }
+.retry-now:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
+.message-status-row .refresh-spinner { align-self: center; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
+/* Contacts-list discovery status + retry, mirroring the messages view. Collapses
+   its margin when empty so it doesn't pad the list in the normal state. */
+.connection-status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-block: 8px; }
+.connection-status-row:has(#connection-status:empty) { margin-block: 0; }
+.connection-status-row .refresh-spinner { align-self: center; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
+
+/* Flat lists keep the contact and preview primary. */
+#connections, #pending-connections, #legacy-connections {
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+ul, ol { list-style: none; padding: 0; margin: 0; }
+#connections > li, #pending-connections > li, #legacy-connections > li { padding: 10px 8px; }
+#connections > li:first-child, #pending-connections > li:first-child, #legacy-connections > li:first-child { border-top: 0; }
+/* Subtle divider between rows in each section. */
+#connections > li + li, #pending-connections > li + li, #legacy-connections > li + li { border-top: 1px solid rgba(255, 255, 255, .06); }
+/* Pending rows match legacy rows: text column, then a right-aligned action. */
+.pending-row { display: flex; align-items: center; gap: 8px; }
+#pending-connections .pending-label { font-weight: 500; }
+.pending-assist { flex: none; }
+/* Empty state echoes an auto-selected contact row (selected tint + name/preview)
+   so the rail keeps its shape before any contacts exist. */
+.empty-card { padding: 12px 8px; border-radius: 8px; background: var(--selected-tint); }
+.empty-card-title { margin: 0; font-size: 15px; font-weight: 500; color: #fff; }
+.empty-card-detail { margin: 2px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+#pending-connections p { margin: 2px 0 0; }
+#connections > li:hover { background: var(--row-hover); }
+/* Legacy rows aren't clickable as a whole (the Convert button is the action), so
+   the row itself doesn't highlight on hover. */
+.legacy-convert { flex: none; }
+
+/* Thread rows: a full-width clickable button with an unread badge and text
+   column (name, monospace peer id, latest-message preview). */
+.thread-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-weight: 500;
+}
+.thread-button:hover:not(:disabled) { background: transparent; }
+.thread-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.thread-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-id { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #6a6a71; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-secondary { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
+.contact-status { margin: 4px 0 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.contact-status.attention { color: #c79448; }
+.thread-preview { margin: 4px 0 0; color: #a5a5ad; font-size: 13px; font-weight: 400; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.preview-sender { color: inherit; font-style: italic; }
+/* A quiet timestamp, without pill chrome. */
+.thread-time { flex: none; margin-left: auto; align-self: center; display: inline-flex; color: var(--muted); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.thread-time:empty { display: none; }
+/* Saved assessment shown as a pill badge, set apart from the row's name/preview.
+   Informational states (no action identified / partially assessed) read as quiet
+   tertiary monospace text, like the legacy user ID; only "needs attention" gets the
+   amber pill, since it calls for action. */
+.status-badge { align-self: flex-start; max-width: 100%; margin: 6px 0 0; display: inline-flex; align-items: center; gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.4; color: #6a6a71; }
+.status-badge[hidden] { display: none; }
+.status-kind { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.status-reason { min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-badge.attention { padding: 3px 9px; border-radius: 999px; background: rgba(224, 178, 109, .14);
+  font-family: inherit; font-weight: 500; color: #e0b26d; }
+.status-badge.attention .status-kind { color: #c79448; }
+.thread-time .refresh-spinner { width: 10px; height: 10px; --spinner-thickness: 1.5px; }
+
+/* Conversation: a familiar chat layout. Bubbles align by direction — incoming
+   left (gray), outgoing right (green) — with the date beneath each bubble. */
+#messages { display: flex; flex-direction: column; padding: 4px 0; }
+.message-row { display: flex; align-items: flex-end; gap: 8px; margin: 5px 0; }
+.message-row.incoming { justify-content: flex-start; }
+.message-row.outgoing { justify-content: flex-end; }
+
+.msg-content { display: flex; flex-direction: column; min-width: 0; max-width: 78%; }
+.message-row.incoming .msg-content { align-items: flex-start; }
+.message-row.outgoing .msg-content { align-items: flex-end; }
+.bubble { max-width: 100%; padding: 9px 13px; border-radius: 18px; line-height: 1.4; }
+.message-row.incoming .bubble { background: var(--raised); color: #fff; border-bottom-left-radius: 6px; }
+.message-row.outgoing .bubble { background: var(--outgoing); color: #fff; border-bottom-right-radius: 6px; }
+.bubble-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 3px 6px 0; font-size: 11px; color: var(--muted); }
+.message-row.outgoing .message-meta { justify-content: flex-end; }
+#messages .message-date { font-size: 11px; line-height: 1.3; }
+/* The sending agent, on its own line under the date, quieter than it. */
+.message-sender { flex-basis: 100%; font-size: 10px; color: #6a6a70; }
+/* Inline file attachments: a dark paperclip badge, then the file paths listed
+   under it, each with a quiet teal "open in chat" action. */
+.message-artifacts { margin-top: 10px; font-size: 12px; overflow-wrap: anywhere; }
+.artifact-label { display: inline-flex; align-items: center; gap: 5px; margin: 0 0 8px; padding: 3px 9px 3px 7px; border-radius: 999px; background: rgba(0, 0, 0, .28); color: rgba(255, 255, 255, .4); font-weight: 500; }
+.artifact-clip { flex: none; }
+.artifact { margin-top: 6px; }
+.artifact-path { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(255, 255, 255, .72); }
+.artifact-open { margin-top: 6px; min-height: 30px; padding: 5px 11px; font-size: 12px; }
+.artifact [role='status'] { margin: 4px 0 0; color: inherit; }
+.artifact [role='status']:empty { display: none; }
+.artifact-request { white-space: pre-wrap; margin: 6px 0 0; font-size: 11px; }
+
+/* Contact header and the framed conversation card. */
+.contact-header { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
+.contact-headings { min-width: 0; flex: 1; }
+.contact-name { display: flex; align-items: center; gap: 4px; }
+.identity-info { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #6a6a71; transition: background 150ms ease, color 150ms ease, transform 100ms ease-out; }
+.identity-info:hover:not(:disabled), .identity-info[aria-expanded='true'] { background: var(--raised); color: #fff; }
+.identity-info:active:not(:disabled) { transform: scale(.92); filter: none; }
+.contact-headings h2 { margin: 0; color: var(--text-primary); }
+.contact-topic { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.contact-subtitle { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6a6a71; overflow-wrap: anywhere; }
+
+
+/* Advanced tools stay one level deeper, beside the contact name. */
+.advanced-toggle { flex: none; margin-left: auto; align-self: flex-start; min-height: 28px; padding: 4px; font-size: 11px; font-weight: 400; background: transparent; color: var(--muted); }
+.advanced-toggle .btn-icon { display: none; }
+.advanced-toggle:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.advanced-panel { display: flex; flex-direction: column; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 12px; background: var(--raised); }
+.advanced-panel > p { margin: 0; }
+.advanced-panel .context-details, .advanced-panel details { margin: 0; }
+
+/* Reply composer reads as a message-to-contact box (purple Send + hint). */
+.composer-primary.send-to-peer:not(:disabled) { background: var(--outgoing); color: #fff; }
+.composer-primary.send-to-peer:hover:not(:disabled) { background: #6b4fe0; }
+/* Disabled Send stays recognizably purple, just dimmed (not harshly dark). */
+.composer-primary.send-to-peer:disabled { background: rgba(90, 63, 208, .45); color: rgba(255, 255, 255, .7); }
+/* Gray secondary action (the host-chat handoff) so it doesn't read as primary. */
+.composer-actions .btn-secondary:not(:disabled) { background: var(--raised); color: #fff; font-weight: 400; }
+.composer-actions .btn-secondary:hover:not(:disabled) { background: #2d2d34; }
+.composer-hint { margin: 8px 0 0; font-size: 12px; color: #6a6a70; }
+/* Multiparty-only detail lines, kept subtle. */
+.message-recipients, .message-source, .addressing-help { color: var(--muted); font-size: 11px; }
+.message-row.addressed-to-viewer .bubble { box-shadow: 0 0 0 2px var(--teal); }
+.message-row.addressed-to-others .bubble { opacity: .6; }
+.incoming-sources label { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; }
+.incoming-sources input { width: 18px; min-height: 18px; flex: none; }
+#viewing-agent { max-width: 280px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12px 0 0; }
+
+/* Reply composer action buttons (Send + handoff) on one wrapping row. */
+.composer-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.send-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
+.send-badge .send-spinner { flex: none; width: 11px; height: 11px; --spinner-thickness: 1.5px; }
+/* Unread visibility; the sidebar overrides positioning and sizing above. */
+.unread-dot { position: absolute; top: -2px; left: -2px; width: 11px; height: 11px; border-radius: 50%; background: #3b82f6; border: 2px solid var(--surface); visibility: hidden; }
+.unread-dot.on { visibility: visible; }
+#thread-composer details label { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+/* The flex footer is always pinned, including short and empty histories. */
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface); border: 1px solid rgba(255, 255, 255, .04); border-radius: 16px; padding: 12px 14px; }
+#thread-composer label { display: block; }
+#thread-composer .composer-actions { margin-top: 14px; }
+/* Primary Send sits bottom-right; the secondary handoff stays on the left. */
+#thread-composer .composer-actions .composer-primary { margin-left: auto; }
+details { margin-block: 16px; }
+summary { color: var(--teal); cursor: pointer; width: fit-content; max-width: 100%; }
+details[open] > summary { color: var(--violet); }
+#thread-context { padding: 16px; background: var(--surface); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
+/* Standalone app status line (host connect / handoff feedback). Collapses when
+   empty via the shared [role=status]:empty rule, so it adds no persistent chrome. */
+.app-status { flex: none; margin: 8px 0 10px; max-height: 12vh; overflow-y: auto; }
+/* Onboarding card: the dismissible nudge atop the message view when no
+   automatic-check schedule exists. */
+.onboarding-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px;
+  background: var(--raised); text-align: left; }
+.onboarding-head { display: flex; align-items: center; gap: 8px; }
+.onboarding-icon { color: var(--teal); flex: none; }
+.onboarding-title { margin: 0; color: #fff; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.onboarding-dismiss { flex: none; margin-left: auto; width: 24px; height: 24px; min-height: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: transparent; color: var(--muted); }
+.onboarding-dismiss:hover:not(:disabled) { background: var(--raised); color: #fff; }
+.onboarding-text { margin: 0; color: #c4c4cc; font-size: 13px; line-height: 1.5; }
+.onboarding-action { align-self: flex-start; margin-top: 2px; font-size: 13px; }
+.onboarding-card--sticky { position: sticky; top: 0; z-index: 2; margin: 0 4px 10px; }
+/* Quiet re-entry point in the Advanced panel once the card is dismissed. */
+#onboarding-advanced { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.onboarding-advanced-action { align-self: flex-start; font-size: 13px; }
+.list-intro { font-size: 13px; }
+
+/* A tapered "comet" ring: a conic gradient fading from transparent to teal,
+   masked to a thin ring. Smoother and more modern than a solid border spinner. */
+.refresh-spinner { --spinner-thickness: 2px; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(from 90deg, transparent, var(--teal)); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness))); mask: radial-gradient(farthest-side, transparent calc(100% - var(--spinner-thickness)), #000 calc(100% - var(--spinner-thickness))); animation: refresh-spin .8s linear infinite; }
+/* Spinner to the right of "Load more history"; its space is always reserved
+   (visibility, not display) so showing it never moves the button. */
+.more-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.more-spinner { flex: none; width: 16px; height: 16px; visibility: hidden; }
+/* Quiet, link-like "Load more history" — no pill background, sized to match the
+   "Showing messages through X" label above it. */
+#message-more { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 1px 8px; }
+#message-more:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
+/* Prominent initial-load state: a large centered spinner with a label. */
+#message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
+#message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
+/* Loading label as a dark chip, matching the section-header badges. */
+.loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
+/* Spinner shown inside a button while its request is in flight. */
+.btn-spinner { flex: none; width: 14px; height: 14px; --spinner-thickness: 2px; }
+/* Toasts: bottom-centered, transition in/out (interruptible), dismissable. */
+/* Anchor toasts to the top: the host's bottom chrome height is unreliable, but the
+   top edge (plus any reported top inset) is predictable. */
+.toaster { position: fixed; left: 50%; transform: translateX(-50%); top: calc(16px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); z-index: 50; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--divider); color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 10px 30px #0007; opacity: 0; transform: translateY(-14px); transition: opacity .3s cubic-bezier(.23, 1, .32, 1), transform .3s cubic-bezier(.23, 1, .32, 1); }
+.toast.toast-shown { opacity: 1; transform: translateY(0); }
+.toast-body { flex: 1; min-width: 0; }
+.toast-title { margin: 0; font-weight: 600; font-size: 14px; }
+.toast-text { margin: 2px 0 0; color: #c4c4cc; font-size: 13px; line-height: 1.45; }
+.toast-action { flex: none; min-height: 0; padding: 6px 10px; font-size: 12px; font-weight: 500; border-radius: 8px; background: var(--teal-tint); color: var(--teal); }
+.toast-action:hover:not(:disabled) { background: var(--teal-tint-hover); }
+.toast-action:active:not(:disabled) { transform: scale(.97); }
+.toast-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); transition: background 150ms ease, color 150ms ease; }
+.toast-close:hover:not(:disabled) { background: var(--surface); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: opacity .2s ease; transform: none; } }
+/* Reading position is restored explicitly by keyed message identity. */
+html { overflow-anchor: none; }
+
+/* Subtle staggered entrance for thread rows (mirrors Portal's rise-in). */
+@keyframes connection-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.animate-rise { opacity: 0; animation: connection-rise .5s cubic-bezier(.16, 1, .3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spinner { animation: none; }
+  .animate-rise { animation: none; opacity: 1; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  #contact-identity { background: var(--raised); backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --muted: #c5c5cc; --divider: #8a8a8e; }
+  #contact-identity { background: var(--surface); backdrop-filter: none; border-color: #fff; }
+  .thread-button[aria-current='true'] { outline: 1px solid #60a5fa; outline-offset: -1px; }
+  .thread-preview, .composer-hint, .message-sender { color: var(--muted); }
+}
+
+/* Use host mode, not viewport width, to choose spacing. Insets stay separate.
+   The fullscreen fallback must clear the host's bottom chrome on its own when the
+   host doesn't report a bottom inset; max() still avoids double-padding when it
+   does report one. */
+:root[data-display-mode='fullscreen'] { --composer-clearance: 48px; }
+
+@media (max-width: 520px) {
+
+  .section-header h2 { font-size: 11px; }
+}
+
+/* A quiet explanation, not a simulated conversation or another card. */
+.app-intro { max-width: 760px; margin: 8px 0 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+#selection-empty { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-items: center; padding: 24px 16px 104px; }
+.welcome-content { max-width: 440px; margin-inline: auto; }
+.welcome-illustration { width: 180px; max-width: 100%; height: auto; margin-bottom: 20px; }
+.welcome-eyebrow { color: var(--teal); font-size: 13px; font-weight: 500; margin: 0 0 8px; }
+#welcome-title { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.025em; margin: 0 0 16px; text-wrap: balance; color: var(--text-primary); }
+.welcome-content > p:not(.welcome-eyebrow) { color: var(--muted); line-height: 1.6; }
+.welcome-next { margin-bottom: 24px; }
+/* Each welcome CTA gets its own block with a short, plain-language description. */
+.welcome-actions { display: flex; flex-direction: column; gap: 24px; }
+.welcome-action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#invite-welcome, #open-invite-welcome { min-height: 44px; }
+.welcome-action-desc { margin: 0; color: #6a6a71; font-size: 13px; line-height: 1.5; }
+#standing-template { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c7c7cc; }
+.app-dialog .dialog-field-label { margin-bottom: -6px; }
+@media (hover: hover) and (pointer: fine) {
+  #invite-welcome:active { transform: scale(.97); }
+}
+@media (prefers-reduced-motion: reduce) { #invite-welcome:active { transform: none; } }
+@media (max-width: 520px) {
+  body main { padding-top: calc(12px + max(env(safe-area-inset-top, 0px), var(--host-safe-top, 0px))); }
+  .app-intro { font-size: 12px; line-height: 1.4; }
+  #selection-empty { padding: 16px 4px; align-items: start; }
+  .welcome-illustration { width: 120px; margin-bottom: 12px; }
+  .welcome-content > p { font-size: 12px; }
+}

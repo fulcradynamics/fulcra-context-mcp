@@ -7,7 +7,7 @@ This is an MCP server that provides tools and resources to call the Fulcra API u
 
 There is a public instance of this server running at `https://mcp.fulcradynamics.com/mcp`.  See [https://docs.fulcradynamics.com/](https://docs.fulcradynamics.com/) to get started quickly.  This repo is primarily for users who need to run the server locally, want to see under the hood, or want to help contribute.
 
-When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as a local MCP server using the stdio transport.  Otherwise, it acts as a remote server using the Streamble HTTP transport.  It handles the OAuth2 callback, but doesn't leak the exchanged tokens to MCP clients.  Instead, it maintains a mapping table and runs its own OAuth2 service between MCP clients.
+When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as a local MCP server using the stdio transport.  Otherwise, it acts as a remote server using the Streamable HTTP transport.  It handles the OAuth2 callback, but doesn't leak the exchanged tokens to MCP clients.  Instead, it maintains a mapping table and runs its own OAuth2 service between MCP clients.
 
 ### Remote Connection using Proxy
 
@@ -29,13 +29,29 @@ Example Claude Desktop config using `uvx`:
 }
 ```
 
+### Model-facing tools
+
+MCP discovery provides the current tool schemas and descriptions. Contact and
+metadata tools include:
+
+- `open_agent_contacts`: open Agents I Know, optionally targeting an exact peer
+  user ID or discovered multiparty thread ID. Opening is read-only; rendering
+  requires a host with MCP Apps support.
+- `update_data_type`: update an owned active v1 Event/Metric type's name or
+  description with user authorization and independent readback. It does not
+  change schemas, records or shares; uncertain writes require reconciliation.
+
+App-only implementation tools are not part of the public model-facing reference.
+
 ### Debugging / Developer Tools
+
+- [Agents I Know MCP App](docs/contacts-app.md): run this checkout through a private development tunnel and test the ChatGPT sidebar UI. The HTML ships with this server, not a separate plugin server.
 
 - Both the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) and [mcp-remote](https://github.com/geelen/mcp-remote) tools can be useful in debugging.
 
 #### Viewing Tools
 
-Every MCP client is different, but many abbreviate abbreviate tool and parameter descriptions for summaries. To avoid confusing client models, keep the initial descriptions short (full description in one line, around 80 characters).
+Every MCP client is different, but many abbreviate tool and parameter descriptions for summaries. To avoid confusing client models, keep the initial descriptions short (full description in one line, around 80 characters).
 
 While developing locally, the `scripts/simulate_tools.py` script simulates what this might look like to an MCP client:
 ```

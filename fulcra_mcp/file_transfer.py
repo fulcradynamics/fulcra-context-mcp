@@ -4,7 +4,7 @@ client, without passing their bytes through the model.
 * **Resources.** ``fulcra://files/{path}`` (and, for files another user shares,
   ``fulcra://users/{fulcra_userid}/files/{path}``) serve a file's bytes through
   ``resources/read``.
-* **The file manager panel** (an MCP App, ``ui://fulcra/file-manager.html``).
+* **The file manager panel** (an MCP App, ``ui://fulcra/file-manager/v4.html``).
   In hosts that display MCP Apps, ``open_file_manager`` shows a panel where the
   user browses folders, drops files in to upload them and downloads files. The
   panel uploads in chunks through two app-only tools, ``start_file_upload`` and
@@ -49,10 +49,11 @@ from .credentials import current_grant_id
 from .file_manager_ui import FILE_MANAGER_HTML
 from .settings import settings
 from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
+from .user_agent import user_agent
 
 logger = structlog.getLogger(__name__)
 
-FILE_MANAGER_URI = "ui://fulcra/file-manager.html"
+FILE_MANAGER_URI = "ui://fulcra/file-manager/v4.html"
 
 # Resumable uploads take chunks in multiples of 256 KiB, except the last.
 UPLOAD_GRANULE = 256 * 1024
@@ -385,25 +386,31 @@ def _raising_http_errors(func):
 
 
 @tools_mcp.tool(
-    annotations={"title": "Open File Manager", "readOnlyHint": True},
+    annotations={"title": "Open File Manager", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI),
 )
 @_friendly_http_errors
-async def open_file_manager(path: str = "/") -> str:
+async def open_file_manager(path: str = "/", fulcra_userid: str | None = None) -> str:
     """Show the user a file manager for their Fulcra files, where they can
     upload files from their computer (any type or size, such as spreadsheets)
     and download files. Use it when the user wants to upload or download files.
 
     Args:
-        path: The folder to open (default "/").
+        path: The folder or exact file to open (default "/").
+        fulcra_userid: Optional file owner. Shared files open read-only;
+            access still requires a separate file share.
     """
     fulcra = tools.get_fulcra_object()
     path = _file_path(path)
-    listing = fulcra.list_files(path)
-    result = {
-        "folders": listing.get("folders") or [],
-        "files": [_slim_file(f) for f in listing.get("files") or []],
-    }
+    result = tools._list_file_entries(fulcra, path, fulcra_userid)
+    if isinstance(result, str):
+        return result
+    if fulcra_userid:
+        return (
+            f"Showing read-only Fulcra files owned by {fulcra_userid} at {path}. "
+            "If the panel is unavailable, use list_files or read_file(as_link=true) "
+            f"with this exact fulcra_userid. Files: {json.dumps(result)}"
+        )
     return (
         f"Showing the Fulcra file manager at {path}. Files the user uploads "
         "there appear in list_files. "
@@ -439,7 +446,7 @@ def _require_grant() -> str:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Start File Upload", "destructiveHint": False},
+    annotations={"title": "Start File Upload", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.
@@ -530,7 +537,11 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
         url,
         data=data,
         method="PUT",
-        headers={"Content-Length": str(len(data)), "Content-Range": content_range},
+        headers={
+            "Content-Length": str(len(data)),
+            "Content-Range": content_range,
+            "User-Agent": user_agent(),
+        },
     )
     try:
         with urllib.request.urlopen(request):
@@ -545,7 +556,7 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Upload File Chunk", "destructiveHint": False},
+    annotations={"title": "Upload File Chunk", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.

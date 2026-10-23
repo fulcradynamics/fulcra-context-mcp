@@ -14,12 +14,15 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fulcra_api import connections, data_type_management, records
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import AfterValidator
 
 from .compact_tools import CompactTools
 from .credentials import get_fulcra_object
+from .contact_identifier import parse_contact_identifier, validate_identifier, write_contact_identifier
+from .connection_compatibility import LEGACY_OUTBOX_PATTERN
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
@@ -120,7 +123,7 @@ class AnnotationType(Enum):
     Scale = "scale"
 
 
-@tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Workouts", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_workouts(
     start_time: AwareDatetime,
@@ -208,7 +211,7 @@ def _slim_v1_spec(spec: dict) -> dict:
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Create Data Type", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Data Type", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def create_data_type(
     base_type: Literal["event", "metric", "moment", "duration", "boolean", "numeric", "scale"],
@@ -333,6 +336,271 @@ async def create_data_type(
     return f"Created data type {catalog_id}: " + json.dumps(ann)
 
 
+@tools_mcp.tool(annotations={"title": "Update Data Type", "readOnlyHint": False,
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
+async def update_data_type(
+    data_type: str, name: str | None = None, description: str | None = None,
+    expected_description: str | None = None,
+) -> dict:
+    """Update only name/description of an owned active Event/Metric type.
+    Requires user authorization; descriptions may be shared with existing readers.
+    Preserve unrelated description content. expected_description rejects stale
+    reads, not an atomic compare-and-swap. Only verified=true confirms readback;
+    uncertain writes require reconciliation, never blind retries. No schema,
+    record, or share changes. Legacy annotations are not supported.
+
+    Args:
+        data_type: Exact owned Event/<uuid> or Metric/<uuid> catalog ID.
+        name: Replacement name; omit to preserve.
+        description: Complete replacement description; omit to preserve.
+        expected_description: Description as last read from get_data_catalog; optional stale-read guard.
+    """
+    parsed = _user_defined_type(data_type, "updated")
+    changes = {k: v for k, v in {'name': name, 'description': description}.items() if v is not None}
+    if (isinstance(parsed, str) or parsed[0] not in ('Event', 'Metric')
+            or not changes or name is not None and not name.strip()):
+        return dict(status='rejected', verified=False, reason='Provide an exact Event/Metric ID and metadata changes.')
+    base, type_id = parsed
+    if base is None or data_type != f'{base}/{type_id}':
+        return dict(status='rejected', verified=False, reason='Use the exact canonical catalog ID.')
+    def read_owned():
+        rows = api.v1_catalog(data_type=data_type, fulcra_userid=own)
+        if not isinstance(rows, list) or len(rows) != 1:
+            raise ValueError('Missing or ambiguous owned type.')
+        entry = rows[0]
+        if (not own or api.get_fulcra_userid() != own
+                or entry.get('id') != data_type or entry.get('fulcra_userid') != own
+                or entry.get('api_version') != 'v1' or entry.get('recordable') is not True
+                or entry.get('deprecated') or entry.get('deleted_at')):
+            raise ValueError('An active owned recordable v1 type is required.')
+        return entry
+
+    try:
+        api = get_fulcra_object()
+        own = api.get_fulcra_userid()
+        before = read_owned()
+        if (expected_description is not None
+                and _catalog_description(before.get('description') or '') != _catalog_description(expected_description)):
+            raise ValueError('Description changed; reread before deciding whether to update.')
+    except Exception:
+        return dict(status='rejected', verified=False, reason='Owned metadata or expected description could not be verified.')
+    try:
+        api.update_data_type(base, type_id, changes)
+        after = read_owned()
+        # Ignore server-maintained timestamps; compare all metadata and schema.
+        preserved = ('id', 'fulcra_userid', 'api_version', 'name', 'description',
+                     'record_spec', 'deprecated', 'deleted_at', 'recordable', 'tags')
+        if any(after.get(k) != changes.get(k, before.get(k)) for k in preserved):
+            raise ValueError('Metadata readback differs.')
+    except Exception:
+        return dict(status='uncertain', verified=False, data_type=data_type,
+                    reason='Write or independent readback failed; reconcile before another write.')
+    return dict(status='updated', verified=True, data_type=data_type, **changes)
+
+
+@tools_mcp.tool(app={"visibility": ["app"]},
+                annotations={"title": "Send Agent Contact Message", "readOnlyHint": False,
+                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
+async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str, body: str, mid: str,
+                    recipients: list[str] | None = None,
+                    kind: Literal["message", "reply", "ack"] = "message",
+                    in_reply_to: str | None = None,
+                    pri: Literal["P1", "P2", "P3"] = "P2", slug: str | None = None,
+                    artifacts: list[dict] | None = None,
+                    expected_peer_userids: list[str] | None = None) -> dict:
+    """Post to an existing exact-audience Event channel. Only status=posted confirms
+    own-channel readback, not peer delivery. Uncertain retries: bounded, same mid
+    and payload; never bypass denial. Replies/acks target messages/replies, not acks.
+    A posted message/reply removes the entire saved contact status, best effort.
+
+    Args:
+        peer_userid: Exact peer UUID.
+        outbox: Owned Event/<uuid> channel.
+        sender: Agent name, <=128 characters.
+        body: Exact nonblank text, <=4000 characters.
+        mid: Stable UUID allocated before sending.
+        recipients: Agent names; omit for everyone.
+        expected_peer_userids: Full other-user UUID audience; required for multiparty.
+        kind: Envelope kind.
+        in_reply_to: Peer message/reply UUID within 30 days; required for reply/ack.
+        pri: P1 urgent, P2 normal, P3 low.
+        slug: Topic; messages default to chat, answers inherit.
+        artifacts: File references: path, optional version/owner. No new shares.
+    """
+    from .connection import send
+    fulcra = get_fulcra_object()
+    return await asyncio.to_thread(send, fulcra, peer_userid=peer_userid, outbox=outbox,
+                                   sender=sender, body=body, mid=mid, recipients=recipients,
+                                   expected_peer_userids=expected_peer_userids,
+                                   kind=kind, in_reply_to=in_reply_to, pri=pri, slug=slug,
+                                   artifacts=artifacts)
+
+
+
+@tools_mcp.tool(app={"visibility": ["app"]},
+                annotations={"title": "End Agent Contact", "readOnlyHint": False,
+                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": True})
+async def end_agent_contact(data_type: str, peer_userid: str, archive: bool = False) -> dict:
+    """Stop sharing an owned single-peer Event channel and verify no grant remains;
+    optionally archive it (restore_data_type undoes). Their share is unchanged.
+
+    Args:
+        data_type: Owned Event/<uuid> channel.
+        peer_userid: Exact UUID of its sole directly authorized peer.
+        archive: Also archive the channel; records are kept.
+    """
+    from .connection import end
+    return await asyncio.to_thread(end, get_fulcra_object(), data_type=data_type,
+                                   peer_userid=peer_userid, archive=archive)
+
+def _own_legacy_outbox(fulcra, data_type: str, own: str) -> dict:
+    entries = fulcra.resolve_data_type(data_type, fulcra_userid=own)
+    if len(entries) != 1:
+        raise ValueError("Missing or ambiguous own legacy outbox catalog entry")
+    entry = entries[0]
+    if (entry.get("id") != data_type or entry.get("fulcra_userid") != own
+            or not isinstance(entry.get("name"), str)
+            or not re.search(LEGACY_OUTBOX_PATTERN, entry["name"], re.IGNORECASE)
+            or entry.get("deprecated")):
+        raise ValueError("Only the authenticated user's active MomentAnnotation legacy outbox can be labeled")
+    return entry
+
+
+def _legacy_annotation_body(fulcra, path: str, type_id: str, own: str) -> dict:
+    """Read the legacy resource; never invent missing replacement metadata."""
+    row = json.loads(fulcra.fulcra_api(path, method="GET", authenticated=True))
+    fields = ("name", "description", "annotation_type", "spec", "measurement_spec", "tags")
+    if (not isinstance(row, dict) or any(key not in row for key in fields)
+            or row.get("id") != type_id or row.get("fulcra_userid") != own
+            or row.get("annotation_type") != "moment" or row.get("deleted_at") is not None):
+        raise ValueError("Missing or invalid own moment annotation metadata")
+    if (not isinstance(row["name"], str) or not isinstance(row["description"], str)
+            or not isinstance(row["tags"], list) or row["measurement_spec"] is not None
+            or (row["spec"] is not None and not isinstance(row["spec"], dict))):
+        raise ValueError("Malformed annotation metadata; refusing replacement")
+    for tag in row["tags"]:
+        if not isinstance(tag, str) or str(UUID(tag)) != tag:
+            raise ValueError("Malformed annotation tags; refusing replacement")
+    spec = row["spec"]
+    if spec is not None and (set(spec) - {"default_note"}
+                            or (spec.get("default_note") is not None
+                                and not isinstance(spec["default_note"], str))):
+        raise ValueError("Malformed or unsupported moment spec; refusing replacement")
+    return {key: row[key] for key in fields}
+
+
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={"title": "Set Agent Contact Identifier", "readOnlyHint": False,
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": True})
+@_friendly_http_errors
+async def set_contact_identifier(data_type: str, identifier: str) -> str:
+    """Label your own Event channel or legacy outbox; changes only the description
+    marker, verified by readback. Requires an unambiguous owned catalog entry.
+    Labels are untrusted display text, not routing IDs or verified names.
+
+    Args:
+        data_type: Owned Event/<uuid> or legacy MomentAnnotation/<uuid> catalog ID.
+        identifier: Trimmed single-line text, 1..80 characters, no controls.
+    """
+    try:
+        validate_identifier(identifier)
+        base, sep, type_id = data_type.partition("/")
+        if (base not in ("MomentAnnotation", "Event") or not sep
+                or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", type_id)):
+            raise ValueError("data_type must be an exact Event/<uuid> or MomentAnnotation/<uuid> catalog ID")
+    except ValueError as exc:
+        return str(exc)
+    fulcra = get_fulcra_object()
+    own = fulcra.get_fulcra_userid()
+    if not isinstance(own, str) or not own:
+        return "Could not establish the authenticated user's identity"
+    if base == 'Event':
+        from .connection import channel_entry
+        try:
+            original = channel_entry(fulcra, own, data_type)
+            description = write_contact_identifier(original.get('description'), identifier)
+            changed = description != original.get('description')
+            if changed:
+                fulcra.update_data_type('Event', type_id, {'description': description})
+            current = channel_entry(fulcra, own, data_type)
+            if current.get('description') != description:
+                raise ValueError('Channel description readback mismatch')
+            return json.dumps({'data_type': data_type, 'fulcra_userid': own,
+                               'identifier': identifier, 'changed': changed, 'verified': True})
+        except ValueError as exc:
+            return str(exc)
+    path = f"/user/v1alpha1/annotation/{type_id}"
+    try:
+        _own_legacy_outbox(fulcra, data_type, own)
+        original = _legacy_annotation_body(fulcra, path, type_id, own)
+        description = write_contact_identifier(original["description"], identifier)
+    except (ValueError, TypeError, KeyError) as exc:
+        return str(exc)
+    changed = description != original["description"]
+    body = {**original, "description": description}
+    if changed:
+        # Legacy annotation PUT replaces metadata, unlike input-service types.
+        # Whitelist the full writable body; never echo row IDs or timestamps.
+        fulcra.fulcra_api(path, method="PUT", data=body, authenticated=True)
+    try:
+        # The SDK follows the PUT's 303; that response is NOT this readback.
+        current = _legacy_annotation_body(fulcra, path, type_id, own)
+        if current != body or parse_contact_identifier(current["description"]) != identifier:
+            raise ValueError("annotation metadata readback mismatch")
+        catalog = _own_legacy_outbox(fulcra, data_type, own)
+        if parse_contact_identifier(catalog.get("description")) != identifier:
+            raise ValueError("catalog identifier readback mismatch")
+    except (ValueError, TypeError, KeyError) as exc:
+        return f"Could not verify connection identifier after readback: {exc}. Check the catalog before retrying."
+    return json.dumps({"data_type": data_type, "fulcra_userid": own,
+                       "identifier": identifier, "changed": changed, "verified": True})
+
+
+@tools_mcp.tool(annotations={"title": "Set Contact Status", "readOnlyHint": False,
+                            "destructiveHint": True, "openWorldHint": False, "idempotentHint": False},
+                app={"visibility": ["app"]})
+async def set_contact_status(data_type: str, peer_userid: str, attention: bool, reason: str) -> dict:
+    """Save a peer-visible Status pill on your own Event connection, only with
+    share_contact_status enabled and complete scoped reads. Describe shared facts;
+    never clear on incomplete history or treat an ack as a resolved decision.
+    Failure must not block other work; never retry denial.
+
+    Args:
+        data_type: Owned Event/<uuid> channel.
+        peer_userid: Exact UUID of its sole directly authorized peer.
+        attention: Whether the user needs to attend to this conversation.
+        reason: Shared-status label; trimmed single-line Unicode, 1..80 code points, no controls.
+    """
+    from datetime import datetime, timezone
+    from . import connection
+    from .contact_status import write_status, parse_status, validate_status
+
+    result = {'data_type': data_type, 'peer_userid': peer_userid, 'verified': False}
+    try:
+        if not re.fullmatch('Event/' + connection.UUID_PATTERN, data_type) or not connection._uuid(peer_userid):
+            raise ValueError('Use an exact Event/<uuid> channel and peer UUID.')
+        assessment = dict(attention=attention, reason=reason,
+                          assessed_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        validate_status(assessment)
+        api = get_fulcra_object()
+        own, original = connection.owned_connection(api, data_type, peer_userid)
+        description = write_status(original.get('description'), assessment)
+        if api.get_fulcra_userid() != own:
+            raise ValueError('Authenticated account changed.')
+        api.update_data_type('Event', data_type.split('/')[1], {'description': description})
+        current = connection._authorize(api, own, peer_userid, data_type)
+        # Catalog update timestamps may legitimately change. The SDK PUT sends
+        # only description; verify target content plus stable type metadata.
+        if (current.get('description') != description
+                or any(current.get(k) != original.get(k) for k in ('name', 'record_spec'))
+                or parse_status(current.get('description')) != assessment):
+            raise ValueError('Contact status readback mismatch.')
+        return {**result, 'verified': True, 'assessment': assessment}
+    except Exception:
+        # Metadata is optional. Do not turn denial/uncertainty into a retry, or
+        # let it prevent the agent from finishing its separate read workflow.
+        return {**result, 'reason': 'Status not verified. Continue read/report work; do not retry or bypass denial.'}
+
+
 def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | str:
     """(v1 base type or None for an annotation, the type's UUID) from a
     user-defined type ID, or an error message if it isn't one."""
@@ -361,7 +629,7 @@ def _user_defined_type(data_type: str, action: str) -> tuple[str | None, str] | 
     )
 
 
-@tools_mcp.tool(annotations={"title": "Archive Data Type", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Archive Data Type", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def archive_data_type(data_type: str) -> str:
     """Archive (soft-delete) a user-defined data type.
@@ -395,7 +663,7 @@ async def archive_data_type(data_type: str) -> str:
     )
 
 
-@tools_mcp.tool(annotations={"title": "Restore Data Type", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Restore Data Type", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_data_type(data_type: str) -> str:
     """Restore an archived user-defined data type.
@@ -447,7 +715,7 @@ def _recordable_fields(properties: dict) -> list[str]:
     return sorted(k for k in properties if k not in RECORD_PLUMBING_FIELDS)
 
 
-@tools_mcp.tool(annotations={"title": "Record Data", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def record_data(
     data_type: str,
@@ -610,7 +878,7 @@ async def record_data(
 MAX_DELETE_RECORDS = 500
 
 
-@tools_mcp.tool(annotations={"title": "Delete Records", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete Records", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_records(data_type: str, record_ids: list[str]) -> str:
     """Delete records from one of the user's own v1 data types.
@@ -672,7 +940,79 @@ async def delete_records(data_type: str, record_ids: list[str]) -> str:
     )
 
 
-@tools_mcp.tool(annotations={"title": "Send Agent Message", "destructiveHint": False})
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Prepare Agent Invitation", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+async def prepare_agent_invitation(data_type: str, open_invitation: bool = False) -> dict:
+    """Prepare an invitation code at the user's request; authorizes only its matched
+    return share. Include own_userid/code in the invite. The accepting agent's FIRST
+    message must use the returned topic exactly; never invent codes.
+
+    Args:
+        data_type: Exact owned, unshared Event/<uuid> channel.
+        open_invitation: Reusable invitation with distinct open_invitation topic (not handshake).
+            Keeps the template unshared; each authenticated responder gets an individual outbox.
+    """
+    from .agent_invitations import prepare
+    try:
+        return await asyncio.to_thread(prepare, get_fulcra_object(), data_type, open_invitation)
+    except Exception:
+        raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
+
+
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+async def create_agent_invitation(inviter_name: str, recipient_name: str,
+                                  recipient_userid: str | None = None) -> dict:
+    """Create a new outbox labeled <recipient>'s agent and prepare its single-person
+    invitation code; with recipient_userid, share the outbox with exactly that user.
+
+    Args:
+        inviter_name: The user's name.
+        recipient_name: The invited person's name.
+        recipient_userid: Optional exact Fulcra user ID of the invited person.
+    """
+    from .agent_invitations import create
+    try:
+        return await asyncio.to_thread(create, get_fulcra_object(), inviter_name, recipient_name, recipient_userid)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    except Exception:
+        raise ToolError('Invitation not verified. Check Pending in Agents I Know before retrying.') from None
+
+
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> dict:
+    """Get the user's standing open invitation (created on first use; private,
+    never shared). Responders each get their own outbox via matching.
+
+    Args:
+        inviter_name: Name to save for the invitation text; "" clears it, omit to keep.
+    """
+    from .agent_invitations import standing
+    try:
+        return await asyncio.to_thread(standing, get_fulcra_object(), inviter_name)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    except Exception:
+        raise ToolError('Standing invitation not verified. Reload before retrying.') from None
+
+
+@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+    "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+async def match_agent_invitations() -> dict:
+    """Match unambiguous FIRST-message codes for user-prepared invitations using
+    authenticated incoming-share owners, not sender claims. Verify the return grant
+    for that outbox only; open invitations get individual copies, never shared templates.
+    Labels (<sender> via <open invitation identifier>) are display-only. Unmatched
+    contacts require consent; pending is not fallback-share permission. No sends or
+    preference changes.
+    """
+    from .agent_invitations import match
+    return await asyncio.to_thread(match, get_fulcra_object())
+
+
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def send_agent_message(
     connection: str,
@@ -684,45 +1024,61 @@ async def send_agent_message(
     reply_to: str | None = None,
     ack: str | None = None,
     record_id: str | None = None,
-) -> str:
-    """Send a message to another person's agent, over a connection made with
-    the connect-our-agents skill. Everyone in the connection can read it.
+    artifacts: list[dict] | None = None,
+    expected_peer_userids: list[str] | None = None,
+    target_peer_userid: str | None = None,
+) -> dict:
+    """Send over a connect-our-agents connection; everyone in it can read the message.
+    Posted confirms own readback, not peer delivery. Never retry denial.
+    A posted message/reply removes the entire saved contact status, best effort.
 
     Args:
-        connection: Your channel's ID ("Event/<uuid>"), or the other person's
-            Fulcra user ID.
-        sender: Your agent's name; use the same one every time.
-        body: The message text, at most 4000 characters.
-        topic: A short thread name; replies reuse it by default.
-        recipients: Agent names the message is for; leave out for everyone.
-        priority: P1 (urgent), P2 or P3.
-        reply_to: The id of their message this answers (from get_records).
-        ack: The id of their message you've read but can't answer yet.
-        record_id: To retry a send whose outcome is unknown, the id it
-            returned, so it isn't sent twice.
+        connection: Owned Event/<uuid> channel or exact peer UUID; channel required for multiparty.
+        sender: Stable agent name, <=128 characters.
+        body: Nonblank message, <=4000 characters.
+        topic: Thread name; replies inherit.
+        recipients: Agent names; omit for everyone.
+        priority: P1 urgent, P2 normal (default), P3 low.
+        reply_to: Peer message/reply UUID within 30 days; mutually exclusive with ack.
+        ack: Peer message/reply UUID to acknowledge, within 30 days; never an ack.
+        record_id: Reuse returned UUID and unchanged payload for bounded uncertain retries.
+        artifacts: File references: path, optional version/owner. No new shares.
+        expected_peer_userids: Full other-user UUID audience; required for multiparty.
+        target_peer_userid: Multiparty reply/ack's exact owner UUID; never infer from sender.
     """
+    from uuid import uuid4
+    from .connection import send, _uuid, UUID_PATTERN
+    mid = record_id if record_id is not None else str(uuid4())
     fulcra = get_fulcra_object()
-    try:
-        result = connections.send_agent_message(
-            fulcra,
-            connection,
-            sender=sender,
-            body=body,
-            topic=topic,
-            recipients=recipients,
-            priority=priority,
-            reply_to=reply_to,
-            ack=ack,
-            record_id=record_id,
-            sources=[MCP_RECORD_SOURCE],
-        )
-    except ValueError as e:
-        return f"Not sent: {e}"
-    record = {k: v for k, v in result["record"].items() if k != "sources"}
-    return (
-        f"Sent {record['kind']} {result['id']} on {result['channel']} "
-        f"(upload ID {result['upload_id']}): {json.dumps(record)}"
-    )
+    def checked_send():
+        try:
+            if not (_uuid(connection) or re.fullmatch('Event/' + UUID_PATTERN, connection)):
+                raise ValueError('connection must be an exact peer UUID or Event/<uuid>.')
+            if reply_to is not None and ack is not None:
+                raise ValueError('Give reply_to or ack, not both.')
+            # The pinned SDK recognizes the historical prefix only. Translate a
+            # local discovery copy; send() rechecks untouched live grants below.
+            shares = [dict(s, datashare_name=connections.SHARE_NAME_PREFIX)
+                      if s.get('datashare_name', '').startswith('connect-our-agents') else s
+                      for s in fulcra.get_datashares()]
+            channel, people = connections.resolve_connection(shares, connection)
+            if len(people) != 1 and (expected_peer_userids is None or not connection.startswith('Event/')):
+                raise ValueError('Multiparty sends require an exact owned channel and expected_peer_userids.')
+            if len(people) > 1 and (reply_to or ack) and target_peer_userid is None:
+                raise ValueError('Multiparty reply/ack requires target_peer_userid from the exact incoming grant.')
+            peer = target_peer_userid if target_peer_userid is not None else people[0]
+            if peer not in people:
+                raise ValueError('Target peer is not in the selected channel audience.')
+            return send(fulcra, peer_userid=peer, outbox=channel, sender=sender,
+                        expected_peer_userids=expected_peer_userids,
+                        body=body, mid=mid, recipients=recipients, pri=priority or 'P2',
+                        slug=topic, kind='reply' if reply_to else 'ack' if ack else 'message',
+                        in_reply_to=reply_to if reply_to is not None else ack, artifacts=artifacts)
+        except ValueError as exc:
+            return {'status': 'rejected', 'mid': mid, 'reason': str(exc)}
+        except Exception:
+            return {'status': 'rejected', 'mid': mid, 'reason': 'Connection verification failed. Nothing submitted.'}
+    return await asyncio.to_thread(checked_send)
 
 
 def _compatible_tools(entry: dict) -> str:
@@ -743,6 +1099,11 @@ def _compatible_tools(entry: dict) -> str:
     return NO_TOOL_GROUP
 
 
+def _catalog_description(description: str) -> str:
+    """The description as get_data_catalog shows it, whitespace folded."""
+    return re.sub(r"\s+", " ", description).strip()
+
+
 def _slim_entry(entry: dict) -> dict:
     """Strip a v1 catalog entry down to the fields an MCP client needs."""
     record_spec = entry.get("record_spec") or {}
@@ -750,7 +1111,7 @@ def _slim_entry(entry: dict) -> dict:
     if entry.get("name") and entry["name"] != entry["id"]:
         slim["name"] = entry["name"]
     if entry.get("description"):
-        slim["description"] = re.sub(r"\s+", " ", entry["description"]).strip()
+        slim["description"] = _catalog_description(entry["description"])
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):
@@ -891,7 +1252,7 @@ def _user_defined_fields(schema: dict) -> tuple[dict[str, str | dict], list[str]
     return fields, required
 
 
-@tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_data_catalog(
     data_type: str | None = None,
@@ -986,7 +1347,7 @@ async def get_data_catalog(
     return "Available data types, grouped by compatible tool: " + json.dumps(grouped)
 
 
-@tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Time Series", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_time_series(
     data_type: str,
@@ -1059,15 +1420,18 @@ async def get_time_series(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_records(
     data_type: str,
-    start_time: AwareDatetime,
-    end_time: AwareDatetime,
+    start_time: AwareDatetime | None = None,
+    end_time: AwareDatetime | None = None,
     fulcra_userid: str | None = None,
+    latest: bool = False,
 ) -> str:
-    """Retrieve the raw records of any data type during a time period.
+    """Retrieve raw records in a range, or the latest v1 record without dates.
+
+    Set latest=true and omit both dates for a single latest v1 record.
 
     Works with every type listed by `get_data_catalog`, including user-defined
     ones ("<BaseType>/<uuid>" IDs); the correct API endpoint is chosen
@@ -1084,8 +1448,13 @@ async def get_records(
         end_time: Range end (exclusive). Must include tz (ISO8601).
         fulcra_userid: Retrieve data for another Fulcra user (if shared); a
             shared type's get_data_catalog entry carries its owner's ID.
+        latest: Return one latest v1 record without a date range.
     """
-    if (err := _range_error(start_time, end_time)) is not None:
+    if latest and (start_time is not None or end_time is not None):
+        return 'Omit both dates when requesting latest.'
+    if not latest and (start_time is None or end_time is None):
+        return 'Provide both dates, or latest=true for a v1 data type.'
+    if not latest and (err := _range_error(start_time, end_time)) is not None:
         return err
     fulcra = get_fulcra_object()
 
@@ -1116,7 +1485,7 @@ async def get_records(
     results = []
     for entry in catalog_entries:
         try:
-            results += records.get_records(fulcra, entry, start_time, end_time)
+            results += records.get_records(fulcra, entry, start_time, end_time, **({'latest': True} if latest else {}))
         except ValueError:
             return (
                 f"Could not derive an API endpoint for data type {entry['id']!r}. "
@@ -1179,7 +1548,7 @@ def _collect_updates(
     return updates
 
 
-@tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Data Updates", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_data_updates(
     start_time: AwareDatetime,
@@ -1230,7 +1599,7 @@ async def get_data_updates(
     return f"Data updates{whose} from {start_time} to {end_time}: " + json.dumps(updates)
 
 
-@tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Sleep", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_sleep(
     start_time: AwareDatetime,
@@ -1291,7 +1660,7 @@ def _own_time_zone(fulcra) -> str:
     return preferences.get("timezone") or "UTC"
 
 
-@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Location", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_location(
     time: AwareDatetime | None = None,
@@ -1438,7 +1807,7 @@ def _slim_event(
     return slim
 
 
-@tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Calendar Events", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_calendar_events(
     start_time: AwareDatetime | None = None,
@@ -1537,7 +1906,7 @@ def _not_shared_message(path: str, fulcra_userid: str) -> str:
     )
 
 
-@tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "List Files", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def list_files(
     path: str = "/",
@@ -1574,6 +1943,15 @@ async def list_files(
         return f"Versions of {path}, newest first: " + json.dumps(
             [_slim_file(f) for f in versions]
         )
+    result = _list_file_entries(fulcra, path, fulcra_userid)
+    if isinstance(result, str):
+        return result
+    whose = f" shared by user {fulcra_userid}" if fulcra_userid else ""
+    return f"Files at {path}{whose}: " + json.dumps(result)
+
+
+def _list_file_entries(fulcra, path: str, fulcra_userid: str | None = None) -> dict | str:
+    """Browse folders or resolve an exact file using metadata only."""
     try:
         listing = fulcra.list_files(path, fulcra_userid=fulcra_userid)
     except urllib.error.HTTPError as e:
@@ -1587,6 +1965,9 @@ async def list_files(
         "folders": listing.get("folders") or [],
         "files": [_slim_file(f) for f in listing.get("files") or []],
     }
+    # The owned root is always a folder, even before the first upload.
+    if path == "/" and not fulcra_userid:
+        return result
     if not result["folders"] and not result["files"]:
         try:
             result["files"] = [
@@ -1597,11 +1978,10 @@ async def list_files(
             if fulcra_userid:
                 return _not_shared_message(path, fulcra_userid)
             return f"No folder or file found at {path!r}."
-    whose = f" shared by user {fulcra_userid}" if fulcra_userid else ""
-    return f"Files at {path}{whose}: " + json.dumps(result)
+    return result
 
 
-@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def read_file(
     path: str,
@@ -1715,7 +2095,7 @@ async def read_file(
     return f"Content of {path}: {text}"
 
 
-@tools_mcp.tool(annotations={"title": "Write File", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def write_file(
     path: str,
@@ -1816,7 +2196,7 @@ async def write_file(
     return f"Wrote {path}: " + json.dumps(_slim_file(result.get("file", result)))
 
 
-@tools_mcp.tool(annotations={"title": "Delete File", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete File", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_file(path: str) -> str:
     """Delete a file stored in the user's Fulcra account.
@@ -1838,7 +2218,7 @@ async def delete_file(path: str) -> str:
     return f"Deleted {path} (version {file_record['id']})."
 
 
-@tools_mcp.tool(annotations={"title": "Restore File Version", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
@@ -1996,7 +2376,7 @@ def _data_type_not_shared_message(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Create Share", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def create_share(
     name: str,
@@ -2065,7 +2445,7 @@ async def create_share(
     return "Created share: " + json.dumps(_slim_share(result.get("datashare", result)))
 
 
-@tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both") -> str:
     """List what this user shares with others and what others share with them.
@@ -2099,7 +2479,7 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
     return "Shares: " + json.dumps(result)
 
 
-@tools_mcp.tool(annotations={"title": "Delete Share", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Delete Share", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def delete_share(share_id: str) -> str:
     """End a share: delete one this user made, revoking every recipient's access,
@@ -2197,7 +2577,7 @@ def _group_http_error(e: urllib.error.HTTPError, group_id: str) -> str | None:
     return None
 
 
-@tools_mcp.tool(annotations={"title": "Get Groups", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get Groups", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def get_groups(group_id: str | None = None, subscribed_only: bool = False) -> str:
     """List Fulcra groups, or get one group's full details.
@@ -2229,7 +2609,7 @@ async def get_groups(group_id: str | None = None, subscribed_only: bool = False)
     return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
 
 
-@tools_mcp.tool(annotations={"title": "Join Group", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def join_group(group_id: str) -> str:
     """Join a Fulcra group on the user's behalf, at their explicit request.
@@ -2252,7 +2632,7 @@ async def join_group(group_id: str) -> str:
     return f"Joined group {group_id}: " + json.dumps(membership)
 
 
-@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "destructiveHint": True})
+@tools_mcp.tool(annotations={"title": "Leave or Delete Group", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 @_friendly_http_errors
 async def leave_group(group_id: str, delete: bool = False) -> str:
     """Leave a Fulcra group on the user's behalf, at their explicit request.
@@ -2290,7 +2670,7 @@ async def leave_group(group_id: str, delete: bool = False) -> str:
     return f"The user is no longer a member of group {group_id}."
 
 
-@tools_mcp.tool(annotations={"title": "Create Group", "destructiveHint": False})
+@tools_mcp.tool(annotations={"title": "Create Group", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def create_group(
     title: str,
@@ -2398,7 +2778,7 @@ if settings.fulcra_environment == "stdio":
 USER_INFO_HIDDEN_FIELDS = ("status", "tier", "service_status", "intercom_token")
 
 
-@tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True})
+@tools_mcp.tool(annotations={"title": "Get User Info", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_user_info() -> str:
     """Return general info about the Fulcra user.

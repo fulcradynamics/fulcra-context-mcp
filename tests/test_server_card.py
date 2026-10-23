@@ -1,4 +1,4 @@
-"""The server's identity (PLAT-617): one name, title and version across
+"""The server's identity: one name, title and version across
 server.json, the Server Card at /mcp/server-card, and the serverInfo clients see."""
 
 import json
@@ -91,12 +91,12 @@ async def test_server_info_matches_the_card():
 
 
 def test_server_info_without_server_json_falls_back(monkeypatch, tmp_path):
-    # A PyPI install has no server.json: serverInfo still has a name and version.
+    # A PyPI install has no server.json: keep its navigation icon too.
     monkeypatch.setattr(server_info, "SERVER_JSON", tmp_path / "server.json")
     server_info.server_json.cache_clear()
     try:
         assert server_info.website_url() is None
-        assert server_info.icons() is None
+        assert [icon.model_dump(exclude_none=True) for icon in server_info.icons()] == SERVER_JSON["icons"]
         assert server_info.version()
         with pytest.raises(FileNotFoundError):
             server_info.server_card()

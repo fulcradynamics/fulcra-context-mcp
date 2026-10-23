@@ -1,6 +1,6 @@
 [project]
 name = "fulcra-context-mcp"
-version = "1.2.5"
+version = "1.18.7"
 description = "Fulcra Context MCP Server"
 license = "Apache-2.0"
 authors = [
@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.12",
     "fastmcp>=3.3.0,<4",
-    "fulcra-api>=0.1.53",
+    "fulcra-api>=0.1.56",
     "google-cloud-storage>=2.18",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.3",
@@ -25,6 +25,7 @@ exclude-newer-package = { fulcra = false, fulcra-api = false, fulcra-data-types 
 
 [dependency-groups]
 dev = [
+    "promql-parser>=0.10.0",
     "pytest>=8.4",
     "pytest-asyncio>=1.0",
 ]
@@ -42,3 +43,9 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 fulcra-context-mcp = "fulcra_mcp.main:main"
+
+[tool.setuptools.packages.find]
+include = ["fulcra_mcp*"]
+
+[tool.setuptools.package-data]
+fulcra_mcp = ["ui/*.html", "static/icon.png", "static/menu-*.svg", "static/*.json", "static/.well-known/*.json"]

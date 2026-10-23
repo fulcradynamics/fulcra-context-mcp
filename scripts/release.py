@@ -6,7 +6,7 @@ RELEASING.md.
 
 One version covers everything: the PyPI package, the registry listing
 (server.json's `version`), the Server Card and the serverInfo the running
-server reports (PLAT-617).
+server reports.
 
 Usage:
     # In a release PR: bump pyproject.toml, server.json and uv.lock together.

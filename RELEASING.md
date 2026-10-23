@@ -1,50 +1,88 @@
 # Releasing
 
-Releases are automated. A release is a PR that bumps the version; merging it publishes the package to PyPI and the server listing to the [official MCP Registry](https://registry.modelcontextprotocol.io) (`com.fulcradynamics/context`).
+A version-bump PR merged to `main` publishes the package to PyPI and the
+[official MCP Registry](https://registry.modelcontextprotocol.io)
+(`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## Cutting a release
+## 1.18.7 release notes
 
-```bash
-uv run python scripts/release.py bump 1.1.1
-```
+- Generic tools carry no contacts policy again: `create_share` and
+  `create_data_type` no longer refuse the contacts app's private stores, and
+  `update_data_type` has no store-name rules. The app still stops using a store
+  that a user has shared.
+- `list_shares` and `get_data_catalog` return main's projections: no
+  `selectors_complete`, forced empty selector arrays, raw `metadata`,
+  `creation_fields_schema` or extra schema fetches for connection channels.
+  Catalog descriptions are whitespace-folded for every type;
+  `update_data_type`'s `expected_description` compares the same way.
+- Open-invitation responder outboxes use the standard channel schema.
+- `get_records(latest=true)` stays strictly opt-in; ranged reads still require
+  both dates.
+- Tools that exist on main keep main's `readOnlyHint`/`destructiveHint` values,
+  now explicit: `read_file` is read-only again; `create_share`, `join_group`,
+  `record_data`, `write_file`, `restore_file`, `send_agent_message` and the
+  upload tools are non-destructive again.
+- Ship contacts UI v76 (description markers parse from folded descriptions).
 
-This sets the version in `pyproject.toml`, in `server.json` (both its `version` and `packages[].version`) and in `uv.lock`. Open a PR with them.
+## 1.18.4 release notes
 
-One version covers everything: the PyPI package, the registry listing, the Server Card and the version the running server reports to clients. They've matched since 1.1.0.
+- Hide the contacts Debug menu by default, including when frontend metadata is
+  missing. Set `FULCRA_CONTACTS_DEBUG=true` to enable display-only previews.
+- Ship contacts UI v75; other Advanced controls and live actions are unchanged.
 
-On every PR, `.github/workflows/release-check.yml` checks that:
-- `pyproject.toml` and `server.json` have the same version;
-- `server.json` passes the registry schema and `mcp-publisher validate`;
-- any change to `server.json` raises its `version`. Published registry versions can't be republished, so an unbumped change would never reach the listing.
+## 1.17.0 release notes
 
-## What merging does
+- Add [owned Event/Metric metadata updates](docs/data-type-metadata.md) with
+  independent readback, raw exact-catalog metadata and private-store safeguards.
+- Keep contact operations and native settings app-only; retain canonical
+  `send_agent_message` for models. Requires skill-first plugin procedures.
+- Consolidate contact launch on `agent_contact_open`, with optional exact
+  peer/thread or a full unselected list. Preserve app-only global navigation,
+  native mentions and the separate file manager; remove the compact launch.
+- Ship contacts UI v63 with fullscreen-only OpenAI metadata. Generic bridge
+  capabilities are separate; display-mode changes preserve selection and drafts.
+- No user-data or existing-schedule migration. Refresh discovery and update the
+  compatible plugin; hosted/native acceptance remains separate from local tests.
 
-On every push to `main`, `.github/workflows/release.yml` publishes whatever isn't published yet. A push that changes neither version does nothing.
+## Version bump
 
-1. **PyPI**, if PyPI doesn't have the `pyproject.toml` version:
-   1. run the tests;
-   2. build, and upload with PyPI Trusted Publishing;
-   3. tag `vX.Y.Z` and create a GitHub release.
-2. **MCP Registry**, if the registry doesn't have the `server.json` version. This also runs when only `server.json` changed.
-   1. Wait until PyPI serves the package version. The registry checks for the `mcp-name` marker from `README.md` in that exact version's description.
-   2. Check that the URLs `server.json` lists respond.
-   3. Publish with `mcp-publisher`, then confirm the registry lists the new version as latest.
-3. **Server Card**: wait until the hosted server, which deploys from `main` separately, serves the new version at `https://mcp.fulcradynamics.com/mcp/server-card`. If this times out, the deploy is late or broken; PyPI and the registry are already published.
+    uv run python scripts/release.py bump 1.1.1
 
-The server's name, title, description and links come from `server.json`. It's served as the Server Card (SEP-2127) and reported to clients when they connect (`fulcra_mcp/server_info.py`), so change them there.
+This updates `pyproject.toml`, both versions in `server.json`, and `uv.lock`.
+One version covers the package, registry, Server Card and running server.
+Release checks require matching versions, a valid registry schema/listing and a
+version increase for changes to `server.json` (published versions are immutable).
 
-Both publish jobs run in the `release` GitHub environment. If a step fails, fix the cause and re-run the workflow from the Actions tab ("Run workflow"); it picks up whatever is still unpublished.
+For contact UI changes, follow [the app's development and tests](docs/contacts-app.md#development-and-tests)
+and keep the paired plugin in step ([interface](docs/connection-compatibility.md)).
 
-## One-time setup
+## Automated publication
 
-- **PyPI:** on the `fulcra-context-mcp` project, add a Trusted Publisher with:
-  - owner `fulcradynamics`;
-  - repository `fulcra-context-mcp`;
-  - workflow `release.yml`;
-  - environment `release`.
-- **GitHub:** the `release` environment, limited to `main`, is managed in the infrastructure repo at `tf/github/repos/fulcra-context-mcp/terragrunt.hcl` (`environments`). Add required reviewers there if releases should wait for approval.
-- **Registry key:** the environment secret `MCP_PRIVATE_KEY` is set by hand, so the key never enters tofu state: `gh secret set MCP_PRIVATE_KEY --env release -R fulcradynamics/fulcra-context-mcp`. Its value is the hex-encoded Ed25519 private key matching the `MCPv1` DNS TXT record on `fulcradynamics.com`; see `docs/registry-publishing.md` for how to derive it. Never commit the key.
+On pushes to `main`, `.github/workflows/release.yml` publishes missing versions:
 
-## Publishing by hand
+1. Run tests, build and upload to PyPI with Trusted Publishing; tag `vX.Y.Z`
+   and create a GitHub release.
+2. Wait for PyPI's package description (including README's `mcp-name` marker),
+   check listed URLs, publish with `mcp-publisher`, and verify the registry.
+3. Wait for the separately deployed server's version at
+   `https://mcp.fulcradynamics.com/mcp/server-card`. A timeout here does not undo
+   successful PyPI/registry publication.
 
-If the workflow can't run, the manual steps are in `docs/registry-publishing.md`. Run `python3 scripts/release.py plan` to see what's unpublished.
+`server.json` owns the server name, title, description and links. The Server Card
+and initialization use it through `fulcra_mcp/server_info.py`.
+Both publish jobs use the `release` GitHub environment. After fixing a failure,
+rerun the workflow; it resumes unpublished work. Unchanged versions do nothing.
+
+## One-time setup and recovery
+
+- PyPI Trusted Publisher: owner `fulcradynamics`, repository `fulcra-context-mcp`,
+  workflow `release.yml`, environment `release`.
+- The infrastructure repo manages the `main`-only environment and optional required
+  reviewers in `tf/github/repos/fulcra-context-mcp/terragrunt.hcl` (`environments`).
+- Set `MCP_PRIVATE_KEY` manually in that environment, not in tofu state or source.
+  It is the hex-encoded Ed25519 private key matching the `MCPv1` DNS TXT record
+  on `fulcradynamics.com`.
+
+For recovery, run `python3 scripts/release.py plan` to see what remains unpublished,
+then follow the publication commands in
+[the release workflow](.github/workflows/release.yml).

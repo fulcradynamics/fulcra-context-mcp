@@ -3,6 +3,7 @@ import json
 import secrets
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import structlog
@@ -23,6 +24,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyHttpUrl
 
 from .settings import settings
+from .user_agent import fulcra_api_kwargs
 
 OIDC_SCOPES = ["openid", "profile", "name", "email"]
 
@@ -41,7 +43,16 @@ def _is_newer(candidate: FulcraCredentials, current: FulcraCredentials) -> bool:
         return False
     if current.access_token_expiration is None:
         return True
-    return candidate.access_token_expiration > current.access_token_expiration
+    return aware(candidate.access_token_expiration) > aware(
+        current.access_token_expiration
+    )
+
+
+def aware(dt: datetime) -> datetime:
+    """``dt`` with a timezone: older fulcra-api stamps expirations
+    as naive local time, later releases as aware, and grant files written by
+    either may be compared."""
+    return dt if dt.tzinfo is not None else dt.astimezone()
 
 
 def _copy_credentials(src: FulcraCredentials, dst: FulcraCredentials) -> None:
@@ -120,7 +131,7 @@ class FulcraOAuthProvider(OAuthProvider):
         self.grant_credentials: dict[str, FulcraCredentials] = {}
         self.token_grant: dict[str, str] = {}
         self.refresh_grant: dict[str, str] = {}
-        self._grant_locks: dict[str, threading.Lock] = {}
+        self._grant_locks: dict[str, threading.RLock] = {}
         self._grant_locks_guard = threading.Lock()
 
     # ------------------------------------------------------------------ paths
@@ -143,13 +154,15 @@ class FulcraOAuthProvider(OAuthProvider):
 
     # ----------------------------------------------------------------- grants
 
-    def grant_lock(self, grant_id: str) -> threading.Lock:
+    def grant_lock(self, grant_id: str) -> threading.RLock:
         """Per-grant lock; hold it while refreshing the Fulcra token so two
-        concurrent tool calls cannot both spend the same Auth0 refresh token."""
+        concurrent tool calls cannot both spend the same Auth0 refresh token.
+        Reentrant, because the up-front refresh in fulcra_for_grant holds it
+        while fulcra-api calls back into GrantFulcraAPI.refresh_credentials."""
         with self._grant_locks_guard:
             lock = self._grant_locks.get(grant_id)
             if lock is None:
-                lock = self._grant_locks[grant_id] = threading.Lock()
+                lock = self._grant_locks[grant_id] = threading.RLock()
             return lock
 
     def save_grant(self, grant_id: str) -> bool:
@@ -370,6 +383,7 @@ class FulcraOAuthProvider(OAuthProvider):
             oidc_client_id=settings.oidc_client_id,
             oidc_domain=settings.fulcra_oidc_domain,
             oidc_audience=settings.fulcra_api,
+            **fulcra_api_kwargs(),
         )
         auth_url = fulcra.get_authorization_code_url(
             redirect_uri=f"{settings.oidc_server_url}/callback",
@@ -393,6 +407,7 @@ class FulcraOAuthProvider(OAuthProvider):
             oidc_client_id=settings.oidc_client_id,
             oidc_domain=settings.fulcra_oidc_domain,
             oidc_audience=settings.fulcra_api,
+            **fulcra_api_kwargs(),
         )
         try:
             fulcra.authorize_with_authorization_code(
