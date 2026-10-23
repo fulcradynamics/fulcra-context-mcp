@@ -12,8 +12,7 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 - End contact removes and verifies only narrow grants, preserves broader sharing
   and discloses remaining access. Ownership, narrow-route validation and message
   consent are unchanged; new shares remain narrow only.
-- Invitation and preference state may be exposed by existing broad shares.
-- Ship contacts UI v78.
+- Ship contacts UI v79.
 
 ## 1.18.7 release notes
 

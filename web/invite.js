@@ -63,7 +63,7 @@ export function openInviteDialog(app, doc, status, returnFocus, handoff = {}) {
   const title = doc.createElement('h2'); title.id = 'invite-title'; title.textContent = 'Invite someone';
   head.append(title);
   const intro = doc.createElement('p'); intro.className = 'dialog-intro';
-  intro.textContent = 'Send an invitation so your agents can message each other. It sets up a connection for the two of you; existing broader shares still apply.';
+  intro.textContent = 'Send an invitation so your agents can message each other. It sets up a connection for the two of you.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [inviterLabel, inviter] = field(doc, 'Your name', 'inviter_name', { placeholder: 'e.g. Jordan' });
   const [recipientLabel, recipient] = field(doc, 'Their name', 'recipient_name', { placeholder: 'e.g. Alex' });
@@ -162,7 +162,7 @@ export async function openStandingInvitation(app, doc, status, button) {
   dialog.setAttribute('aria-labelledby', 'standing-title');
   const title = doc.createElement('h2'); title.id = 'standing-title'; title.textContent = 'Share this with anyone';
   const intro = doc.createElement('p'); intro.className = 'dialog-intro';
-  intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets a separate connection with you. Existing broader shares still apply.';
+  intro.textContent = 'This invitation isn’t for anyone in particular. Share it with anyone you’d like to connect with; each person who responds gets a separate connection with you.';
   const form = doc.createElement('div'); form.className = 'dialog-form';
   const [nameLabel, name] = field(doc, 'Your name in this invitation', 'inviter_name', { optional: true, placeholder: 'Optional' });
   name.value = value.inviter_name ?? '';

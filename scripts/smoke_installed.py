@@ -77,8 +77,8 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v78.html', 'global'),
-                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v78.html', 'thread'),
+                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v79.html', 'global'),
+                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v79.html', 'thread'),
                 ):
                     assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
                         {'src': f'https://mcp.fulcradynamics.com/menu-{theme}.svg',
@@ -110,13 +110,13 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v78.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v79.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v78 entrypoints verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v79 entrypoints verified.')
 
 
 if __name__ == '__main__':

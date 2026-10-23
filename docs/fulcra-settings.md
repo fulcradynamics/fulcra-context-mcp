@@ -4,7 +4,7 @@ The server advertises native `openai/settings`. Settings are configuration, not
 instructions: saving never sends messages, changes checkpoints or schedules
 anything. Every tool here is app-only. Skills edit the same owned document with
 exact catalog reads and `update_data_type`, preserving unrelated values
-and verifying ownership and readback. Existing broader shares may expose it.
+and verifying ownership and readback.
 
 ## Tools
 

@@ -150,7 +150,7 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
                             expected_peer_userids: list[str] | None = None) -> dict:
     """Replace this contact's preference overrides at the user's request; {} restores the global values.
 
-    Stored off the connection, subject to existing shares. No messages, sharing, checkpoints
+    Stored off the connection. No messages, sharing, checkpoints
     or scheduler edits.
     """
     from . import contact_preferences as policy

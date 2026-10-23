@@ -429,7 +429,7 @@ def _standing_entry(api, own):
 
 def standing(api, inviter_name=None):
     """Return the user's standing open invitation, creating it on first use.
-    A given inviter_name ('' clears it) is saved on the template, subject to existing shares."""
+    A given inviter_name ('' clears it) is saved on the template."""
     from fulcra_api import data_type_management
     from .contact_identifier import write_contact_identifier, validate_identifier
 

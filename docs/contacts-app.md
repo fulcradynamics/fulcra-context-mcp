@@ -173,14 +173,11 @@ never add grants to the template and create a separate outbox per responder, lab
 `standing_invitation_inviter: "<name>"` description line) is never copied to
 responder outboxes, which are named after their label.
 
-Existing broad shares may expose invitation codes, templates and preferences;
-that is the user's access policy, not a reason to block preparation or matching.
-The app adds only narrow responder grants, never broad grants, and never revokes
-existing broad sharing or asks for approval of it. Explicit single-type grants
+The app adds only narrow responder grants. Explicit single-type grants
 targeting state storage are still rejected; ownership, schemas, first-message
-evidence and record consent remain required. Generic sharing tools do not enforce
-app storage privacy. An unavailable matcher does not veto independently discovered
-two-way contacts. Storage has no compare-and-swap; a worker lock serializes one process only.
+evidence and record consent remain required. An unavailable matcher does not veto
+independently discovered two-way contacts. Storage has no compare-and-swap; a worker
+lock serializes one process only.
 
 ## Legacy mesh conversion
 

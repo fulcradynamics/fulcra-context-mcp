@@ -952,7 +952,6 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
         data_type: Exact owned Event/<uuid> channel without targeted grants.
         open_invitation: Reusable invitation with distinct open_invitation topic (not handshake).
             Never grants access to the template; each responder gets an individual outbox.
-            Existing broad shares may expose the template and invitation state.
     """
     from .agent_invitations import prepare
     try:
@@ -986,7 +985,7 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
     "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> dict:
     """Get the user's standing open invitation (created on first use; no template
-    grants added). Existing broad shares still apply. Responders get separate outboxes.
+    grants added). Responders get separate outboxes.
 
     Args:
         inviter_name: Name to save for the invitation text; "" clears it, omit to keep.
