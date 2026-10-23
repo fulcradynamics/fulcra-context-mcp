@@ -86,3 +86,58 @@ async def test_metadata_write_transport_failure_is_uncertain(call, fake_fulcra):
     assert result['status'] == 'uncertain'
     assert result['verified'] is False
     assert fake_fulcra.update_data_type.call_count == 1
+
+
+
+SCHEMA = {'type': 'object', 'properties': {'id': {'type': 'string'}, 'title': {'type': 'string'}},
+          'required': ['title']}
+
+
+def _with_fields(**extra):
+    schema = copy.deepcopy(SCHEMA)
+    schema['properties'].update(extra)
+    return schema
+
+
+async def test_add_fields_sends_existing_and_new_fields(call, fake_fulcra):
+    fake_fulcra.v1_catalog.return_value = [ENTRY]
+    fake_fulcra.v1_catalog_schema.side_effect = [SCHEMA, _with_fields(year={'type': 'integer'})]
+    result = json.loads(await call('update_data_type', {
+        'data_type': TYPE, 'add_fields': {'properties': {'year': {'type': 'integer'}}}}))
+    assert result['verified'] is True
+    assert result['added_fields'] == ['year']
+    assert '5 minutes' in result['note']
+    base, type_id, body = fake_fulcra.update_data_type.call_args.args
+    assert (base, type_id) == ('Event', TYPE.split('/')[1])
+    assert json.loads(body['record_spec']['schema']) == {
+        'properties': {'title': {'type': 'string'}, 'year': {'type': 'integer'}}, 'required': ['title']}
+
+
+@pytest.mark.parametrize('fields, reason', [
+    ({'properties': {'title': {'type': 'integer'}}}, 'already has title'),
+    ({'properties': {'year': {'type': 'integer'}}, 'required': ['year']}, 'must be optional'),
+])
+async def test_add_fields_refuses_changes_to_existing_fields(call, fake_fulcra, fields, reason):
+    fake_fulcra.v1_catalog.return_value = [ENTRY]
+    fake_fulcra.v1_catalog_schema.return_value = SCHEMA
+    result = json.loads(await call('update_data_type', {'data_type': TYPE, 'add_fields': fields}))
+    assert result['status'] == 'rejected'
+    assert reason in result['reason']
+    fake_fulcra.update_data_type.assert_not_called()
+
+
+async def test_add_fields_is_not_combined_with_metadata(call, fake_fulcra):
+    result = json.loads(await call('update_data_type', {
+        'data_type': TYPE, 'name': 'New', 'add_fields': {'properties': {'y': {'type': 'string'}}}}))
+    assert result['status'] == 'rejected'
+    fake_fulcra.update_data_type.assert_not_called()
+
+
+@pytest.mark.parametrize('after', [SCHEMA, _with_fields(year={'type': 'integer'}, title={'type': 'integer'})])
+async def test_add_fields_unverified_readback_is_uncertain(call, fake_fulcra, after):
+    fake_fulcra.v1_catalog.return_value = [ENTRY]
+    fake_fulcra.v1_catalog_schema.side_effect = [SCHEMA, after]
+    result = json.loads(await call('update_data_type', {
+        'data_type': TYPE, 'add_fields': {'properties': {'year': {'type': 'integer'}}}}))
+    assert result['status'] == 'uncertain'
+    assert fake_fulcra.update_data_type.call_count == 1

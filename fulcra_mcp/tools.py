@@ -358,27 +358,38 @@ def _check_metadata_privacy(api, base, name, entry=None):
                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
 async def update_data_type(
     data_type: str, name: str | None = None, description: str | None = None,
-    expected_description: str | None = None,
+    expected_description: str | None = None, add_fields: dict[str, Any] | None = None,
 ) -> dict:
-    """Update only name/description of an owned active Event/Metric type.
+    """Update the name/description of an owned active Event/Metric type, or
+    add optional fields to it.
     Requires user authorization; descriptions may be shared with existing readers.
     Preserve unrelated description content. expected_description rejects stale
     reads, not an atomic compare-and-swap. Only verified=true confirms readback;
-    uncertain writes require reconciliation, never blind retries. No schema,
-    record, or share changes. Private configuration types must remain unshared
-    and cannot be renamed. Legacy annotations are not supported.
+    uncertain writes require reconciliation, never blind retries. Existing
+    fields can't be removed, renamed, retyped or made required (create a new
+    type for that); no record or share changes. Private configuration types
+    must remain unshared and cannot be renamed. Legacy annotations are not
+    supported.
 
     Args:
         data_type: Exact owned Event/<uuid> or Metric/<uuid> catalog ID.
         name: Replacement name; omit to preserve.
         description: Complete replacement description; omit to preserve.
         expected_description: Exact raw description from catalog metadata; optional stale-read guard.
+        add_fields: JSON Schema of new optional fields, e.g.
+            {"properties": {"genre": {"type": "string"}}}. Not combined with
+            name/description. Wait 5 minutes before recording values for them.
+            To fill them in on stored records, record_data each record again,
+            complete, with its record_id.
     """
     parsed = _user_defined_type(data_type, "updated")
     changes = {k: v for k, v in {'name': name, 'description': description}.items() if v is not None}
     if (isinstance(parsed, str) or parsed[0] not in ('Event', 'Metric')
-            or not changes or name is not None and not name.strip()):
-        return dict(status='rejected', verified=False, reason='Provide an exact Event/Metric ID and metadata changes.')
+            or not changes and add_fields is None or name is not None and not name.strip()):
+        return dict(status='rejected', verified=False, reason='Provide an exact Event/Metric ID and metadata changes or add_fields.')
+    if changes and add_fields is not None:
+        return dict(status='rejected', verified=False,
+                    reason='add_fields cannot be combined with name or description; make two calls.')
     base, type_id = parsed
     if base is None or data_type != f'{base}/{type_id}':
         return dict(status='rejected', verified=False, reason='Use the exact canonical catalog ID.')
@@ -401,21 +412,60 @@ async def update_data_type(
         _check_metadata_privacy(api, base, changes.get('name', before.get('name')), before)
         if expected_description is not None and before.get('description') != expected_description:
             raise ValueError('Description changed; reread before deciding whether to update.')
+        if add_fields is not None:
+            # Catalog entries don't carry the schema; read it separately
+            schema_before = _v1_schema(api, data_type, own)
     except Exception:
         return dict(status='rejected', verified=False, reason='Owned metadata or expected description could not be verified.')
     try:
-        api.update_data_type(base, type_id, changes)
+        if add_fields is not None:
+            try:
+                data_type_management.add_fields(
+                    api, {**before, 'record_spec': {'schema': schema_before}}, add_fields)
+            except ValueError as e:
+                # Refused before anything was sent
+                return dict(status='rejected', verified=False, reason=str(e))
+        else:
+            api.update_data_type(base, type_id, changes)
         after = read_owned()
         _check_metadata_privacy(api, base, after.get('name'), after)
         # Ignore server-maintained timestamps; compare all metadata and schema.
         preserved = ('id', 'fulcra_userid', 'api_version', 'name', 'description',
                      'record_spec', 'deprecated', 'deleted_at', 'recordable', 'tags')
+        if add_fields is not None:
+            preserved = tuple(k for k in preserved if k != 'record_spec')
+            schema_after = _v1_schema(api, data_type, own)
+            if not _fields_added(schema_before, schema_after, add_fields['properties']):
+                raise ValueError('Schema readback differs.')
         if any(after.get(k) != changes.get(k, before.get(k)) for k in preserved):
             raise ValueError('Metadata readback differs.')
     except Exception:
         return dict(status='uncertain', verified=False, data_type=data_type,
                     reason='Write or independent readback failed; reconcile before another write.')
+    if add_fields is not None:
+        return dict(status='updated', verified=True, data_type=data_type,
+                    added_fields=sorted(add_fields['properties']),
+                    note='Wait 5 minutes before recording values for the new fields: '
+                         'until then they may be dropped without an error.')
     return dict(status='updated', verified=True, data_type=data_type, **changes)
+
+
+def _v1_schema(api, data_type: str, fulcra_userid: str) -> dict:
+    schema = api.v1_catalog_schema(data_type=data_type, api_version='v1', fulcra_userid=fulcra_userid)
+    if isinstance(schema, str):
+        schema = json.loads(schema)
+    if not isinstance(schema, dict) or not isinstance(schema.get('properties'), dict):
+        raise ValueError('Schema unavailable.')
+    return schema
+
+
+def _fields_added(before: dict, after: dict, added: dict) -> bool:
+    """Whether schema `after` has every field of `before`, unchanged, plus `added`."""
+    def fields(schema):
+        return schema['properties'], sorted(schema.get('required') or [])
+    (old, old_required), (new, new_required) = fields(before), fields(after)
+    return (all(new.get(k) == v for k, v in old.items())
+            and all(k in new for k in added) and new_required == old_required)
 
 
 @tools_mcp.tool(app={"visibility": ["app"]},
