@@ -141,7 +141,7 @@ def test_duplicate_channels_from_one_owner_are_ambiguous_not_new_connections(api
     api.create_datashare.assert_not_called()
 
 
-def test_open_label_and_template_fields_are_cloned_without_private_code(api):
+def test_open_responder_gets_label_and_standard_channel_schema_without_private_code(api):
     from fulcra_mcp.contact_identifier import write_contact_identifier, parse_contact_identifier
     clone_api(api)
     api.catalog[0]['description'] = write_contact_identifier('connect-our-agents channel', 'Study group')
@@ -152,7 +152,8 @@ def test_open_label_and_template_fields_are_cloned_without_private_code(api):
     assert result['status'] == 'matched'
     created = next(e for e in api.catalog if e['id'] == result['data_type'])
     assert parse_contact_identifier(created['description']) == OTHER + ' via Study group'
-    assert 'sender' in json.loads(created['record_spec']['schema'])['properties']
+    from fulcra_api.connections import CHANNEL_FIELDS
+    assert json.loads(created['record_spec']['schema'])['properties'] == CHANNEL_FIELDS['properties']
     assert code not in json.dumps(created)
     assert api.create_datashare.call_args.kwargs['allowed_user_ids'] == [PEER]
 
@@ -204,3 +205,17 @@ def test_standing_responders_get_their_own_outbox_without_the_private_name(stand
     outbox = next(e for e in standing_api.catalog if e['id'] == result['data_type'])
     assert outbox['name'] == 'Alex via Open invitation'
     assert invitations.STANDING_INVITER not in outbox['description']
+
+
+def test_standing_name_survives_whitespace_folding(standing_api):
+    import re
+    from fulcra_mcp.contact_identifier import parse_contact_identifier
+    invitations.standing(standing_api, 'Leif')
+    entry = next(e for e in standing_api.catalog if e['id'] == STANDING)
+    folded = re.sub(r'\s+', ' ', entry['description'])
+    assert invitations._standing_inviter(folded) == 'Leif'
+    assert parse_contact_identifier(entry['description']) == 'Open invitation'
+    assert invitations.STANDING_INVITER not in invitations._without_inviter(folded)
+    entry['description'] = folded
+    assert invitations.standing(standing_api, 'Sura')['inviter_name'] == 'Sura'
+    assert parse_contact_identifier(entry['description']) == 'Open invitation'

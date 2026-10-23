@@ -26,6 +26,10 @@ def entry(id, owner=None):
 def backend(fake, catalog, outgoing=(), incoming=()):
     catalog = [dict(e, description='connect-agents-with-anyone channel\n' + (e.get('description') or '')) for e in catalog]
     fake.v1_catalog.return_value = catalog
+    # Like the API, an exact lookup returns only that type.
+    fake.v1_catalog.side_effect = lambda data_type=None, fulcra_userid=None, **_: [
+        e for e in fake.v1_catalog.return_value if data_type in (None, e['id'])
+        and (fulcra_userid is None or e.get('fulcra_userid', fulcra_userid) == fulcra_userid)]
     fake.v1_catalog_schema.return_value = {'type':'object', **CHANNEL_FIELDS}
     fake.get_datashares.return_value = [dict(s, datashare_name='connect-agents-with-anyone: test') for s in outgoing]
     incoming = list(incoming)
@@ -210,7 +214,7 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
             assert str(resource.uri) == uri
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
-    assert fake_fulcra.v1_catalog.call_count == 3
+    assert fake_fulcra.v1_catalog.call_count == 6  # Each discovery: broad listing plus one exact channel lookup.
 
 
 @pytest.mark.parametrize("failure", ["missing-own", "numeric-own", "catalog-owner", "catalog-offline", "shares-offline", "incoming-offline"])

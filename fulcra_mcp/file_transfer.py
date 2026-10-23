@@ -446,7 +446,7 @@ def _require_grant() -> str:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Start File Upload", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False},
+    annotations={"title": "Start File Upload", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.
@@ -556,7 +556,7 @@ def _put_chunk(url: str, data: bytes, start: int, total: int) -> int:
 
 
 @tools_mcp.tool(
-    annotations={"title": "Upload File Chunk", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False},
+    annotations={"title": "Upload File Chunk", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
     app=AppConfig(resource_uri=FILE_MANAGER_URI, visibility=["app"]),
     # The panel calls this; the model never should (it would have to write out
     # each 256 KiB chunk as base64), so the description stays a single line.

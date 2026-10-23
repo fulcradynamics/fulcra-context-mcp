@@ -147,16 +147,8 @@ def _save(api, own, entry, document):
 
 
 def _covering(api, channel):
-    shares = api.get_datashares()
-    if not isinstance(shares, list):
-        raise ValueError('Outgoing grants unavailable.')
-    covering = []
-    for share in shares:
-        if type(share.get('share_all_data')) is not bool or not isinstance(share.get('fulcra_data_types'), list):
-            raise ValueError('Incomplete outgoing grants.')
-        if share['share_all_data'] or set(share['fulcra_data_types']) & {channel, 'Event', 'Event/*', '*'}:
-            covering.append(share)
-    return covering
+    return [share for share in api.get_datashares()
+            if share.get('share_all_data') or set(share.get('fulcra_data_types') or []) & {channel, 'Event', 'Event/*', '*'}]
 
 
 def prepare(api, data_type, open_invitation=False):
@@ -191,15 +183,11 @@ def prepare(api, data_type, open_invitation=False):
 def _evidence(api, own, prefix='handshake'):
     with _checking('incoming_grants'):
         grants = api.get_shared_datasets()
-        if not isinstance(grants, list):
-            raise ValueError('Incoming grants unavailable.')
     channels = set()
     for grant in grants:
         if grant.get('grant_type') in ('self', 'group'):
             continue
-        types = grant.get('fulcra_data_types')
-        if not isinstance(types, list):
-            raise ValueError('Incomplete incoming grants.')
+        types = grant.get('fulcra_data_types') or []
         if (grant.get('grant_type') == 'user' and _uuid(grant.get('sharing_fulcra_userid'))
                 and grant['sharing_fulcra_userid'] != own
                 and isinstance(grant.get('datashare_name'), str)
@@ -245,7 +233,6 @@ def _open_peer(api, own, code, peer):
 def _match_open(api, own, document, template, invite):
     from fulcra_api import data_type_management
     from .contact_identifier import parse_contact_identifier, write_contact_identifier, validate_identifier
-    from .tools import _user_defined_fields
 
     results = []
     rows = _evidence(api, own, 'open_invitation').get(invite['code'], [])
@@ -279,7 +266,6 @@ def _match_open(api, own, document, template, invite):
                     sender = 'Agent'
                 identifier = sender[:max(1, 75 - len(label))] + ' via ' + label[:74]
                 identifier = identifier[:80].strip()
-                fields, required = _user_defined_fields(api.v1_catalog_schema(template, 'v1', fulcra_userid=own))
                 description = write_contact_identifier(_without_inviter(source.get('description') or ''), identifier)
                 entry = verify()
                 binding = dict(state='creating', incoming_data_type=incoming, identifier=identifier)
@@ -289,7 +275,8 @@ def _match_open(api, own, document, template, invite):
                 created = data_type_management.create_data_type(api, {'id': 'Event', 'api_version': 'v1'},
                     identifier if source.get('name') == STANDING_NAME else source.get('name') or 'Agent connection',
                     description=description,
-                    fields_schema={'properties': fields, 'required': required})
+                    fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
+                                   'required': connections.CHANNEL_FIELDS['required']})
                 data_type = created['id']
                 if data_type == template or data_type in document['invitations']:
                     raise ValueError('New individual outbox required.')
@@ -406,14 +393,27 @@ def match(api):
     return {'results': results}
 
 
+def _inviter_marker(description):
+    """(start, end, name) of the saved inviter name, wherever whitespace folding
+    put it, or None."""
+    start = (description or '').find(STANDING_INVITER)
+    if start < 0:
+        return None
+    name, end = json.JSONDecoder().raw_decode(description, start + len(STANDING_INVITER))
+    return start, end, name
+
+
 def _standing_inviter(description):
-    lines = [l for l in (description or '').split('\n') if l.startswith(STANDING_INVITER)]
-    return json.loads(lines[0][len(STANDING_INVITER):]) if lines else ''
+    marker = _inviter_marker(description)
+    return marker[2] if marker else ''
 
 
 def _without_inviter(description):
     # Responder outboxes copy the template description; the name stays private.
-    return '\n'.join(l for l in description.split('\n') if not l.startswith(STANDING_INVITER))
+    marker = _inviter_marker(description)
+    if not marker:
+        return description
+    return description[:marker[0]].rstrip(' \t\r\n') + description[marker[1]:]
 
 
 def _standing_entry(api, own):
@@ -448,10 +448,15 @@ def standing(api, inviter_name=None):
                 raise ValueError('Standing invitation not verified.')
         prepared = prepare(api, entry['id'], open_invitation=True)
         if inviter_name is not None and inviter_name != _standing_inviter(entry['description']):
-            lines: list[str] = _without_inviter(entry['description']).split('\n')
+            description = _without_inviter(entry['description'])
             if inviter_name:
-                lines.insert(1, STANDING_INVITER + json.dumps(inviter_name))
-            api.update_data_type('Event', entry['id'].split('/')[1], {'description': '\n'.join(lines)})
+                # Before the final label suffix, which must stay last.
+                from .contact_identifier import _marker
+                label = _marker(description)
+                index = label[0] if label else len(description)
+                description = (description[:index].rstrip(' \t\r\n') + '\n' + STANDING_INVITER
+                               + json.dumps(inviter_name) + ('\n' + description[index:] if label else ''))
+            api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
             entry = _standing_entry(api, own)
             if not entry or _standing_inviter(entry['description']) != inviter_name:
                 raise ValueError('Name not saved.')

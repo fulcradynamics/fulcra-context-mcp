@@ -24,7 +24,7 @@ function contact({ peerId, name, outId, inId, sender = name, topic, outgoing = [
     catalog: [outbox, inbox],
     outgoing: [shareFixture({ data_types: [outbox.id], with_user_ids: [peerId], share_all_data: false })],
     incoming: [{
-      selectors_complete: true, file_paths: [], file_history_paths: [], share_all_data: false,
+     file_paths: [], file_history_paths: [], share_all_data: false,
       datashare_name: 'connect-agents-with-anyone: synthetic', grant_type: 'user',
       sharing_fulcra_userid: peerId, sharing_fulcra_user_name: name, data_types: [inbox.id],
     }],

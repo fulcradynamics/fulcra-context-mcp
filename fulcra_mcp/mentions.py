@@ -33,7 +33,7 @@ def _compatible_schema(entry):
 
 def _direct_recipient(share):
     recipients = share.get("with_user_ids")
-    if (share.get("selectors_complete") is True and share.get("share_all_data") is False and not share.get("group_id")
+    if (share.get("share_all_data") is False and not share.get("group_id")
             and not share.get('time_start') and not share.get('time_end')
             and share.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
             and all(k not in share or share[k] == [] for k in ("with_group_ids", "file_paths", "file_history_paths"))
@@ -90,7 +90,7 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
             peer = entry.get("fulcra_userid") or own
             outgoing = peer == own
             if outgoing:
-                covering = [s for s in shares["outgoing"] if s.get('selectors_complete') is not True or s.get("share_all_data") is True
+                covering = [s for s in shares["outgoing"] if s.get("share_all_data") is True
                             or any(t in s.get('data_types', []) for t in (entry['id'], 'Event', 'Event/*', '*'))]
                 grants = [_direct_recipient(s) if s.get('data_types') == [entry['id']] else None for s in covering]
                 if not grants or any(not g for g in grants):
@@ -99,7 +99,7 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                 if own in recipients or len(recipients) > 32:
                     continue
                 peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
-            elif not any(s.get('selectors_complete') is True and s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
+            elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
                          and isinstance(s.get('datashare_name'), str)
                          and s['datashare_name'].startswith(SHARE_NAME_PREFIX)
                          and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))

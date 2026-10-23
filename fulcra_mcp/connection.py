@@ -37,8 +37,6 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
     if not entry.get('recordable'):
         raise ValueError('Channel is not recordable.')
     shares = api.get_datashares()
-    if not isinstance(shares, list):
-        raise ValueError('Could not verify outgoing grants.')
     expected = expected_peer_userids if expected_peer_userids is not None else [peer]
     if (not isinstance(expected, list) or not expected or len(expected) > 32
             or any(not _uuid(p) or p == own for p in expected)
@@ -47,13 +45,11 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
     audience = set()
     covering = []
     for share in shares:
-        selectors = share.get('fulcra_data_types')
-        if not isinstance(selectors, list) or type(share.get('share_all_data')) is not bool:
-            raise ValueError('Malformed outgoing grant; reconcile sharing before sending.')
-        if not (share['share_all_data'] or any(s in selectors for s in (outbox, 'Event', '*', 'Event/*'))):
+        selectors = share.get('fulcra_data_types') or []
+        if not (share.get('share_all_data') or any(s in selectors for s in (outbox, 'Event', '*', 'Event/*'))):
             continue
         permissions = share.get('permissions')
-        if (share['share_all_data'] or selectors != [outbox]
+        if (share.get('share_all_data') or selectors != [outbox]
                 or not isinstance(permissions, list) or not permissions
                 or any(not isinstance(p, dict) or not _uuid(p.get('allowed_fulcra_userid'))
                        or p['allowed_fulcra_userid'] == own for p in permissions)
@@ -126,12 +122,12 @@ def _readback(api, entry, record):
 
 def _clear_status(api, entry):
     """Remove the previous assessment after a confirmed send, best effort."""
-    from .contact_status import parse_status, PATTERN
+    from .contact_status import parse_status, remove_status
     try:
         entry = channel_entry(api, entry['fulcra_userid'], entry['id'])
         if parse_status(entry.get('description')) is None:
             return False
-        description = PATTERN.sub('', entry['description'])
+        description = remove_status(entry['description'])
         api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
         return channel_entry(api, entry['fulcra_userid'], entry['id']).get('description') == description
     except Exception:

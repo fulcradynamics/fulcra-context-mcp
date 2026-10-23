@@ -29,13 +29,14 @@ export function parseConnections(result) {
 export const isConnection = e => e.id.startsWith('Event/') && CONNECTION_PREFIXES.some(prefix => e.description?.startsWith(`${prefix} channel`));
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
 const namedShare = s => CONNECTION_PREFIXES.some(prefix => s.datashare_name?.startsWith(prefix));
-const covers = (s, id) => s.selectors_complete !== true || s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
+const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
 export function conversionSources(description, own, peer) {
-  const lines = (description ?? '').split('\n').filter(l => l.startsWith(CONVERSION_PREFIX));
-  if (lines.length !== 1) return [];
+  // Catalog listings fold whitespace, so the marker need not be on its own line.
+  const parts = (description ?? '').split(CONVERSION_PREFIX);
+  if (parts.length !== 2) return [];
   try {
-    const refs = JSON.parse(lines[0].slice(CONVERSION_PREFIX.length));
+    const refs = JSON.parse(parts[1].match(/^\[[^\]]*\]/)?.[0]);
     const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
     if (!Array.isArray(refs) || refs.length > 32 || !refs.every(r => r && new RegExp('^MomentAnnotation/' + uuid + '$').test(r.id)
       && [own, peer].includes(r.fulcra_userid))) return [];
@@ -54,10 +55,10 @@ function parseShares(result) {
   return shares;
 }
 
-// Unknown selectors potentially cover every channel. Only complete, single-channel direct grants
-// establish outgoing recipients. Inspect ALL covering grants, not just narrow ones.
+// Only single-channel direct grants establish outgoing recipients. Inspect ALL
+// covering grants, not just narrow ones.
 function directRecipients(share) {
-  return share.selectors_complete === true && share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
+  return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
     && Array.isArray(share.data_types) && share.data_types.length === 1
     && Array.isArray(share.with_user_ids) && share.with_user_ids.length > 0
@@ -113,7 +114,7 @@ export async function discoverThreads(app) {
         peer = 'connection:' + JSON.stringify([own, ...recipients].sort());
       }
     } else if (!shares.incoming.some(s => s.sharing_fulcra_userid === owner
-      && s.selectors_complete === true && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
+      && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
       && s.data_types?.length === 1 && s.data_types[0] === entry.id)) {
       omitted++; continue;
     }

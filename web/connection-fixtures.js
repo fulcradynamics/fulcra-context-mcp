@@ -7,12 +7,12 @@ export function channelFixture(entry) {
     ...structuredClone(schema) };
 }
 export function shareFixture(share) {
-  return { selectors_complete: true, data_types: [], file_paths: [], file_history_paths: [],
+  return {data_types: [], file_paths: [], file_history_paths: [],
     datashare_name:'connect-agents-with-anyone: synthetic', ...share };
 }
 export function incomingFixtures(catalog, own='me') {
   return catalog.filter(e => e.fulcra_userid && e.fulcra_userid !== own).map(e => ({
-    selectors_complete: true, file_paths: [], file_history_paths: [],
+   file_paths: [], file_history_paths: [],
     datashare_name:'connect-agents-with-anyone: synthetic', grant_type:'user',
     sharing_fulcra_userid:e.fulcra_userid, data_types:[e.id],
   }));

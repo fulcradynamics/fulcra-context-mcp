@@ -3,10 +3,9 @@
 Never use these untrusted labels for authorization, grouping, or routing.
 """
 import json
-import re
 import unicodedata
 
-from .connection_compatibility import IDENTIFIER_TOKEN, CHANNEL_PREFIXES
+from .connection_compatibility import IDENTIFIER_TOKEN
 
 TOKEN = IDENTIFIER_TOKEN
 PREFIX = TOKEN + ": "
@@ -47,21 +46,6 @@ def _marker(description: str | None) -> tuple[int, int, str] | None:
 def parse_contact_identifier(description: str | None) -> str | None:
     marker = _marker(description)
     return marker[2] if marker else None
-
-
-def normalize_catalog_description(description: str) -> str:
-    """Fold prose whitespace without changing (or repairing) marker data."""
-    if description.startswith(CHANNEL_PREFIXES):
-        return description  # Preserve line-delimited conversion provenance.
-    try:
-        marker = _marker(description)
-    except ValueError:
-        return description
-    if not marker:
-        return re.sub(r"\s+", " ", description).strip()
-    start, end, _ = marker
-    prose = re.sub(r"\s+", " ", description[:start]).strip()
-    return (prose + " " if prose else "") + description[start:end]
 
 
 def write_contact_identifier(description: str | None, identifier: str) -> str:

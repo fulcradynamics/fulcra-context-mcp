@@ -1,7 +1,8 @@
 // Untrusted display data from our own channels only, never live state or authority.
 export function parseStatus(description) {
   if (typeof description !== 'string' || description.split('[contact_status:').length !== 2) return null;
-  const match = description.split('\n').map(line => line.match(/^\[contact_status: (\{[^\r\n]*\})\]$/)).find(Boolean);
+  // Catalog listings fold whitespace, so the marker need not be on its own line.
+  const match = description.match(/\[contact_status: (\{[^\r\n]*?\})\]/);
   try {
     const value = JSON.parse(match?.[1]);
     if (!value || Object.keys(value).sort().join(',') !== 'assessed_at,attention,reason'

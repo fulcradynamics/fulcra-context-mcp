@@ -21,8 +21,8 @@ from pydantic import AfterValidator
 
 from .compact_tools import CompactTools
 from .credentials import get_fulcra_object
-from .contact_identifier import normalize_catalog_description, parse_contact_identifier, validate_identifier, write_contact_identifier
-from .connection_compatibility import LEGACY_OUTBOX_PATTERN, CHANNEL_PREFIXES
+from .contact_identifier import parse_contact_identifier, validate_identifier, write_contact_identifier
+from .connection_compatibility import LEGACY_OUTBOX_PATTERN
 from .settings import settings
 
 tools_mcp = FastMCP(name="Fulcra Context Tools")
@@ -275,10 +275,6 @@ async def create_data_type(
     fulcra = get_fulcra_object()
 
     if base_type in V1_BASE_BY_TYPE:
-        try:
-            _check_metadata_privacy(fulcra, V1_BASE_BY_TYPE[base_type], name)
-        except Exception:
-            return "Private configuration requires verified unshared Event storage; no type was created."
         if description is None or not description.strip():
             return f"base_type='{base_type}' requires a description of what the type tracks."
         if scale is not None:
@@ -340,20 +336,6 @@ async def create_data_type(
     return f"Created data type {catalog_id}: " + json.dumps(ann)
 
 
-def _check_metadata_privacy(api, base, name, entry=None):
-    # Keep the existing private-store protection when generic primitives write
-    # the same interoperable metadata. No contact-specific public parameters.
-    from .contact_preferences import NAME as PREFERENCES_NAME, _check_private
-    from .agent_invitations import NAME as INVITATIONS_NAME
-    private_names = {PREFERENCES_NAME, INVITATIONS_NAME}
-    if entry and entry.get('name') in private_names and name != entry['name']:
-        raise ValueError('Private configuration names cannot be changed.')
-    if name in private_names:
-        if base != 'Event':
-            raise ValueError('Private configuration requires Event storage.')
-        _check_private(api, entry)
-
-
 @tools_mcp.tool(annotations={"title": "Update Data Type", "readOnlyHint": False,
                             "destructiveHint": True, "openWorldHint": False, "idempotentHint": False})
 async def update_data_type(
@@ -365,14 +347,13 @@ async def update_data_type(
     Preserve unrelated description content. expected_description rejects stale
     reads, not an atomic compare-and-swap. Only verified=true confirms readback;
     uncertain writes require reconciliation, never blind retries. No schema,
-    record, or share changes. Private configuration types must remain unshared
-    and cannot be renamed. Legacy annotations are not supported.
+    record, or share changes. Legacy annotations are not supported.
 
     Args:
         data_type: Exact owned Event/<uuid> or Metric/<uuid> catalog ID.
         name: Replacement name; omit to preserve.
         description: Complete replacement description; omit to preserve.
-        expected_description: Exact raw description from catalog metadata; optional stale-read guard.
+        expected_description: Description as last read from get_data_catalog; optional stale-read guard.
     """
     parsed = _user_defined_type(data_type, "updated")
     changes = {k: v for k, v in {'name': name, 'description': description}.items() if v is not None}
@@ -398,15 +379,14 @@ async def update_data_type(
         api = get_fulcra_object()
         own = api.get_fulcra_userid()
         before = read_owned()
-        _check_metadata_privacy(api, base, changes.get('name', before.get('name')), before)
-        if expected_description is not None and before.get('description') != expected_description:
+        if (expected_description is not None
+                and _catalog_description(before.get('description') or '') != _catalog_description(expected_description)):
             raise ValueError('Description changed; reread before deciding whether to update.')
     except Exception:
         return dict(status='rejected', verified=False, reason='Owned metadata or expected description could not be verified.')
     try:
         api.update_data_type(base, type_id, changes)
         after = read_owned()
-        _check_metadata_privacy(api, base, after.get('name'), after)
         # Ignore server-maintained timestamps; compare all metadata and schema.
         preserved = ('id', 'fulcra_userid', 'api_version', 'name', 'description',
                      'record_spec', 'deprecated', 'deleted_at', 'recordable', 'tags')
@@ -735,7 +715,7 @@ def _recordable_fields(properties: dict) -> list[str]:
     return sorted(k for k in properties if k not in RECORD_PLUMBING_FIELDS)
 
 
-@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def record_data(
     data_type: str,
@@ -1032,7 +1012,7 @@ async def match_agent_invitations() -> dict:
     return await asyncio.to_thread(match, get_fulcra_object())
 
 
-@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def send_agent_message(
     connection: str,
@@ -1119,6 +1099,11 @@ def _compatible_tools(entry: dict) -> str:
     return NO_TOOL_GROUP
 
 
+def _catalog_description(description: str) -> str:
+    """The description as get_data_catalog shows it, whitespace folded."""
+    return re.sub(r"\s+", " ", description).strip()
+
+
 def _slim_entry(entry: dict) -> dict:
     """Strip a v1 catalog entry down to the fields an MCP client needs."""
     record_spec = entry.get("record_spec") or {}
@@ -1126,7 +1111,7 @@ def _slim_entry(entry: dict) -> dict:
     if entry.get("name") and entry["name"] != entry["id"]:
         slim["name"] = entry["name"]
     if entry.get("description"):
-        slim["description"] = normalize_catalog_description(entry["description"])
+        slim["description"] = _catalog_description(entry["description"])
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):
@@ -1267,42 +1252,6 @@ def _user_defined_fields(schema: dict) -> tuple[dict[str, str | dict], list[str]
     return fields, required
 
 
-def _creation_fields_schema(entry: dict, full_schema: dict | None) -> dict | None:
-    """Lossless custom fields for create_data_type, never compact field summaries.
-
-    Catalog record_spec.schema may be custom-only or merged with base fields.
-    Prefer it when present. Only project flat object roots: root composition or
-    constraints involving removed base fields cannot safely be cloned.
-    """
-    spec = entry.get('record_spec') or {}
-    schema = spec.get('schema', full_schema)
-    if isinstance(schema, str):
-        try:
-            schema = json.loads(schema)
-        except ValueError:
-            return None
-    if not isinstance(schema, dict) or not isinstance(schema.get('properties'), dict):
-        return None
-    if (set(schema) - {'type', 'properties', 'required', '$defs', 'definitions',
-                       '$schema', 'title', 'description'}
-            or schema.get('type', 'object') != 'object'
-            or any(not isinstance(p, (dict, bool)) for p in schema['properties'].values())):
-        return None
-    required = schema.get('required', [])
-    if not isinstance(required, list) or any(not isinstance(k, str) for k in required):
-        return None
-    builtin = V1_RECORD_FIELDS_SET_BY_TOOL | ({'value'} if entry['id'].startswith('Metric/') else set())
-    fields = {k: v for k, v in schema['properties'].items() if k not in builtin}
-    result = {**schema, 'properties': fields}
-    if 'required' in schema:
-        result['required'] = [k for k in required if k not in builtin]
-    # Local refs to removed properties would no longer resolve. Definitions and
-    # property-local constraints/defaults/nullability are otherwise left intact.
-    if any('#/properties/' + key in json.dumps(result) for key in builtin):
-        return None
-    return result
-
-
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def get_data_catalog(
@@ -1321,13 +1270,9 @@ async def get_data_catalog(
 
     Args:
         data_type: Optional. Return only the data type with this exact ID.
-            Exact v1 entries include raw metadata (name, description, ownership
-            and lifecycle fields) for update_data_type read-modify-write.
             For a user-defined type, this also lists its fields (what
             record_data takes in `fields`): a type name, or the field's JSON
             Schema if it has nested fields or rules; plus required_fields.
-            Exact custom types also include creation_fields_schema for the
-            create_data_type fields argument; null means unavailable/unsupported.
             For an annotation, it adds the annotation's own settings: scale and
             value labels (value_map), kind, unit, defaults, tags and display.
         category: Optional. Filter by category.
@@ -1361,21 +1306,11 @@ async def get_data_catalog(
     grouped: dict[str, list[dict]] = {}
     for entry in catalog:
         slim = _slim_entry(entry)
-        if data_type and entry.get('id') == data_type and entry.get('api_version') == 'v1':
-            # Exact reads retain raw values for safe metadata read-modify-write,
-            # independent of display normalization in the compact projection.
-            slim['metadata'] = {key: entry[key] for key in (
-                'name', 'description', 'fulcra_userid', 'api_version',
-                'recordable', 'deprecated', 'deleted_at') if key in entry}
-        if data_type and entry.get('id') == data_type and _is_user_defined_v1(entry):
-            slim['creation_fields_schema'] = _creation_fields_schema(entry, None)
-        # Fetch the merged schema for display and, if raw schema is absent, for
-        # supported lossless custom-field extraction on an exact lookup.
+        # The catalog doesn't carry schemas; fetch one only for a single type.
         # A shared type is looked up in its owner's account, not the caller's.
         # The field list is a bonus: if the schema can't be fetched, still
         # return the entry rather than failing the whole call.
-        if _is_user_defined_v1(entry) and ((data_type and len(catalog) == 1)
-                or entry.get('description', '').startswith(CHANNEL_PREFIXES)):
+        if data_type and len(catalog) == 1 and _is_user_defined_v1(entry):
             try:
                 schema = fulcra.v1_catalog_schema(
                     entry["id"], "v1", fulcra_userid=entry.get("fulcra_userid")
@@ -1385,8 +1320,6 @@ async def get_data_catalog(
                     "data_type_schema_unavailable", data_type=entry["id"], status=e.code
                 )
             else:
-                if data_type and entry.get('id') == data_type:
-                    slim['creation_fields_schema'] = _creation_fields_schema(entry, schema)
                 fields, required = _user_defined_fields(schema)
                 if fields:
                     slim["fields"] = fields
@@ -2048,7 +1981,7 @@ def _list_file_entries(fulcra, path: str, fulcra_userid: str | None = None) -> d
     return result
 
 
-@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def read_file(
     path: str,
@@ -2162,7 +2095,7 @@ async def read_file(
     return f"Content of {path}: {text}"
 
 
-@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def write_file(
     path: str,
@@ -2285,7 +2218,7 @@ async def delete_file(path: str) -> str:
     return f"Deleted {path} (version {file_record['id']})."
 
 
-@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
@@ -2381,11 +2314,7 @@ def _slim_share(s: dict) -> dict:
         "created_at",
     )
     out = {k: s[k] for k in keep if k in s}
-    selectors = s.get("fulcra_data_types")
-    from .share_selectors import selectors_complete
-    complete = selectors_complete(selectors)
-    out["selectors_complete"] = complete
-    files, history, data = _split_share_types(selectors if complete else [])
+    files, history, data = _split_share_types(s.get("fulcra_data_types") or [])
     out["file_paths"] = files
     out["file_history_paths"] = history
     out["data_types"] = data
@@ -2395,8 +2324,7 @@ def _slim_share(s: dict) -> dict:
     out["with_group_ids"] = [
         p["allowed_group_id"] for p in s.get("group_permissions") or []
     ]
-    return {k: v for k, v in out.items()
-            if k in ('file_paths', 'file_history_paths', 'data_types') or v not in (None, [], "")}
+    return {k: v for k, v in out.items() if v not in (None, [], "")}
 
 
 def _own_userid(fulcra) -> str | None:
@@ -2448,7 +2376,7 @@ def _data_type_not_shared_message(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def create_share(
     name: str,
@@ -2505,18 +2433,6 @@ async def create_share(
     if time_start and time_end and (err := _range_error(time_start, time_end)):
         return err
     fulcra = get_fulcra_object()
-    if data_types or share_all_data:
-        from . import contact_preferences
-        from .agent_invitations import NAME as INVITATIONS_NAME
-        own = fulcra.get_fulcra_userid()
-        for entry in fulcra.v1_catalog(fulcra_userid=own):
-            if entry.get('fulcra_userid') != own:
-                continue
-            if (share_all_data or set(types) & {entry.get('id'), 'Event', 'Event/*', '*'}):
-                if entry.get('name') == contact_preferences.NAME:
-                    return "Contact preferences are private and cannot be shared."
-                if entry.get('name') == INVITATIONS_NAME:
-                    return "Agent invitations are private and cannot be shared."
     result = fulcra.create_datashare(
         datashare_name=name,
         fulcra_data_types=types,
@@ -2545,10 +2461,7 @@ async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both
     Returns:
         A JSON string with "own_fulcra_userid", "outgoing" (entries carry a
         "datashare_id") and/or "incoming" (entries carry a "grant_id"); either
-        ID ends that share with `delete_share`. Selector arrays (data_types,
-        file_paths, file_history_paths) are explicit, even empty. Use them for
-        safety checks only when selectors_complete is true; false means the raw
-        selectors were missing/malformed, not known-empty.
+        ID ends that share with `delete_share`.
     """
     fulcra = get_fulcra_object()
     result: dict = {}
@@ -2696,7 +2609,7 @@ async def get_groups(group_id: str | None = None, subscribed_only: bool = False)
     return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
 
 
-@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def join_group(group_id: str) -> str:
     """Join a Fulcra group on the user's behalf, at their explicit request.

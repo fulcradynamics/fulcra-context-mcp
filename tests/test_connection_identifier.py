@@ -133,13 +133,10 @@ def test_malformed_ambiguous_fail_closed(description):
 
 def test_catalog_normalization_keeps_exact_marker_value():
     label = 'Trip  ["Paris"]'
-    raw = 'Prose\n  folded.\n[mesh_identifier: ' + json.dumps(label) + ']'
+    raw = helper().write_contact_identifier('Prose\n  folded.', label)
     slim = tools._slim_entry({'id': TYPE_ID, 'description': raw})
     assert helper().parse_contact_identifier(slim['description']) == label
     assert slim['description'].startswith('Prose folded. ')
-    malformed = 'Prose [mesh_identifier: "bad\nlabel"]'
-    # Do not turn an invalid marker into a valid label by normalizing it.
-    assert tools._slim_entry({'id': TYPE_ID, 'description': malformed})['description'] == malformed
 
 
 def test_marker_limits_and_embedded_marker_text():

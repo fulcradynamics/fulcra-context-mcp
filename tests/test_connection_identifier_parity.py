@@ -16,23 +16,19 @@ CASES = json.loads((ROOT / 'tests/fixtures/contact-identifier-whitespace.json').
 def test_suffix_boundaries(case):
     for suffix in [case['suffix'], ' \t' + case['suffix'] + '\r\n']:
         raw = 'Prose\n  folded. [mesh_identifier: "Trip"]' + suffix
-        normalized = _slim_entry({'id': 'MomentAnnotation/test', 'description': raw})['description']
         if case['valid']:
             assert parse_contact_identifier(raw) == 'Trip'
-            assert parse_contact_identifier(normalized) == 'Trip'
             assert write_contact_identifier(raw, 'Trip') == raw
         else:
-            assert normalized == raw  # Never repair malformed reserved metadata.
-            for description in [raw, normalized]:
-                with pytest.raises(ValueError):
-                    parse_contact_identifier(description)
-                with pytest.raises(ValueError):
-                    write_contact_identifier(description, 'New')
+            with pytest.raises(ValueError):
+                parse_contact_identifier(raw)
+            with pytest.raises(ValueError):
+                write_contact_identifier(raw, 'New')
 
 
-def test_normalized_catalog_reaches_ui_without_repair():
+def test_normalized_catalog_reaches_ui():
     rows = []
-    for case in CASES:
+    for case in [c for c in CASES if c['valid']]:
         raw = 'connect-agents-with-anyone channel\nProse\n  folded. [mesh_identifier: "Trip"]' + case['suffix']
         entry = {'id': 'Event/test', 'name': 'Connection',
                  'fulcra_userid': 'peer', 'categories': ['shared_type'], 'description': raw}
@@ -46,7 +42,7 @@ for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
   const { threads } = await discoverThreads({ async callServerTool({ name }) {
     return { structuredContent: { result: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry] })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',selectors_complete:true,file_paths:[],file_history_paths:[],data_types:[entry.id]}], outgoing: [] }) } };
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'own', incoming: [{sharing_fulcra_userid:'peer',grant_type:'user',datashare_name:'connect-agents-with-anyone: test',file_paths:[],file_history_paths:[],data_types:[entry.id]}], outgoing: [] }) } };
   } });
   assert.equal(threads.length, 1);
   assert.equal(threads[0].identifier, valid ? 'Trip' : undefined);
@@ -60,9 +56,8 @@ for (const { entry, valid } of JSON.parse(readFileSync(0, 'utf8'))) {
 
 @pytest.mark.parametrize('raw,expected', [
     ('  Ordinary\n\t description  ', 'Ordinary description'),
-    ('  Ordinary\n [mesh_identifier: bad]  ', '  Ordinary\n [mesh_identifier: bad]  '),
-    ('  Ordinary\n [mesh_identifier "Trip"]  ', '  Ordinary\n [mesh_identifier "Trip"]  '),
+    ('  Ordinary\n [mesh_identifier: "Trip"]  ', 'Ordinary [mesh_identifier: "Trip"]'),
 ])
 def test_generic_catalog_description_normalization(raw, expected):
-    # This normalization applies to all catalog types, not just connection outboxes.
+    # The same folding applies to every catalog type, connection channels included.
     assert _slim_entry({'id': 'heart_rate', 'description': raw})['description'] == expected

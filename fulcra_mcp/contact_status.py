@@ -5,7 +5,6 @@ from datetime import datetime
 from .contact_identifier import validate_identifier
 
 TOKEN = '[contact_status:'
-PATTERN = re.compile(r'^\[contact_status: (\{[^\r\n]*\})\]$', re.MULTILINE)
 
 
 def validate_status(value):
@@ -19,14 +18,31 @@ def validate_status(value):
     return value
 
 
-def parse_status(description):
+def _marker(description):
+    """(start, end, value) of the single status marker, wherever whitespace
+    folding put it, or None if absent or malformed."""
     if not isinstance(description, str) or description.count(TOKEN) != 1:
         return None
-    match = PATTERN.search(description)
+    start = description.index(TOKEN)
     try:
-        return validate_status(json.loads(match[1])) if match else None
-    except (ValueError, TypeError):
+        if description[start + len(TOKEN)] != ' ':
+            return None
+        value, end = json.JSONDecoder().raw_decode(description, start + len(TOKEN) + 1)
+        validate_status(value)
+    except (ValueError, TypeError, IndexError):
         return None
+    return (start, end + 1, value) if description[end:end + 1] == ']' else None
+
+
+def parse_status(description):
+    marker = _marker(description)
+    return marker[2] if marker else None
+
+
+def remove_status(description):
+    """The description without its status marker and the whitespace before it."""
+    start, end, _ = _marker(description)
+    return description[:start].rstrip(' \t\r\n') + description[end:]
 
 
 def write_status(description, value):
@@ -37,11 +53,11 @@ def write_status(description, value):
     if TOKEN in description:
         if parse_status(description) is None:
             raise ValueError('Malformed status; refusing metadata replacement.')
-        match = PATTERN.search(description)
-        return description[:match.start()] + marker + description[match.end():]
+        start, end, _ = _marker(description)
+        return description[:start] + marker + description[end:]
     # Insert before the final label suffix; every existing byte stays unchanged.
-    from .contact_identifier import _marker
-    label = _marker(description)
+    from .contact_identifier import _marker as label_marker
+    label = label_marker(description)
     index = label[0] if label else len(description)
     before = description[:index]
     return before + ('' if before.endswith('\n') else '\n') + marker + ('\n' if label else '') + description[index:]
