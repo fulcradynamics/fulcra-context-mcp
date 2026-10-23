@@ -58,9 +58,8 @@ function parseShares(result) {
 // Only single-channel direct grants establish outgoing recipients. Inspect ALL
 // covering grants, not just narrow ones.
 function directRecipients(share) {
-  return share.share_all_data === false && !share.group_id && !share.time_start && !share.time_end
+  return !share.group_id && !share.time_start && !share.time_end
     && ['with_group_ids', 'file_paths', 'file_history_paths'].every(k => share[k] === undefined || (Array.isArray(share[k]) && share[k].length === 0))
-    && Array.isArray(share.data_types) && share.data_types.length === 1
     && Array.isArray(share.with_user_ids) && share.with_user_ids.length > 0
     && share.with_user_ids.every(p => typeof p === 'string' && p)
     && share.with_user_ids;
@@ -98,17 +97,21 @@ export async function discoverThreads(app) {
         if (connection && entry.name !== STANDING_INVITATION) pending.push(source);
         continue;
       }
-      const grants = covering.map(s => s.data_types?.[0] === entry.id && directRecipients(s));
+      const narrow = covering.filter(s => s.share_all_data === false
+        && s.data_types?.length === 1 && s.data_types[0] === entry.id);
+      const grants = narrow.map(directRecipients);
       const recipients = [...new Set(grants.flat())].sort();
-      if (recipients.some(p => !p || p === own) || recipients.length > 32
-        || (!connection && recipients.length !== 1)
-        || (connection && !covering.every(namedShare))) {
+      if (!recipients.length || recipients.some(p => !p || p === own) || recipients.length > 32
+        || (!connection && (recipients.length !== 1 || narrow.length !== covering.length))
+        || (connection && !narrow.every(namedShare))
+        || !covering.every(s => [true, false].includes(s.share_all_data)
+          && directRecipients(s) && directRecipients(s).every(p => recipients.includes(p)))) {
         omitted++;
         continue;
       }
       [peer] = recipients;
       // Grant creation is available in list_shares; Event catalog dates are not.
-      source.sharedAt = Math.max(0, ...covering.map(s => Date.parse(s.created_at)).filter(Number.isFinite));
+      source.sharedAt = Math.max(0, ...narrow.map(s => Date.parse(s.created_at)).filter(Number.isFinite));
       if (connection && recipients.length > 1) {
         source.expectedPeerUserids = recipients;
         peer = 'connection:' + JSON.stringify([own, ...recipients].sort());

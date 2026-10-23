@@ -4,6 +4,16 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.18.8 release notes
+
+- Keep completed contacts connected when existing broader grants overlap the
+  narrow channel grants without adding recipients. Discovery, mentions and
+  send authorization still require narrow grants for the exact audience.
+- Continue rejecting groups, time bounds and additional recipients. End contact
+  refuses broader overlaps before deleting anything; manage those shares separately.
+- Preserve private invitation-store checks and narrow-only share creation.
+- Ship contacts UI v77.
+
 ## 1.18.7 release notes
 
 - Generic tools carry no contacts policy again: `create_share` and

@@ -51,8 +51,10 @@ Contacts are Event channels named with either supported prefix
 narrow direct grants:
 
 - Our channels need direct grants to exactly the expected audience. Every covering
-  grant is checked, including share-all/wildcard grants. Groups, files and time
-  bounds never establish a connection.
+  grant is checked, including share-all/wildcard grants. Existing broader grants
+  may overlap only when all their recipients already belong to the narrow-grant
+  audience; they never establish a connection or add members. Groups, files and
+  time bounds remain rejected.
 - Incoming grants must name one channel and its exact owner.
 - Multiparty membership comes from our own channel's actual audience. An audience
   change clears selection/context and stops sends; drafts never move to a wider
@@ -60,7 +62,7 @@ narrow direct grants:
 - Names and `mesh_identifier` labels are untrusted display text, never identity.
 
 With several eligible outboxes, the composer initially chooses the one with the
-newest covering outgoing share's `created_at` from `list_shares`. Event catalog
+newest narrow outgoing share's `created_at` from `list_shares`. Event catalog
 entries do not expose creation/update dates; message timestamps describe activity,
 not channel creation. Missing/invalid dates rank last, with exact channel ID as the
 stable tie-break. Explicit choices (including no selection) survive refreshes;
@@ -142,8 +144,9 @@ contact's handoff for the session to avoid duplicates.
 - **Ask my agent** on a pending contact and **Update connection** on a legacy one
   send bounded chat requests; neither grants sharing consent.
 - **Advanced → End contact** (one-to-one only) calls `end_agent_contact`: it deletes
-  our covering shares, verifies none remain and optionally archives our channel.
-  The peer's share is untouched, so the contact may reappear under Pending.
+  our narrow shares, verifies none remain and optionally archives our channel.
+  Broader overlaps require separate management: this action refuses them before
+  deleting any shares. The peer's share is untouched, so the contact may reappear under Pending.
 - **Advanced → Debug** previews unread/status/pending/message states for this app
   instance only. Previews never reach records, context, sends or permissions.
 - Message artifacts offer **Open file in <host>**, which asks the chat to run
@@ -167,8 +170,10 @@ keep the template private and create a separate outbox per responder, labeled
 `standing_invitation_inviter: "<name>"` description line) is never copied to
 responder outboxes, which are named after their label.
 
-`create_share` refuses any grant covering invitation or preference storage.
-Storage has no compare-and-swap; a worker lock serializes one process only.
+The app refuses to use invitation or preference storage covered by existing
+shares, including share-all. Generic sharing tools do not enforce app storage
+privacy. An unavailable matcher does not veto independently discovered two-way
+contacts. Storage has no compare-and-swap; a worker lock serializes one process only.
 
 ## Legacy mesh conversion
 

@@ -43,23 +43,28 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
             or len(set(expected)) != len(expected) or peer not in expected):
         raise ValueError('Provide the exact distinct expected peer user IDs, excluding yourself.')
     audience = set()
-    covering = []
+    narrow_audience = set()
     for share in shares:
         selectors = share.get('fulcra_data_types') or []
         if not (share.get('share_all_data') or any(s in selectors for s in (outbox, 'Event', '*', 'Event/*'))):
             continue
         permissions = share.get('permissions')
-        if (share.get('share_all_data') or selectors != [outbox]
+        if (any(s.startswith(('file:', 'filehistory:')) for s in selectors)
                 or not isinstance(permissions, list) or not permissions
                 or any(not isinstance(p, dict) or not _uuid(p.get('allowed_fulcra_userid'))
                        or p['allowed_fulcra_userid'] == own for p in permissions)
                 or any(share.get(k) for k in ('group_permissions', 'group_id', 'file_paths', 'files',
                                               'file_history_paths', 'time_start', 'time_end'))
                 or not _uuid(share.get('id') or share.get('datashare_id'))):
-            raise ValueError('Every covering grant must share only this channel with direct users, without groups, files or time bounds.')
-        audience.update(p['allowed_fulcra_userid'] for p in permissions)
-        covering.append(share)
-    if not covering or not all(s.get('datashare_name', '').startswith(SHARE_NAME_PREFIX) for s in covering):
+            raise ValueError('Every covering grant must have direct users, without groups, files or time bounds.')
+        recipients = {p['allowed_fulcra_userid'] for p in permissions}
+        audience.update(recipients)
+        if not share.get('share_all_data') and selectors == [outbox]:
+            if not (share.get('datashare_name') or '').startswith(SHARE_NAME_PREFIX):
+                raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
+            narrow_audience.update(recipients)
+    # Broad overlaps may not establish or expand a connection's audience.
+    if narrow_audience != set(expected):
         raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
     if audience != set(expected):
         raise ValueError('Channel audience changed or differs from expected_peer_userids. Nothing submitted.')
@@ -219,7 +224,10 @@ def end(api, *, data_type, peer_userid, archive=False):
     result = dict(data_type=data_type, peer_userid=peer_userid, ended=False, archived=False)
     try:
         own, _ = owned_connection(api, data_type, peer_userid)
-        covering = [s for s in api.get_datashares() if s.get('fulcra_data_types') == [data_type]]
+        covering = [s for s in api.get_datashares() if s.get('share_all_data')
+                    or set(s.get('fulcra_data_types') or []) & {data_type, 'Event', 'Event/*', '*'}]
+        if any(s.get('share_all_data') or s.get('fulcra_data_types') != [data_type] for s in covering):
+            raise ValueError('A broader share covers this contact. Manage it separately; nothing deleted.')
         for share in covering:
             if api.get_fulcra_userid() != own:
                 raise ValueError('Authenticated account changed.')

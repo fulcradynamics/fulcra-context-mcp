@@ -33,11 +33,9 @@ def _compatible_schema(entry):
 
 def _direct_recipient(share):
     recipients = share.get("with_user_ids")
-    if (share.get("share_all_data") is False and not share.get("group_id")
+    if (isinstance(share.get("share_all_data"), bool) and not share.get("group_id")
             and not share.get('time_start') and not share.get('time_end')
-            and share.get('datashare_name', '').startswith(SHARE_NAME_PREFIX)
             and all(k not in share or share[k] == [] for k in ("with_group_ids", "file_paths", "file_history_paths"))
-            and isinstance(share.get("data_types"), list) and len(share["data_types"]) == 1
             and isinstance(recipients, list) and recipients
             and all(isinstance(p, str) and p for p in recipients)):
         return recipients
@@ -92,11 +90,16 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
             if outgoing:
                 covering = [s for s in shares["outgoing"] if s.get("share_all_data") is True
                             or any(t in s.get('data_types', []) for t in (entry['id'], 'Event', 'Event/*', '*'))]
-                grants = [_direct_recipient(s) if s.get('data_types') == [entry['id']] else None for s in covering]
-                if not grants or any(not g for g in grants):
+                narrow = [s for s in covering if s.get('share_all_data') is False
+                          and s.get('data_types') == [entry['id']]]
+                grants = [_direct_recipient(s) for s in narrow]
+                if (not grants or any(not g for g in grants)
+                        or not all((s.get('datashare_name') or '').startswith(SHARE_NAME_PREFIX) for s in narrow)):
                     continue
                 recipients = sorted({p for g in grants for p in g})
-                if own in recipients or len(recipients) > 32:
+                if (own in recipients or len(recipients) > 32
+                        or any(not (audience := _direct_recipient(s)) or not set(audience) <= set(recipients)
+                               for s in covering)):
                     continue
                 peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
             elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'

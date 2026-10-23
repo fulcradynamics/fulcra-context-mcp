@@ -108,7 +108,7 @@ test('only catalog groups compatible with get_records are readable', () => {
 test('orphans and self do not become threads; broad/mixed grants cannot hide behind a narrow grant', async () => {
   for (const extra of [
 
-    { ...grant('own'), data_types: ['Event/own', 'StepCount'] },
+    { ...grant('own'), data_types: ['Event/own', 'StepCount'], with_user_ids: ['extra-peer'] },
     { share_all_data: true },
     { ...grant('own'), with_group_ids: ['group'] },
     { ...grant('own'), file_paths: ['/'] },
