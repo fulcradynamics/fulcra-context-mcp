@@ -1,0 +1,78 @@
+"""The /openai/mcp endpoint: the full server minus the dedicated health and
+location tools, with its own RFC 9728 path-form discovery."""
+
+import json
+
+import httpx
+import pytest
+
+from fulcra_mcp.main import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH, app
+from test_stateless import INITIALIZE, TOOLS_LIST, mcp_client
+
+
+def _tool_names(response: httpx.Response) -> set[str]:
+    data = next(
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    )
+    return {tool["name"] for tool in data["result"]["tools"]}
+
+
+async def test_openai_endpoint_hides_health_and_location_tools(tmp_path):
+    async with mcp_client(tmp_path) as client:
+        full = _tool_names(await client.post("/mcp", json=TOOLS_LIST))
+        assert (await client.post(OPENAI_MCP_PATH, json=INITIALIZE)).status_code == 200
+        openai = _tool_names(await client.post(OPENAI_MCP_PATH, json=TOOLS_LIST))
+
+    assert OPENAI_HIDDEN_TOOLS <= full
+    assert openai == full - OPENAI_HIDDEN_TOOLS
+    assert {"get_records", "get_data_catalog"} <= openai
+
+
+async def test_openai_endpoint_refuses_hidden_tool_calls(tmp_path):
+    call = {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {"name": "get_location", "arguments": {}},
+    }
+    async with mcp_client(tmp_path) as client:
+        response = await client.post(OPENAI_MCP_PATH, json=call)
+    assert "Unknown tool" in response.text
+
+
+async def test_openai_endpoint_requires_auth():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(OPENAI_MCP_PATH, json=TOOLS_LIST)
+    assert response.status_code == 401
+    assert "resource_metadata=" in response.headers["www-authenticate"]
+
+
+@pytest.mark.parametrize("path", [OPENAI_MCP_PATH, f"{OPENAI_MCP_PATH}/"])
+async def test_openai_endpoint_preflight(path):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.options(
+            path,
+            headers={
+                "Origin": "https://chatgpt.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "*"
+
+
+async def test_openai_path_form_protected_resource_metadata():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        root = (await client.get("/.well-known/oauth-protected-resource")).json()
+        response = await client.get(f"/.well-known/oauth-protected-resource{OPENAI_MCP_PATH}")
+    assert response.status_code == 200
+    doc = response.json()
+    assert doc["resource"] == root["resource"].rstrip("/") + OPENAI_MCP_PATH
+    assert doc["authorization_servers"] == root["authorization_servers"]
+    assert doc["scopes_supported"] == root["scopes_supported"]
