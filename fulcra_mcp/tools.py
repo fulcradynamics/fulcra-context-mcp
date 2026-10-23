@@ -441,8 +441,9 @@ async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str,
                 annotations={"title": "End Agent Contact", "readOnlyHint": False,
                              "destructiveHint": True, "openWorldHint": False, "idempotentHint": True})
 async def end_agent_contact(data_type: str, peer_userid: str, archive: bool = False) -> dict:
-    """Stop sharing an owned single-peer Event channel and verify no grant remains;
-    optionally archive it (restore_data_type undoes). Their share is unchanged.
+    """Remove an owned single-peer Event channel's narrow contact grants and verify
+    their removal; optionally archive it (restore_data_type undoes). Broader access
+    and their shares are unchanged; broader_access_remains reports covering shares.
 
     Args:
         data_type: Owned Event/<uuid> channel.
@@ -948,9 +949,9 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
     message must use the returned topic exactly; never invent codes.
 
     Args:
-        data_type: Exact owned, unshared Event/<uuid> channel.
+        data_type: Exact owned Event/<uuid> channel without targeted grants.
         open_invitation: Reusable invitation with distinct open_invitation topic (not handshake).
-            Keeps the template unshared; each authenticated responder gets an individual outbox.
+            Never grants access to the template; each responder gets an individual outbox.
     """
     from .agent_invitations import prepare
     try:
@@ -983,8 +984,8 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
 @tools_mcp.tool(app={"visibility": ["app"]}, annotations={
     "title": "Standing Open Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> dict:
-    """Get the user's standing open invitation (created on first use; private,
-    never shared). Responders each get their own outbox via matching.
+    """Get the user's standing open invitation (created on first use; no template
+    grants added). Responders get separate outboxes.
 
     Args:
         inviter_name: Name to save for the invitation text; "" clears it, omit to keep.
@@ -1003,7 +1004,7 @@ async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> 
 async def match_agent_invitations() -> dict:
     """Match unambiguous FIRST-message codes for user-prepared invitations using
     authenticated incoming-share owners, not sender claims. Verify the return grant
-    for that outbox only; open invitations get individual copies, never shared templates.
+    for that outbox only; open invitations get individual copies, never template grants.
     Labels (<sender> via <open invitation identifier>) are display-only. Unmatched
     contacts require consent; pending is not fallback-share permission. No sends or
     preference changes.
@@ -1057,10 +1058,13 @@ async def send_agent_message(
             if reply_to is not None and ack is not None:
                 raise ValueError('Give reply_to or ack, not both.')
             # The pinned SDK recognizes the historical prefix only. Translate a
-            # local discovery copy; send() rechecks untouched live grants below.
+            # local narrow-grant discovery copy; broad access is not membership.
+            # send() rechecks untouched live grants below.
             shares = [dict(s, datashare_name=connections.SHARE_NAME_PREFIX)
-                      if s.get('datashare_name', '').startswith('connect-our-agents') else s
-                      for s in fulcra.get_datashares()]
+                      if (s.get('datashare_name') or '').startswith('connect-our-agents') else s
+                      for s in fulcra.get_datashares()
+                      if not s.get('share_all_data') and len(s.get('fulcra_data_types') or []) == 1
+                      and re.fullmatch('Event/' + UUID_PATTERN, s['fulcra_data_types'][0])]
             channel, people = connections.resolve_connection(shares, connection)
             if len(people) != 1 and (expected_peer_userids is None or not connection.startswith('Event/')):
                 raise ValueError('Multiparty sends require an exact owned channel and expected_peer_userids.')

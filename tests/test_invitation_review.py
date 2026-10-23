@@ -79,7 +79,7 @@ def test_uncertain_attempt_does_not_accept_expanded_audience(api):
     {'share_all_data': True}, {'data_types': ['Event']},
     {'data_types': ['Event/*']}, {'data_types': ['*']}, {'data_types': [STATE]},
 ])
-async def test_shared_invitation_storage_stops_invitation_work(api, monkeypatch, grant):
+async def test_only_targeted_state_shares_stop_invitation_work(api, monkeypatch, grant):
     from fastmcp import Client
     from fulcra_mcp import tools
     from fulcra_mcp.main import mcp
@@ -93,8 +93,11 @@ async def test_shared_invitation_storage_stops_invitation_work(api, monkeypatch,
     api.create_datashare.assert_called_once()
     api.get_datashares.return_value.append({'share_all_data': 'share_all_data' in grant,
                                             'fulcra_data_types': grant.get('data_types', [])})
-    with pytest.raises(ValueError, match='may be shared'):
-        invitations.prepare(api, OUT)
+    if grant.get('data_types') == [STATE]:
+        with pytest.raises(ValueError, match='targeted share'):
+            invitations.prepare(api, OUT)
+    else:
+        assert invitations.prepare(api, OUT)['status'] == 'prepared'
 
 
 @pytest.mark.parametrize('grant', [{'data_types': [OUT]}, {'file_paths': ['/shared/']}])

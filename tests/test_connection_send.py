@@ -89,10 +89,10 @@ def test_successful_upload_is_not_repeated_while_ingestion_is_pending(api, monke
     assert len(api.writes) == 1
 
 
-def test_broad_grant_blocks_even_if_not_named_connection(api):
+def test_broad_grant_does_not_block_connection(api):
     api.shares.append(dict(id=TARGET, share_all_data=True, fulcra_data_types=[], permissions=[]))
-    assert send(api)['status'] == 'rejected'
-    assert not api.writes
+    assert send(api)['status'] == 'posted'
+    assert len(api.writes) == 1
 
 @pytest.mark.parametrize('change', [dict(grant_type='group'), dict(sharing_fulcra_userid=OWN), dict(fulcra_data_types=[IN, OUT]), dict(time_start='2026-01-01')])
 def test_reply_target_requires_exact_direct_peer_grant(api, change):

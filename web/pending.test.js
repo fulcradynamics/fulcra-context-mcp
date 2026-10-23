@@ -24,7 +24,6 @@ test('covering grants exclude broad, group, self and ambiguous outboxes from pen
     [{ ...grant('a'), group_id: 'group' }],
     [{ ...grant('a'), data_types: ['Event/a', 'StepCount'] }],
     [grant('a', 'me')],
-    [grant('a'), { share_all_data: true }],
   ]) {
     const result = await discover([entry('a')], covering);
     assert.deepEqual(result.pending, []);
