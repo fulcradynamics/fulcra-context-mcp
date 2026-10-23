@@ -715,7 +715,7 @@ def _recordable_fields(properties: dict) -> list[str]:
     return sorted(k for k in properties if k not in RECORD_PLUMBING_FIELDS)
 
 
-@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Record Data", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def record_data(
     data_type: str,
@@ -1012,7 +1012,7 @@ async def match_agent_invitations() -> dict:
     return await asyncio.to_thread(match, get_fulcra_object())
 
 
-@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def send_agent_message(
     connection: str,
@@ -1981,7 +1981,7 @@ def _list_file_entries(fulcra, path: str, fulcra_userid: str | None = None) -> d
     return result
 
 
-@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Read File", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def read_file(
     path: str,
@@ -2095,7 +2095,7 @@ async def read_file(
     return f"Content of {path}: {text}"
 
 
-@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Write File", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def write_file(
     path: str,
@@ -2218,7 +2218,7 @@ async def delete_file(path: str) -> str:
     return f"Deleted {path} (version {file_record['id']})."
 
 
-@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Restore File Version", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
 async def restore_file(version_id: str) -> str:
     """Restore a previous version of a file in the user's Fulcra account.
@@ -2376,7 +2376,7 @@ def _data_type_not_shared_message(
     )
 
 
-@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+@tools_mcp.tool(annotations={"title": "Create Share", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def create_share(
     name: str,
@@ -2609,7 +2609,7 @@ async def get_groups(group_id: str | None = None, subscribed_only: bool = False)
     return f"{label} ({len(groups)}): " + json.dumps([_slim_group(g) for g in groups])
 
 
-@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+@tools_mcp.tool(annotations={"title": "Join Group", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
 @_friendly_http_errors
 async def join_group(group_id: str) -> str:
     """Join a Fulcra group on the user's behalf, at their explicit request.

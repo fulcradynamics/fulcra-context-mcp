@@ -18,6 +18,10 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 - Open-invitation responder outboxes use the standard channel schema.
 - `get_records(latest=true)` stays strictly opt-in; ranged reads still require
   both dates.
+- Tools that exist on main keep main's `readOnlyHint`/`destructiveHint` values,
+  now explicit: `read_file` is read-only again; `create_share`, `join_group`,
+  `record_data`, `write_file`, `restore_file`, `send_agent_message` and the
+  upload tools are non-destructive again.
 - Ship contacts UI v76 (description markers parse from folded descriptions).
 
 ## 1.18.4 release notes
