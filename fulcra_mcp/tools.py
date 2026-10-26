@@ -1012,7 +1012,7 @@ async def match_agent_invitations() -> dict:
     return await asyncio.to_thread(match, get_fulcra_object())
 
 
-@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+@tools_mcp.tool(annotations={"title": "Send Agent Message", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @_friendly_http_errors
 async def send_agent_message(
     connection: str,
@@ -1820,7 +1820,7 @@ async def get_calendar_events(
     list their calendars grouped by account/source.
 
     Each carries a participant_count; pass include_participants=true when you need
-    who was invited and their responses. 
+    who was invited and their responses.
 
     Args:
         start_time: Range start (inclusive). Must include tz (ISO8601).
