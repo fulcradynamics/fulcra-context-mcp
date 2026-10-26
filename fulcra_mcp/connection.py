@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 
 import jsonschema
 from fulcra_api import connections, records
-from .connection_compatibility import SHARE_NAME_PREFIX, CHANNEL_PREFIXES
+
 
 UUID_PATTERN = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 RETRY_DELAY = 1
@@ -25,7 +25,6 @@ def channel_entry(api, owner, channel):
         raise ValueError('Missing or ambiguous channel.')
     entry = entries[0]
     if (entry.get('id') != channel or entry.get('fulcra_userid') != owner
-            or not entry.get('description', '').startswith(CHANNEL_PREFIXES)
             or entry.get('deprecated') or entry.get('deleted_at')
             or entry.get('api_version') != 'v1'):
         raise ValueError('An active Event connection channel with exact owner identity is required.')
@@ -33,7 +32,10 @@ def channel_entry(api, owner, channel):
 
 
 def _authorize(api, own, peer, outbox, expected_peer_userids=None):
+    from .channel_metadata import is_template
     entry = channel_entry(api, own, outbox)
+    if is_template(entry.get('description')) or entry.get('name') == 'connect-our-agents-standing-invitation':
+        raise ValueError('An open invitation template is not a contact channel.')
     if not entry.get('recordable'):
         raise ValueError('Channel is not recordable.')
     shares = api.get_datashares()
@@ -42,27 +44,25 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
             or any(not _uuid(p) or p == own for p in expected)
             or len(set(expected)) != len(expected) or peer not in expected):
         raise ValueError('Provide the exact distinct expected peer user IDs, excluding yourself.')
-    audience = set()
-    covering = []
+    narrow_audience = set()
     for share in shares:
         selectors = share.get('fulcra_data_types') or []
-        if not (share.get('share_all_data') or any(s in selectors for s in (outbox, 'Event', '*', 'Event/*'))):
+        if share.get('share_all_data') or selectors != [outbox]:
             continue
         permissions = share.get('permissions')
-        if (share.get('share_all_data') or selectors != [outbox]
+        if (any(s.startswith(('file:', 'filehistory:')) for s in selectors)
                 or not isinstance(permissions, list) or not permissions
                 or any(not isinstance(p, dict) or not _uuid(p.get('allowed_fulcra_userid'))
                        or p['allowed_fulcra_userid'] == own for p in permissions)
                 or any(share.get(k) for k in ('group_permissions', 'group_id', 'file_paths', 'files',
                                               'file_history_paths', 'time_start', 'time_end'))
                 or not _uuid(share.get('id') or share.get('datashare_id'))):
-            raise ValueError('Every covering grant must share only this channel with direct users, without groups, files or time bounds.')
-        audience.update(p['allowed_fulcra_userid'] for p in permissions)
-        covering.append(share)
-    if not covering or not all(s.get('datashare_name', '').startswith(SHARE_NAME_PREFIX) for s in covering):
+            raise ValueError('Narrow channel grants must have direct users, without groups, files or time bounds.')
+        recipients = {p['allowed_fulcra_userid'] for p in permissions}
+        narrow_audience.update(recipients)
+    # Broad overlaps may not establish or expand a connection's audience.
+    if narrow_audience != set(expected):
         raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
-    if audience != set(expected):
-        raise ValueError('Channel audience changed or differs from expected_peer_userids. Nothing submitted.')
     return entry
 
 
@@ -85,19 +85,20 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
 
 
 def _target(api, peer, target, now):
+    from .channel_metadata import is_template
     found = []
     channels = set()
     for grant in api.get_shared_datasets():
         types = grant.get('fulcra_data_types')
         if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
-                and isinstance(grant.get('datashare_name'), str)
-                and grant['datashare_name'].startswith(SHARE_NAME_PREFIX)
                 and isinstance(types, list) and len(types) == 1
                 and re.fullmatch('Event/' + UUID_PATTERN, types[0])
                 and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
             channels.add((peer, types[0]))
     for owner, channel in channels:
         entry = channel_entry(api, owner, channel)
+        if is_template(entry.get('description')) or entry.get('name') == 'connect-our-agents-standing-invitation':
+            continue
         for row in records.get_records(api, entry, now - connections.REPLY_LOOKBACK, now):
             if row.get('id') == target:
                 stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
@@ -214,19 +215,24 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
 
 def end(api, *, data_type, peer_userid, archive=False):
     """End one exact single-peer contact as the connection skill does: delete our
-    covering shares, read back that none remain, then optionally archive our channel.
+    narrow shares, read back that none remain, then optionally archive our channel.
     Their share with us is left alone."""
     result = dict(data_type=data_type, peer_userid=peer_userid, ended=False, archived=False)
     try:
         own, _ = owned_connection(api, data_type, peer_userid)
-        covering = [s for s in api.get_datashares() if s.get('fulcra_data_types') == [data_type]]
-        for share in covering:
+        narrow = [s for s in api.get_datashares() if not s.get('share_all_data')
+                  and s.get('fulcra_data_types') == [data_type]]
+        for share in narrow:
             if api.get_fulcra_userid() != own:
                 raise ValueError('Authenticated account changed.')
             api.delete_datashare(share.get('id') or share['datashare_id'])
-        if any(s.get('share_all_data') or data_type in (s.get('fulcra_data_types') or [])
-               for s in api.get_datashares()):
-            raise ValueError('A covering share remains.')
+        remaining = api.get_datashares()
+        if any(not s.get('share_all_data') and s.get('fulcra_data_types') == [data_type]
+               for s in remaining):
+            raise ValueError('A narrow contact grant remains.')
+        if any(s.get('share_all_data') or set(s.get('fulcra_data_types') or [])
+               & {data_type, 'Event', 'Event/*', '*'} for s in remaining):
+            result['broader_access_remains'] = True
         result['ended'] = True
         if archive:
             api.update_data_type('Event', data_type.split('/')[1], {'deprecated': True})

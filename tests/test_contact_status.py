@@ -110,20 +110,20 @@ async def test_real_sdk_transport_preservation_and_independent_readback(backend)
     assert result['assessment'] == status
 
 
-@pytest.mark.parametrize('change', [dict(fulcra_userid=PEER), dict(description=None), dict(description='ordinary event'), dict(recordable=False), dict(record_spec={'type':'metric'}), dict(api_version='v1alpha1'), dict(description=DESCRIPTION+'\n[contact_status: bad]')])
+@pytest.mark.parametrize('change', [dict(fulcra_userid=PEER), dict(description=None), dict(recordable=False), dict(record_spec={'type':'metric'}), dict(api_version='v1alpha1'), dict(description=DESCRIPTION+'\n[contact_status: bad]')])
 async def test_invalid_or_peer_metadata_never_writes(backend, change):
     backend['row'].update(change)
     assert (await assess())['verified'] is False
     assert not backend['writes']
 
 
-async def test_schema_and_all_covering_grants(backend):
+async def test_schema_required_but_broad_access_does_not_block_status(backend):
     backend['schema'] = {'properties': {}}
     assert (await assess())['verified'] is False
     backend.pop('schema')
     backend['shares'].append(dict(share_all_data=True, fulcra_data_types=[], permissions=[]))
-    assert (await assess())['verified'] is False
-    assert not backend['writes']
+    assert (await assess())['verified'] is True
+    assert len(backend['writes']) == 1
 
 
 @pytest.mark.parametrize('option', [dict(persist=False), dict(mutation={'description': None}), dict(denied=True)])

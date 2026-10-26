@@ -150,7 +150,7 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
                             expected_peer_userids: list[str] | None = None) -> dict:
     """Replace this contact's preference overrides at the user's request; {} restores the global values.
 
-    Stored privately, never on the connection. No messages, sharing, checkpoints
+    Stored off the connection. No messages, sharing, checkpoints
     or scheduler edits.
     """
     from . import contact_preferences as policy
@@ -166,5 +166,5 @@ def set_contact_preferences(data_type: str, peer_userid: str, overrides: dict,
 
 @settings_mcp.tool(app={"visibility": ["app"]}, annotations=READ_ONLY)
 def get_message_check_status(configuration_id: str | None = None) -> dict:
-    """Read a selected private check configuration; omit the ID to discover choices."""
+    """Read a selected owned check configuration; omit the ID to discover choices."""
     return check_status(configuration_id)

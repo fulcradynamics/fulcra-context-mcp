@@ -15,3 +15,8 @@ test('unverified ending or archive is an error', async () => {
   await assert.rejects(endContact(app([{ ended: false, reason: 'A covering share remains.' }]), thread, false), /covering share remains/);
   await assert.rejects(endContact(app([{ ended: true, archived: false }]), thread, true), /archiving was not verified/);
 });
+
+test('ending reports remaining broader access without another approval', async () => {
+  assert.deepEqual(await endContact(app([{ ended: true, broader_access_remains: true }]), thread, false),
+    { archived: 0, broaderAccessRemains: true });
+});

@@ -24,7 +24,7 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.18.5'
+                assert initialized.serverInfo.version == '1.19.0'
                 icons = initialized.serverInfo.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
                 assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
@@ -77,14 +77,13 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].inputSchema['required']
                 for name, uri, marker in (
-                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v77.html', 'global'),
-                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v77.html', 'thread'),
+                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v80.html', 'global'),
+                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v80.html', 'thread'),
                 ):
-                    assert [icon.model_dump(exclude_none=True) for icon in tools[name].icons] == [
-                        {'src': f'https://mcp.fulcradynamics.com/menu-{theme}.svg',
-                         'mimeType': 'image/svg+xml', 'sizes': ['any'], 'theme': theme}
-                        for theme in ('light', 'dark')
-                    ]
+                    icons = tools[name].icons
+                    assert len(icons) == 1
+                    assert icons[0].src.startswith('data:image/svg+xml,')
+                    assert icons[0].mimeType == 'image/svg+xml' and icons[0].sizes == ['any']
                     opened = await client.call_tool(name, {})
                     assert not opened.isError
                     resource = (await client.read_resource(uri)).contents[0]
@@ -101,7 +100,7 @@ async def main():
                     for value in ('ack-status', 'confirm messages read',
                                   'The read state is kept and no duplicate will be sent.'):
                         assert value in text, value
-                    for value in ('open_invitation followed by one space', 'template is never shared', 'use the invite skill', 'connect-agents-with-anyone', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
+                    for value in ('open_invitation', 'agent_connection', 'connect-our-agents', 'Converted from legacy connection', 'Update connection', 'chat about old messages',
                                   'connection_setup_session', 'Open original setup session', 'Copy handoff for original session',
                                   'contact_status', 'Not assessed', 'Needs attention', 'match_agent_invitations', 'pending-assist',
                                   'Load more history', 'Showing messages through', 'thread-preview', '--message-scroll-clearance: 50dvh',
@@ -110,13 +109,13 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v77.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v80.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v76 entrypoints verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v80 entrypoints verified.')
 
 
 if __name__ == '__main__':

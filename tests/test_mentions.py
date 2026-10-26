@@ -248,7 +248,7 @@ async def test_resource_rechecks_access_and_fails_closed(change, fake_fulcra):
         if change == "revoked":
             backend(fake_fulcra, [])
         elif change == "broad-grant":
-            fake_fulcra.get_datashares.return_value = [narrow, {"share_all_data": True}]
+            fake_fulcra.get_datashares.return_value = [{"share_all_data": True}]
         else:
             fake_fulcra.get_fulcra_userid.return_value = "another-account"
             backend(fake_fulcra, [entry("a", "other-peer")])

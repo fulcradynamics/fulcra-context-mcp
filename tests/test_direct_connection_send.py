@@ -49,6 +49,37 @@ async def test_verified_post_and_duplicate_readback(call, backend):
 @pytest.mark.parametrize('change', [
     {'share_all_data': True}, {'fulcra_data_types': ['Event']},
     {'fulcra_data_types': ['*']}, {'fulcra_data_types': ['Event/*']}, {'fulcra_data_types': [OUTBOX, 'StepCount']},
+])
+async def test_overlapping_grant_to_extra_peer_does_not_block_send(call, backend, change):
+    fake, _ = backend
+    fake.get_datashares.return_value.append({
+        **deepcopy(fake.get_datashares.return_value[0]), **change,
+        'datashare_name': 'Existing personal sharing',
+        'permissions': [{'allowed_fulcra_userid': OTHER}],
+    })
+    assert json.loads(await call('send_agent_contact_message', ARGS))['status'] == 'posted'
+    fake.create_datashare.assert_not_called()
+    fake.delete_datashare.assert_not_called()
+
+
+@pytest.mark.parametrize('change', [
+    {'share_all_data': True}, {'fulcra_data_types': [OUTBOX, 'StepCount']},
+    {'fulcra_data_types': [OUTBOX, 'file:/shared/']},
+])
+async def test_public_send_routes_only_by_narrow_grants(call, backend, change):
+    fake, _ = backend
+    fake.get_datashares.return_value.append({
+        **deepcopy(fake.get_datashares.return_value[0]), **change,
+        'permissions': [{'allowed_fulcra_userid': OTHER}],
+    })
+    result = json.loads(await call('send_agent_message', dict(
+        connection=OUTBOX, sender='Hermes', body='Hello', record_id=MID)))
+    assert result['status'] == 'posted'
+    fake.create_datashare.assert_not_called()
+    fake.delete_datashare.assert_not_called()
+
+
+@pytest.mark.parametrize('change', [
     {'permissions': [{'allowed_fulcra_userid': OTHER}]},
     {'permissions': [{'allowed_fulcra_userid': PEER}, {'allowed_fulcra_userid': OTHER}]},
     {'group_permissions': [{'allowed_group_id': OTHER}]}, {'group_id': OTHER},

@@ -84,7 +84,7 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
             else:
                 body = json.loads(req.data)
                 if method == 'POST':
-                    id = STATE if body['name'] == invitations.NAME else individual
+                    id = individual
                     if id == individual:
                         assert open_invitation
                         schema = json.loads(body['record_spec']['schema'])
@@ -93,9 +93,11 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
                         body['record_spec']['type'] = 'event'
                     catalog.append(dict(id=id, fulcra_userid=OWN, api_version='v1', recordable=True, **body))
                 else:
-                    assert method == 'PUT' and path.endswith(STATE)
-                    id = STATE
-                    next(e for e in catalog if e['id'] == STATE).update(body)
+                    assert method == 'PUT'
+                    entry = next(e for e in catalog if path.endswith(e['id']))
+                    id = entry['id']
+                    assert entry['fulcra_userid'] == OWN
+                    entry.update(body)
                 headers = Message(); headers['Location'] = '/input/v1/data_type/' + id
                 raise HTTPError(req.full_url, 303, 'See Other', headers, None)
         else:

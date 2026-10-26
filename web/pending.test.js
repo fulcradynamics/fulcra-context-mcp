@@ -17,14 +17,13 @@ async function discover(catalog, outgoing = [], incoming = []) {
   return result;
 }
 
-test('covering grants exclude broad, group, self and ambiguous outboxes from pending', async () => {
+test('invalid targeted grants exclude group, self and mixed-selector outboxes from pending', async () => {
   for (const covering of [
-    [{ share_all_data: true }],
     [{ ...grant('a'), with_group_ids: ['group'] }],
     [{ ...grant('a'), group_id: 'group' }],
-    [{ ...grant('a'), data_types: ['Event/a', 'StepCount'] }],
+    [{ ...grant('a'), file_paths: ['/notes/'] }],
+    [{ ...grant('a'), time_start: '2026-01-01T00:00:00Z' }],
     [grant('a', 'me')],
-    [grant('a'), { share_all_data: true }],
   ]) {
     const result = await discover([entry('a')], covering);
     assert.deepEqual(result.pending, []);
