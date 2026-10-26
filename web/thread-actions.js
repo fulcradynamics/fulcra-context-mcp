@@ -100,10 +100,9 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const placeholder = `Message ${name}…`;
     if (input.placeholder !== placeholder) { input.placeholder = placeholder; input.setAttribute('aria-label', placeholder); }
     const host = hostLabel(app.getHostVersion()?.name);
-    const selectionWarning = current.thread?.warnings.find(w => /^(Choose an outbox|Multiple incoming channels)/.test(w));
-    const hintText = selectionWarning ?? (supported
+    const hintText = supported
       ? `Send replies to ${name}; Continue in ${host || 'chat'} to work on it there.`
-      : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`);
+      : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
     const outgoing = (current.thread ? availableSources(current.thread).filter(s => s.direction === 'Outgoing') : [])
       .sort((a, b) => (b.sharedAt ?? 0) - (a.sharedAt ?? 0) || a.id.localeCompare(b.id));
@@ -145,12 +144,12 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     handoff.disabled = sending || !supported || lifecycle.pending || draft.handoffUncertain || !isCurrent() || !context();
   };
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
-  outbox.addEventListener('change', () => { draft.outbox = outbox.value; draft.excludedSources = undefined; changed('sources'); update(); });
+  outbox.addEventListener('change', () => { draft.outbox = outbox.value; changed('sources'); update(); });
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
     // Sending answers the newest unread message and acknowledges the rest.
-    // Answers name the target's sender; the server finds targets on their channel.
+    // Reply references come from displayed records, without a server target lookup.
     const audience = view().thread?.expectedPeerUserids;
     const acknowledgementAddress = ackAddress();
     const allowed = selectedSources(view().thread, draft.excludedSources, source.id).sources.map(sourceKey);

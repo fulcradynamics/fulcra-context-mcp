@@ -10,7 +10,9 @@ from fulcra_mcp.mentions import _thread_labels
 from fulcra_api import connections
 
 
-@pytest.mark.parametrize('description', ['', 'My project messages', None])
+@pytest.mark.parametrize('description', ['', 'My project messages', None,
+    '[agent_connection: invalid]',
+    '[agent_connection: {"version":1,"peers":[{"fulcra_userid":"00000000-0000-4000-8000-000000000099","data_type":"Event/00000000-0000-4000-8000-000000000099"}]}'])
 async def test_send_selected_unmarked_channel(call, backend, description):
     fake, _ = backend
     fake.resolve_data_type.return_value[0]['description'] = description
@@ -86,11 +88,16 @@ def test_invitation_lives_on_outbox_and_preserves_other_metadata(api):
 
 def test_explicit_association_needs_no_invitation_or_peer_metadata(api):
     from fulcra_mcp.channel_metadata import save_peer, parse_metadata
+    api.catalog[1]['description'] = '[agent_connection: invalid stale metadata]'
+    api.catalog[1]['fields'] = {'custom_note': {'type': 'string'}}
+    api.catalog[1]['required_fields'] = ['custom_note']
+    api.v1_catalog_schema.side_effect = AssertionError('Explicit pairing needs no protocol schema')
     save_peer(api, OWN, OUT, PEER, IN)
     assert parse_metadata(api.catalog[0]['description'])['peers'] == [
         {'fulcra_userid': PEER, 'data_type': IN}]
     api.create_datashare.assert_not_called()
     api.create_data_type.assert_not_called()
+    api.v1_catalog_schema.assert_not_called()
 
 
 def test_metadata_save_requires_readback(api):
@@ -106,16 +113,6 @@ async def test_open_template_cannot_be_selected_for_send(call, backend):
         connection=ARGS['outbox'], sender=ARGS['sender'], body=ARGS['body'], record_id=ARGS['mid'])))
     assert result['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
-
-
-def test_reply_target_does_not_require_description_or_share_prefix(api):
-    from datetime import datetime, timezone
-    from fulcra_mcp.connection import _target
-    from test_agent_invitations import OTHER
-    api.catalog[1]['description'] = None
-    api.get_shared_datasets.return_value[1]['datashare_name'] = 'Project'
-    handshake(api, 'a' * 32)
-    assert _target(api, PEER, OTHER, datetime(2026, 10, 2, tzinfo=timezone.utc))['id'] == OTHER
 
 
 def test_multiple_peers_and_unrelated_metadata_survive_matching(api):

@@ -79,13 +79,12 @@ def add_peer(metadata, peer, incoming):
 
 
 def save_peer(api, own, outbox, peer, incoming):
-    # The caller has resolved/authorized this decision. Validate exact backend
-    # ownership and schemas without demanding invitation or reciprocal metadata.
-    from .agent_invitations import _channel
-    _channel(api, own, outbox, own=True)
-    _channel(api, peer, incoming)
+    # Explicit decisions need exact ownership, not invitation protocol evidence.
     if own == peer or not _uuid(peer):
         raise ValueError('Distinct exact peer required.')
+    if any(not re.fullmatch('Event/' + UUID_PATTERN, channel) for channel in (outbox, incoming)):
+        raise ValueError('Exact Event channel references required.')
+    channel_entry(api, peer, incoming)
     metadata = parse_metadata(channel_entry(api, own, outbox).get('description'))
     expected = json.loads(json.dumps(metadata))
     add_peer(metadata, peer, incoming)

@@ -84,32 +84,6 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
     return own, entry
 
 
-def _target(api, peer, target, now):
-    from .channel_metadata import is_template
-    found = []
-    channels = set()
-    for grant in api.get_shared_datasets():
-        types = grant.get('fulcra_data_types')
-        if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
-                and isinstance(types, list) and len(types) == 1
-                and re.fullmatch('Event/' + UUID_PATTERN, types[0])
-                and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
-            channels.add((peer, types[0]))
-    for owner, channel in channels:
-        entry = channel_entry(api, owner, channel)
-        if is_template(entry.get('description')) or entry.get('name') == 'connect-our-agents-standing-invitation':
-            continue
-        for row in records.get_records(api, entry, now - connections.REPLY_LOOKBACK, now):
-            if row.get('id') == target:
-                stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
-                if row.get('kind') not in ('message', 'reply') or not now - connections.REPLY_LOOKBACK <= stamp <= now:
-                    raise ValueError('Reply/ack target must be a peer message or reply within 30 days, never an ack.')
-                found.append(row)
-    if len(found) != 1:
-        raise ValueError('Missing or ambiguous peer reply target within 30 days.')
-    return found[0]
-
-
 def _readback(api, entry, record):
     now = datetime.now(timezone.utc)
     rows = records.get_records(api, entry, now - timedelta(days=30), now + timedelta(seconds=1))
@@ -148,22 +122,20 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
     attempted = False
     try:
         if (not _uuid(peer_userid) or not _uuid(mid)
-                or not re.fullmatch('Event/' + UUID_PATTERN, outbox)
-                or (in_reply_to is not None and not _uuid(in_reply_to))):
+                or not re.fullmatch('Event/' + UUID_PATTERN, outbox)):
             raise ValueError('Use exact UUIDs and an exact Event/<uuid> channel; no normalization is performed.')
         if recipients == []:
             raise ValueError('Omit recipients for everyone; an explicit list cannot be empty.')
         record = connections.build_message(sender=sender, body=body, record_id=mid, kind=kind,
                                            in_reply_to=in_reply_to, recipients=recipients, priority=pri, topic=slug)
+        if in_reply_to is not None:
+            # The SDK canonicalizes UUIDs; references retain their exact spelling.
+            record['in_reply_to'] = in_reply_to
         own = api.get_fulcra_userid()
         if not _uuid(own) or own == peer_userid:
             raise ValueError('Could not establish distinct authenticated sender and peer.')
         entry = _authorize(api, own, peer_userid, outbox, expected_peer_userids)
-        if in_reply_to:
-            target = _target(api, peer_userid, in_reply_to, datetime.now(timezone.utc))
-            if slug is None and 'topic' in target:
-                record['topic'] = target['topic']
-        elif slug is None:
+        if slug is None:
             record['topic'] = 'chat'
         if artifacts is not None:
             record['artifacts'] = artifacts

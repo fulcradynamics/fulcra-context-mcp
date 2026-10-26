@@ -36,7 +36,7 @@ test('own durable pair marks association without reciprocal metadata', async () 
   assert.equal(result.threads[0].sources.find(s => s.direction === 'Incoming').association, 'matched');
 });
 
-test('saved pairs scope each outbox independently and expose selection ambiguity', async () => {
+test('saved pairs default to newest outbox and allow explicit incoming overrides', async () => {
   const secondOut = out.slice(0, -1) + '1', secondIn = incoming.slice(0, -1) + '1';
   const entries = [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]]
     .map(([id, owner, match]) => ({...channelFixture({id, fulcra_userid: owner}),
@@ -48,27 +48,27 @@ test('saved pairs scope each outbox independently and expose selection ambiguity
         outgoing: [out, secondOut].map(id => ({data_types: [id], with_user_ids: [peer], share_all_data: false})),
         incoming: [incoming, secondIn].map(id => ({data_types: [id], sharing_fulcra_userid: peer, grant_type: 'user'}))})}]};
   }});
-  assert.equal(selectedSources(thread).sources.length, 0);
-  assert.match(selectedSources(thread).warnings.join(' '), /Choose an outbox/);
+  thread.sources.find(s => s.id === secondOut).sharedAt = 100;
+  assert.deepEqual(selectedSources(thread).sources.map(s => s.id).sort(), [secondOut, secondIn]);
+  assert.deepEqual(selectedSources(thread, [], out).sources.map(s => s.id).sort(), [out, incoming, secondIn]);
   assert.deepEqual(selectedSources(thread, undefined, out).sources.map(s => s.id).sort(), [out, incoming]);
   assert.deepEqual(selectedSources(thread, undefined, secondOut).sources.map(s => s.id).sort(), [secondOut, secondIn]);
 });
 
-test('one saved pair excludes unrelated channels, including when its match disappears', async () => {
+test('missing saved match falls back to readable incoming channels', async () => {
   const {threads: [thread]} = await discover(metadata({peers: [{fulcra_userid: peer, data_type: incoming}]}));
   const unrelated = {...thread.sources.find(s => s.direction === 'Incoming'), id: incoming.slice(0, -1)+'1'};
   thread.sources.push(unrelated);
   assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, incoming]);
   thread.sources = thread.sources.filter(s => s.id !== incoming);
-  assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out]);
+  assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, unrelated.id]);
 });
 
-test('unmarked multiple incoming channels require a reading choice, not a union', async () => {
+test('unmarked incoming channels remain readable until explicitly excluded', async () => {
   const {threads: [thread]} = await discover('Project');
   const unrelated = {...thread.sources.find(s => s.direction === 'Incoming'), id: incoming.slice(0, -1)+'1'};
   thread.sources.push(unrelated);
-  assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out]);
-  assert.match(selectedSources(thread).warnings.join(' '), /Multiple incoming channels/);
+  assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, incoming, unrelated.id]);
   assert.deepEqual(selectedSources(thread, [JSON.stringify([peer, unrelated.id])]).sources.map(s => s.id), [out, incoming]);
 });
 

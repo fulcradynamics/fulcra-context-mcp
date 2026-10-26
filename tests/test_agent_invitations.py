@@ -88,15 +88,6 @@ def test_unrelated_unnamed_direct_grant_does_not_block_matching(api):
     assert invitations.match(api)['results'][0]['status'] == 'matched'
 
 
-def test_sibling_reply_target_ignores_unnamed_grant(api):
-    from datetime import datetime, timezone
-    from fulcra_mcp.connection import _target
-    handshake(api, 'a' * 32)
-    api.get_shared_datasets.return_value.insert(0, dict(incoming(),
-        datashare_name=None, fulcra_data_types=['file:/shared/']))
-    assert _target(api, PEER, OTHER, datetime(2026, 10, 2, tzinfo=timezone.utc))['id'] == OTHER
-
-
 def test_sibling_mentions_ignore_unnamed_grant():
     from fulcra_mcp.mentions import _thread_labels
     entry = dict(channel(IN, PEER), fields=connections.CHANNEL_FIELDS['properties'],

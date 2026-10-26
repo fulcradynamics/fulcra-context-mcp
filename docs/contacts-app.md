@@ -67,6 +67,9 @@ not channel creation. Missing/invalid dates rank last, with exact channel ID as 
 stable tie-break. Explicit choices (including no selection) survive refreshes;
 revocation disables sending rather than silently switching a draft's channel.
 Recency never grants authorization; every send still rechecks the exact audience.
+Saved matches default incoming reading sources for the selected outbox, but every
+available incoming channel remains selectable. Explicit selections survive polls.
+When no saved match is available, readable channels remain selected by default.
 
 The list has **Agent Chats**, **Pending** (not yet shared both ways) and
 **Legacy Connections** sections, sorted by attention, then unread, then latest
@@ -88,9 +91,12 @@ reads keep the last good view with a stale warning; revoked sources are removed.
 send path:
 
 - Exact UUIDs and owned `Event/<uuid>` channels. Multiparty sends need the full
-  `expected_peer_userids`; replies/acks name the target's exact owner.
+  `expected_peer_userids`; an optional target peer selects within that audience.
 - Body 1–4000 characters, sender up to 128. Omitted recipients means everyone.
-- Reply/ack targets must uniquely match a non-ack message within 30 days.
+- Reply/ack targets are exact, case-preserved UUID references, not delivery
+  prerequisites. No peer record, catalog or schema lookup is made to send them;
+  dangling, old or non-message targets do not block posting. Topic defaults to
+  `chat` unless explicitly supplied, rather than being fetched from the target.
 - A stable record ID is chosen first. Up to two uncertain retries reuse the same ID
   and payload after a readback; denials are never retried.
 - `posted` means our own channel reads the record back, not peer delivery.
@@ -170,7 +176,7 @@ never add grants to the template and create a separate outbox per responder, lab
 `standing_invitation_inviter: "<name>"` description line) is never copied to
 responder outboxes, which are named after their label.
 
-The app adds only narrow responder grants. Ownership, schemas, first-message evidence for automatic return-sharing, and record consent remain required. Explicit matching can record decisions without invitation evidence, using the generic metadata tool. Both participants write only their own outbox description. An unavailable matcher does not veto
+The app adds only narrow responder grants. Ownership, schemas, first-message evidence for automatic return-sharing, and record consent remain required for that automation. Explicit matching records an identified peer owner/channel reference without requiring peer protocol conformity or invitation evidence, using the generic metadata tool. Both participants write only their own outbox description. An unavailable matcher does not veto
 independently discovered two-way contacts. Storage has no compare-and-swap; a worker
 lock serializes one process only.
 

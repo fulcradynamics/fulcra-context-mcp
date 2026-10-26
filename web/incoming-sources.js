@@ -6,7 +6,6 @@ export function resolveOutbox(thread, id) {
   const outgoing = availableSources(thread).filter(s => s.direction === 'Outgoing')
     .sort((a, b) => (b.sharedAt ?? 0) - (a.sharedAt ?? 0) || a.id.localeCompare(b.id));
   if (id !== undefined) return outgoing.find(s => s.id === id);
-  if (outgoing.length > 1 && outgoing.some(s => s.matchedPeers?.length)) return undefined;
   return outgoing[0];
 }
 export function selectedSources(thread, excluded, outboxId) {
@@ -16,15 +15,9 @@ export function selectedSources(thread, excluded, outboxId) {
   let incoming = available.filter(s => s.direction === 'Incoming');
   const sourceWarnings = thread.sourceWarnings ?? thread.warnings;
   const warnings = [...sourceWarnings];
-  if (paired && !outbox) {
-    incoming = [];
-    warnings.push('Choose an outbox in Advanced → Delivery address to read its matched incoming channels.');
-  } else if (outbox?.matchedPeers?.length) {
-    incoming = incoming.filter(s => outbox.matchedPeers.some(p => p.fulcra_userid === s.fulcra_userid && p.data_type === s.id));
-  } else if (excluded === undefined) {
-    const ambiguous = incoming.filter(s => incoming.filter(other => other.fulcra_userid === s.fulcra_userid).length > 1);
-    if (ambiguous.length) warnings.push('Multiple incoming channels are available. Select which channels to read in Advanced → Available incoming channels.');
-    incoming = incoming.filter(s => !ambiguous.includes(s));
+  if (excluded === undefined && outbox?.matchedPeers?.length) {
+    const matches = incoming.filter(s => outbox.matchedPeers.some(p => p.fulcra_userid === s.fulcra_userid && p.data_type === s.id));
+    if (matches.length) incoming = matches;
   }
   incoming = incoming.filter(s => !excluded?.includes(sourceKey(s)));
   if (excluded?.length) warnings.push('Some available incoming channels were excluded by the viewer.');
@@ -53,8 +46,6 @@ export function incomingSelector(doc, onChange) {
       const label = doc.createElement('label');
       const checkbox = doc.createElement('input'); checkbox.type = 'checkbox';
       checkbox.checked = selected.some(s => sourceKey(s) === sourceKey(source));
-      checkbox.disabled = Boolean(outbox?.matchedPeers?.length && !outbox.matchedPeers.some(p => p.fulcra_userid === source.fulcra_userid && p.data_type === source.id))
-        || (!outbox && availableSources(thread).some(s => s.matchedPeers?.length));
       const text = doc.createElement('span');
       text.textContent = `${readable(thread.participants?.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — ${readable(source.name, 'Incoming channel')} (${sources.indexOf(source) + 1})${source.association === 'matched' ? ' — saved match' : ''}`;
       checkbox.addEventListener('change', () => onChange(sourceKey(source), checkbox.checked));

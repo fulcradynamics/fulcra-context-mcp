@@ -22,9 +22,7 @@ test('two saved pairs select exact history and reply through the corresponding o
   await ui.locator('#advanced-toggle').click();
   await ui.locator('.delivery-address summary').click();
   const selector = ui.locator('.delivery-address select');
-  await expect(selector).toHaveValue('');
-  await expect(ui.locator('.composer-hint')).toContainText('Choose an outbox');
-  await expect(ui.locator('#messages')).not.toContainText('paired message');
+  await expect(selector).toHaveValue(out);
   await selector.selectOption(out);
   await expect(ui.locator('#messages')).toContainText('First paired message');
   await expect(ui.locator('#messages')).not.toContainText('Second paired message');
@@ -46,4 +44,19 @@ test('two saved pairs select exact history and reply through the corresponding o
     expect.objectContaining({outbox: out, in_reply_to: incoming+'-message'}),
     expect.objectContaining({outbox: out.slice(0,-1)+'8', in_reply_to: incoming.slice(0,-1)+'9-message'}),
   ]);
+  await ui.locator('.composer-input').fill('Keep this draft');
+  await ui.locator('.incoming-sources summary').click();
+  const choices = ui.locator('.incoming-sources input');
+  await expect(choices.nth(0)).toBeEnabled();
+  await choices.nth(0).check();
+  await expect(ui.locator('#messages')).toContainText('First paired message');
+  await expect(ui.locator('#messages')).toContainText('Second paired message');
+  await page.clock.runFor(11000);
+  await expect(selector).toHaveValue(out.slice(0,-1)+'8');
+  await expect(choices.nth(0)).toBeChecked();
+  await expect(ui.locator('.composer-input')).toHaveValue('Keep this draft');
+  await expect(ui.locator('#messages')).toContainText('First paired message');
+  await selector.selectOption(out);
+  await expect(choices.nth(1)).toBeChecked();
+  await expect(ui.locator('#messages')).toContainText('Second paired message');
 });
