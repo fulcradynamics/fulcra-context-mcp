@@ -13,8 +13,8 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P2W"
 
 [options.exclude-newer-package]
-fulcra = false
 fulcra-api = false
+fulcra = false
 fulcra-data-types = false
 
 [[package]]
@@ -662,7 +662,7 @@ wheels = [
 
 [[package]]
 name = "fulcra-context-mcp"
-version = "1.18.7"
+version = "1.18.8"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
