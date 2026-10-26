@@ -7,19 +7,19 @@ export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/0
 // Explicit read-only opener for layout tests. `autoSelect: false` keeps an
 // untargeted global launch on the instructional view instead of opening the top contact.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true } = {}) {
+export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes})=>{
   window.direct = direct;
   window.contactStatus = status;
   window.second = second;
   window.holdReads = holdReads; window.checkStatus = checkStatus;
   window.ownRecords = ownRecords;
   const frame=document.querySelector('iframe');
-  window.calls=[]; window.contexts=[]; window.hostMessages=[]; window.sizes=[]; window.audience=[peer,other];
+  window.calls=[]; window.contexts=[]; window.hostMessages=[]; window.sizes=[]; window.displayRequests=[]; window.audience=[peer,other];
   window.heldDiscovery=[]; window.heldReads=[];
   window.heldContexts=[];
   window.releaseContexts=reject=>window.heldContexts.splice(0).forEach(fn=>fn(reject));
@@ -33,7 +33,8 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     window.sizes.push(r.params);
     if (window.followSize) frame.style.height = `${r.params.height}px`;
    }
-   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode:'fullscreen'},hostCapabilities:{...(chat?{message:{text:{}}}:{}),...(chat||contextOnly?{updateModelContext:{text:{}}}:{})}});
+   if(r.method==='ui/request-display-mode'){ window.displayRequests.push(r.params.mode); reply(r.id,{mode:availableDisplayModes?.includes(r.params.mode)?r.params.mode:displayMode}); }
+   if(r.method==='ui/initialize')reply(r.id,{protocolVersion:'2026-01-26',hostInfo:{name:'synthetic',version:'1'},hostContext:{displayMode,availableDisplayModes},hostCapabilities:{...(chat?{message:{text:{}}}:{}),...(chat||contextOnly?{updateModelContext:{text:{}}}:{})}});
    if(r.method==='ui/notifications/initialized') {
     window.releaseLaunch = () => frame.contentWindow.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{presentation,peer_fulcra_userid:launchPeer}}},'*');
     if (!holdLaunch) window.releaseLaunch();
@@ -94,7 +95,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     .replace('</head>', autoSelect ? '</head>' : '<script>window.__fulcraDevNoAutoSelect=true;</script></head>')
     .replace(/<meta name="connection-debug"[^>]*>/, debug === null ? '$&' : '')
     .replace('</head>', debug === null || debug === 'missing' ? '</head>' : `<meta name="connection-debug" content="${debug}"></head>`);
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect});
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes});
  const ui=page.frameLocator('iframe');
  if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();

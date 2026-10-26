@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     oidc_server_url: str = "http://localhost:4499"
     fulcra_environment: str = "stdio"
     fulcra_contacts_debug: bool = False
+    # Domain verification token from the OpenAI plugin portal, served at
+    # /.well-known/openai-apps-challenge; unset serves 404.
+    openai_apps_challenge: str | None = None
     port: int = 4499
     oidc_client_id: str | None = None
     fulcra_oidc_domain: str | None = None
