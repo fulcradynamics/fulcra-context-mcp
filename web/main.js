@@ -34,7 +34,14 @@ for (const button of inviteButtons) button.prepend(icon(UserPlus, 'btn-icon'));
 const openInviteButtons = [...document.querySelectorAll('#open-invite, #open-invite-welcome')];
 for (const button of openInviteButtons) button.prepend(icon(Link, 'btn-icon'));
 setupInvite(app, inviteButtons, document.querySelector('#status'), { notifySent }, openInviteButtons).then(connected => {
-  applySafeArea(app.getHostContext());
+  const context = app.getHostContext();
+  applySafeArea(context);
+  // ChatGPT opens fullscreen from its own resource metadata; other hosts need the
+  // standard request. A declined request leaves the inline layout, which still fits.
+  if (context?.displayMode === 'inline' && context.availableDisplayModes?.includes('fullscreen')) {
+    app.requestDisplayMode({ mode: 'fullscreen' })
+      .then(({ mode }) => applySafeArea({ displayMode: mode }), () => {});
+  }
   const status = document.querySelector('#connection-status');
   if (!connected) {
     status.textContent = 'Could not load Agent Contacts: host connection failed. Reopen the app to retry.';
