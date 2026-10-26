@@ -31,6 +31,13 @@ async def test_glama_manifest_is_served(http_client):
     assert body["claim"].startswith("glama_claim_")
 
 
+async def test_openai_domain_challenge_is_served(http_client):
+    response = await http_client.get("/.well-known/openai-apps-challenge")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "zzv_SDdU66ROKE2phCxo4J9s3Qdpq0Ac7gftBk5jEPw"
+
+
 @pytest.mark.parametrize(
     "path",
     [
