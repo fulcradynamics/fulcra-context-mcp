@@ -9,6 +9,8 @@ There is a public instance of this server running at `https://mcp.fulcradynamics
 
 When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as a local MCP server using the stdio transport.  Otherwise, it acts as a remote server using the Streamable HTTP transport.  It handles the OAuth2 callback, but doesn't leak the exchanged tokens to MCP clients.  Instead, it maintains a mapping table and runs its own OAuth2 service between MCP clients.
 
+Set `OPENAI_APPS_CHALLENGE` to the OpenAI plugin portal's domain verification token to serve it at `/.well-known/openai-apps-challenge`; unset, that path returns 404.
+
 ### Remote Connection using Proxy
 
 There is a public instance of this server running at `https://mcp.fulcradynamics.com/`.  Point your OAuth2-capable MCP clients at that.

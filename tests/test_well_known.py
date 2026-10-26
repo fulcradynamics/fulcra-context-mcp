@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from fulcra_mcp.main import app
+from fulcra_mcp.settings import settings
 
 
 @pytest.fixture
@@ -31,11 +32,18 @@ async def test_glama_manifest_is_served(http_client):
     assert body["claim"].startswith("glama_claim_")
 
 
-async def test_openai_domain_challenge_is_served(http_client):
+async def test_openai_domain_challenge_is_served(http_client, monkeypatch):
+    monkeypatch.setattr(settings, "openai_apps_challenge", "test_challenge_token")
     response = await http_client.get("/.well-known/openai-apps-challenge")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
-    assert response.text == "zzv_SDdU66ROKE2phCxo4J9s3Qdpq0Ac7gftBk5jEPw"
+    assert response.text == "test_challenge_token"
+
+
+async def test_openai_domain_challenge_unset_is_not_found(http_client, monkeypatch):
+    monkeypatch.setattr(settings, "openai_apps_challenge", None)
+    response = await http_client.get("/.well-known/openai-apps-challenge")
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize(

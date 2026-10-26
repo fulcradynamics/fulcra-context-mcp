@@ -102,12 +102,13 @@ async def glama_manifest() -> Response:
     )
 
 
-# Public token the OpenAI plugin portal checks to verify ownership of this domain.
+# Public token the OpenAI plugin portal checks to verify ownership of this
+# domain. Each deployment sets its own via OPENAI_APPS_CHALLENGE.
 @app.get("/.well-known/openai-apps-challenge", include_in_schema=False)
 async def openai_apps_challenge() -> Response:
-    return Response(
-        "zzv_SDdU66ROKE2phCxo4J9s3Qdpq0Ac7gftBk5jEPw", media_type="text/plain"
-    )
+    if not settings.openai_apps_challenge:
+        raise HTTPException(status_code=404)
+    return Response(settings.openai_apps_challenge, media_type="text/plain")
 
 
 # Listing icon for the MCP registry and connector directories (server.json
