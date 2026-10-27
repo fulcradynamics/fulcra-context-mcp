@@ -4,7 +4,7 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## 1.19.2 release notes
+## 1.19.3 release notes
 
 - Serve `/openai/mcp` with the same OAuth but without `get_location`, `get_sleep`,
   `get_workouts` or `get_time_series`; `/mcp` retains every tool. Provide the
