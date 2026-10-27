@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 
 import jsonschema
 from fulcra_api import connections, records
-from .connection_compatibility import SHARE_NAME_PREFIX, CHANNEL_PREFIXES
+
 
 UUID_PATTERN = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 RETRY_DELAY = 1
@@ -25,7 +25,6 @@ def channel_entry(api, owner, channel):
         raise ValueError('Missing or ambiguous channel.')
     entry = entries[0]
     if (entry.get('id') != channel or entry.get('fulcra_userid') != owner
-            or not entry.get('description', '').startswith(CHANNEL_PREFIXES)
             or entry.get('deprecated') or entry.get('deleted_at')
             or entry.get('api_version') != 'v1'):
         raise ValueError('An active Event connection channel with exact owner identity is required.')
@@ -33,7 +32,10 @@ def channel_entry(api, owner, channel):
 
 
 def _authorize(api, own, peer, outbox, expected_peer_userids=None):
+    from .channel_metadata import is_template
     entry = channel_entry(api, own, outbox)
+    if is_template(entry.get('description')) or entry.get('name') == 'connect-our-agents-standing-invitation':
+        raise ValueError('An open invitation template is not a contact channel.')
     if not entry.get('recordable'):
         raise ValueError('Channel is not recordable.')
     shares = api.get_datashares()
@@ -57,8 +59,6 @@ def _authorize(api, own, peer, outbox, expected_peer_userids=None):
                 or not _uuid(share.get('id') or share.get('datashare_id'))):
             raise ValueError('Narrow channel grants must have direct users, without groups, files or time bounds.')
         recipients = {p['allowed_fulcra_userid'] for p in permissions}
-        if not (share.get('datashare_name') or '').startswith(SHARE_NAME_PREFIX):
-            raise ValueError('Narrow direct connection grants are required. Nothing was shared.')
         narrow_audience.update(recipients)
     # Broad overlaps may not establish or expand a connection's audience.
     if narrow_audience != set(expected):
@@ -82,31 +82,6 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
             or not _compatible_schema({'fields': fields, 'required_fields': required})):
         raise ValueError('Event connection schema required.')
     return own, entry
-
-
-def _target(api, peer, target, now):
-    found = []
-    channels = set()
-    for grant in api.get_shared_datasets():
-        types = grant.get('fulcra_data_types')
-        if (grant.get('sharing_fulcra_userid') == peer and grant.get('grant_type') == 'user'
-                and isinstance(grant.get('datashare_name'), str)
-                and grant['datashare_name'].startswith(SHARE_NAME_PREFIX)
-                and isinstance(types, list) and len(types) == 1
-                and re.fullmatch('Event/' + UUID_PATTERN, types[0])
-                and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
-            channels.add((peer, types[0]))
-    for owner, channel in channels:
-        entry = channel_entry(api, owner, channel)
-        for row in records.get_records(api, entry, now - connections.REPLY_LOOKBACK, now):
-            if row.get('id') == target:
-                stamp = datetime.fromisoformat(row['start_time'].replace('Z', '+00:00'))
-                if row.get('kind') not in ('message', 'reply') or not now - connections.REPLY_LOOKBACK <= stamp <= now:
-                    raise ValueError('Reply/ack target must be a peer message or reply within 30 days, never an ack.')
-                found.append(row)
-    if len(found) != 1:
-        raise ValueError('Missing or ambiguous peer reply target within 30 days.')
-    return found[0]
 
 
 def _readback(api, entry, record):
@@ -147,22 +122,20 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
     attempted = False
     try:
         if (not _uuid(peer_userid) or not _uuid(mid)
-                or not re.fullmatch('Event/' + UUID_PATTERN, outbox)
-                or (in_reply_to is not None and not _uuid(in_reply_to))):
+                or not re.fullmatch('Event/' + UUID_PATTERN, outbox)):
             raise ValueError('Use exact UUIDs and an exact Event/<uuid> channel; no normalization is performed.')
         if recipients == []:
             raise ValueError('Omit recipients for everyone; an explicit list cannot be empty.')
         record = connections.build_message(sender=sender, body=body, record_id=mid, kind=kind,
                                            in_reply_to=in_reply_to, recipients=recipients, priority=pri, topic=slug)
+        if in_reply_to is not None:
+            # The SDK canonicalizes UUIDs; references retain their exact spelling.
+            record['in_reply_to'] = in_reply_to
         own = api.get_fulcra_userid()
         if not _uuid(own) or own == peer_userid:
             raise ValueError('Could not establish distinct authenticated sender and peer.')
         entry = _authorize(api, own, peer_userid, outbox, expected_peer_userids)
-        if in_reply_to:
-            target = _target(api, peer_userid, in_reply_to, datetime.now(timezone.utc))
-            if slug is None and 'topic' in target:
-                record['topic'] = target['topic']
-        elif slug is None:
+        if slug is None:
             record['topic'] = 'chat'
         if artifacts is not None:
             record['artifacts'] = artifacts
@@ -220,8 +193,7 @@ def end(api, *, data_type, peer_userid, archive=False):
     try:
         own, _ = owned_connection(api, data_type, peer_userid)
         narrow = [s for s in api.get_datashares() if not s.get('share_all_data')
-                  and s.get('fulcra_data_types') == [data_type]
-                  and (s.get('datashare_name') or '').startswith(SHARE_NAME_PREFIX)]
+                  and s.get('fulcra_data_types') == [data_type]]
         for share in narrow:
             if api.get_fulcra_userid() != own:
                 raise ValueError('Authenticated account changed.')

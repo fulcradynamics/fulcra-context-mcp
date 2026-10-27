@@ -16,9 +16,9 @@ from fulcra_api import connections
 
 from .connection import UUID_PATTERN, _uuid, channel_entry, _authorize
 from .connection_compatibility import SHARE_NAME_PREFIX
-from .contact_preferences import _check_state_shares
+from .channel_metadata import parse_metadata, write_metadata, save_metadata, add_peer, save_peer, is_template
 
-NAME = 'Fulcra Agent Invitations'
+
 STANDING_NAME = 'connect-our-agents-standing-invitation'
 STANDING_INVITER = 'standing_invitation_inviter: '
 LOCK = RLock()  # Storage has no compare-and-swap; serialize this worker.
@@ -68,17 +68,24 @@ def _history(api, owner, channel):
     return [json.loads(line) for line in response.splitlines() if line.strip()]
 
 
+class _IncompatibleChannel(ValueError):
+    """A resolved Event schema is not a messaging channel."""
+
+
 def _channel(api, owner, data_type, own=False):
     from .tools import _user_defined_fields
     from .mentions import _compatible_schema
     if not isinstance(data_type, str) or not re.fullmatch('Event/' + UUID_PATTERN, data_type):
         raise ValueError('Exact Event channel required.')
     entry = channel_entry(api, owner, data_type)
-    fields, required = _user_defined_fields(api.v1_catalog_schema(data_type, 'v1', fulcra_userid=owner))
-    if (entry.get('record_spec', {}).get('type') != 'event'
-            or own and not entry.get('recordable')
-            or not _compatible_schema({'fields': fields, 'required_fields': required})):
-        raise ValueError('Compatible connection schema required.')
+    schema = api.v1_catalog_schema(data_type, 'v1', fulcra_userid=owner)
+    if not isinstance(schema, dict) or not isinstance(schema.get('properties'), dict):
+        raise ValueError('Incomplete channel schema.')
+    fields, required = _user_defined_fields(schema)
+    if entry.get('record_spec', {}).get('type') != 'event' or own and not entry.get('recordable'):
+        raise ValueError('Active Event channel required.')
+    if not _compatible_schema({'fields': fields, 'required_fields': required}):
+        raise _IncompatibleChannel('Compatible connection schema required.')
     return entry
 
 
@@ -89,16 +96,14 @@ def _state(api):
     catalog = api.v1_catalog(fulcra_userid=own)
     if not isinstance(catalog, list):
         raise ValueError('Invitation catalog unavailable.')
-    entries = [e for e in catalog if e.get('name') == NAME and e.get('fulcra_userid') == own
+    entries = [e for e in catalog if e.get('fulcra_userid') == own
                and e.get('api_version') == 'v1' and e.get('id', '').startswith('Event/')
                and not e.get('deprecated') and not e.get('deleted_at')]
-    if len(entries) > 1:
-        raise ValueError('Ambiguous invitation storage.')
-    entry = entries[0] if entries else None
-    _check_state_shares(api, entry)
-    document = json.loads(entry['description']) if entry else {'version': 1, 'invitations': {}}
-    if document.get('version') != 1 or not isinstance(document.get('invitations'), dict):
-        raise ValueError('Invalid invitation storage.')
+    document = {'version': 1, 'invitations': {}}
+    for entry in entries:
+        metadata = parse_metadata(entry.get('description'))
+        if 'invitation' in metadata:
+            document['invitations'][entry['id']] = metadata['invitation']
     codes = []
     outboxes = set(document['invitations'])
     for channel, invite in document['invitations'].items():
@@ -128,18 +133,23 @@ def _state(api):
         codes.append(invite['code'])
     if len(set(codes)) != len(codes):
         raise ValueError('Duplicate invitation codes.')
-    return own, entry, document
+    return own, entries, document
 
 
-def _save(api, own, entry, document):
-    description = json.dumps(document, separators=(',', ':'))
+def _save(api, own, entries, document):
     if api.get_fulcra_userid() != own:
         raise ValueError('Account changed.')
-    _check_state_shares(api, entry)
-    if entry:
-        api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
-    else:
-        api.create_data_type('Event', {'name': NAME, 'description': description})
+    for data_type, invite in document['invitations'].items():
+        source = next(e for e in entries if e['id'] == data_type)
+        expected = parse_metadata(source.get('description'))
+        if expected.get('invitation') == invite:
+            continue
+        metadata = json.loads(json.dumps(expected))
+        metadata.update(version=1, invitation=invite)
+        if invite['state'] == 'completed':
+            add_peer(metadata, invite['peer_userid'], invite['incoming_data_type'])
+        if metadata != expected:
+            save_metadata(api, own, data_type, metadata, expected)
     current = _state(api)
     if current[0] != own or current[2] != document:
         raise ValueError('Invitation save not verified.')
@@ -191,15 +201,18 @@ def _evidence(api, own, prefix='handshake'):
         types = grant.get('fulcra_data_types') or []
         if (grant.get('grant_type') == 'user' and _uuid(grant.get('sharing_fulcra_userid'))
                 and grant['sharing_fulcra_userid'] != own
-                and isinstance(grant.get('datashare_name'), str)
-                and grant['datashare_name'].startswith(SHARE_NAME_PREFIX)
                 and len(types) == 1 and re.fullmatch('Event/' + UUID_PATTERN, types[0])
                 and not any(grant.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))):
             channels.add((grant['sharing_fulcra_userid'], types[0]))
     evidence = {}
     for owner, channel in sorted(channels):
         with _checking('incoming_channel'):
-            _channel(api, owner, channel)
+            try:
+                entry = _channel(api, owner, channel)
+            except _IncompatibleChannel:
+                continue
+            if is_template(entry.get('description')) or entry.get('name') == STANDING_NAME:
+                continue
         with _checking('handshake_history'):
             rows = _history(api, owner, channel)
             if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows):
@@ -267,7 +280,7 @@ def _match_open(api, own, document, template, invite):
                     sender = 'Agent'
                 identifier = sender[:max(1, 75 - len(label))] + ' via ' + label[:74]
                 identifier = identifier[:80].strip()
-                description = write_contact_identifier(_without_inviter(source.get('description') or ''), identifier)
+                description = write_contact_identifier(write_metadata(_without_inviter(source.get('description') or ''), None), identifier)
                 entry = verify()
                 binding = dict(state='creating', incoming_data_type=incoming, identifier=identifier)
                 invite['responses'][peer] = binding
@@ -309,6 +322,7 @@ def _match_open(api, own, document, template, invite):
                         fulcra_data_types=[data_type], allowed_user_ids=[peer], share_all_data=False,
                         allowed_group_ids=None, time_start=None, time_end=None)
             _authorize(api, own, peer, data_type)
+            save_peer(api, own, data_type, peer, incoming)
             entry = verify()
             binding['state'] = 'completed'
             _save(api, own, entry, document)
@@ -448,6 +462,7 @@ def standing(api, inviter_name=None):
             if not entry:
                 raise ValueError('Standing invitation not verified.')
         prepared = prepare(api, entry['id'], open_invitation=True)
+        entry = _standing_entry(api, own)
         if inviter_name is not None and inviter_name != _standing_inviter(entry['description']):
             description = _without_inviter(entry['description'])
             if inviter_name:

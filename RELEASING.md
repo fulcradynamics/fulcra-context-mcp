@@ -4,6 +4,24 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.1 release notes
+
+- Reply and acknowledgement references no longer require target lookup, target
+  kind/age checks or proof of target ownership. Preserve exact reference spelling.
+- Explicit pairing records peer owner/channel references without peer protocol
+  checks. Saved UI matches are overridable defaults; newest-outbox selection and
+  readable-channel fallback remain available. Ship contacts UI v81.
+
+## 1.19.0 release notes
+
+- Channel/share prefixes are discovery hints, not requirements for resolved sends,
+  replies, discovery or invitation matching.
+- Invitation codes/state and multiple resolved peer/channel pairs live on the own
+  outbox description; generic metadata updates support explicit matching and both
+  sides of a connection without reciprocal metadata requirements.
+- Preserve other description metadata and invitation consumption; exclude open
+  templates from contacts and sends. Ship contacts UI v80.
+
 ## 1.18.10 release notes
 
 - Existing broader shares no longer block discovery, mentions, sends, invitation

@@ -422,9 +422,9 @@ async def send_agent_contact_message(peer_userid: str, outbox: str, sender: str,
         recipients: Agent names; omit for everyone.
         expected_peer_userids: Full other-user UUID audience; required for multiparty.
         kind: Envelope kind.
-        in_reply_to: Peer message/reply UUID within 30 days; required for reply/ack.
+        in_reply_to: Exact record UUID reference; required for reply/ack, not looked up.
         pri: P1 urgent, P2 normal, P3 low.
-        slug: Topic; messages default to chat, answers inherit.
+        slug: Topic; defaults to chat, including replies.
         artifacts: File references: path, optional version/owner. No new shares.
     """
     from .connection import send
@@ -1037,15 +1037,15 @@ async def send_agent_message(
         connection: Owned Event/<uuid> channel or exact peer UUID; channel required for multiparty.
         sender: Stable agent name, <=128 characters.
         body: Nonblank message, <=4000 characters.
-        topic: Thread name; replies inherit.
+        topic: Thread name; defaults to chat, including replies.
         recipients: Agent names; omit for everyone.
         priority: P1 urgent, P2 normal (default), P3 low.
-        reply_to: Peer message/reply UUID within 30 days; mutually exclusive with ack.
-        ack: Peer message/reply UUID to acknowledge, within 30 days; never an ack.
+        reply_to: Exact record UUID reference, not looked up; mutually exclusive with ack.
+        ack: Exact record UUID reference to acknowledge, not looked up.
         record_id: Reuse returned UUID and unchanged payload for bounded uncertain retries.
         artifacts: File references: path, optional version/owner. No new shares.
         expected_peer_userids: Full other-user UUID audience; required for multiparty.
-        target_peer_userid: Multiparty reply/ack's exact owner UUID; never infer from sender.
+        target_peer_userid: Optional intended peer UUID within the outgoing audience.
     """
     from uuid import uuid4
     from .connection import send, _uuid, UUID_PATTERN
@@ -1057,19 +1057,15 @@ async def send_agent_message(
                 raise ValueError('connection must be an exact peer UUID or Event/<uuid>.')
             if reply_to is not None and ack is not None:
                 raise ValueError('Give reply_to or ack, not both.')
-            # The pinned SDK recognizes the historical prefix only. Translate a
-            # local narrow-grant discovery copy; broad access is not membership.
-            # send() rechecks untouched live grants below.
+            # The SDK uses names as discovery hints. Exact channel routing uses
+            # current narrow grants; send() rechecks their untouched audience.
             shares = [dict(s, datashare_name=connections.SHARE_NAME_PREFIX)
-                      if (s.get('datashare_name') or '').startswith('connect-our-agents') else s
                       for s in fulcra.get_datashares()
                       if not s.get('share_all_data') and len(s.get('fulcra_data_types') or []) == 1
                       and re.fullmatch('Event/' + UUID_PATTERN, s['fulcra_data_types'][0])]
             channel, people = connections.resolve_connection(shares, connection)
             if len(people) != 1 and (expected_peer_userids is None or not connection.startswith('Event/')):
                 raise ValueError('Multiparty sends require an exact owned channel and expected_peer_userids.')
-            if len(people) > 1 and (reply_to or ack) and target_peer_userid is None:
-                raise ValueError('Multiparty reply/ack requires target_peer_userid from the exact incoming grant.')
             peer = target_peer_userid if target_peer_userid is not None else people[0]
             if peer not in people:
                 raise ValueError('Target peer is not in the selected channel audience.')

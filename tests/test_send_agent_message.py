@@ -8,7 +8,10 @@ from test_connection_send import API, OUT, OWN, PEER, MID, TARGET
 def connected(monkeypatch):
     api = API()
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
-    monkeypatch.setattr(tools.records, 'get_records', lambda api, entry, *a, **kw: api.rows if entry['fulcra_userid'] == OWN else [api.target])
+    def own_records(api, entry, *args, **kwargs):
+        assert entry['fulcra_userid'] == OWN, 'Sending must not retrieve peer records'
+        return api.rows
+    monkeypatch.setattr(tools.records, 'get_records', own_records)
     return api
 
 async def test_sends_on_your_channel_and_reports_verified_id(call, connected):
@@ -17,16 +20,18 @@ async def test_sends_on_your_channel_and_reports_verified_id(call, connected):
     assert connected.writes[0]['id'] == MID
     assert connected.writes[0]['body'] == 'hello'
 
-async def test_reply_reuses_topic(call, connected):
-    result = json.loads(await call('send_agent_message', dict(connection=OUT, sender='a', body='yes', reply_to=TARGET)))
+@pytest.mark.parametrize('topic', [None, 'explicit topic'])
+async def test_reply_uses_supplied_or_default_topic(call, connected, topic):
+    result = json.loads(await call('send_agent_message', dict(connection=OUT, sender='a', body='yes', reply_to=TARGET, topic=topic)))
     assert result['status'] == 'posted'
-    assert result['record']['topic'] == 'test'
+    assert result['record']['topic'] == (topic or 'chat')
 
-async def test_refusal_explained_without_write(call, connected):
+async def test_ack_reference_does_not_depend_on_target_kind(call, connected):
     connected.target['kind'] = 'ack'
     result = json.loads(await call('send_agent_message', dict(connection=PEER, sender='a', body='x', ack=TARGET)))
-    assert result['status'] == 'rejected' and 'never an ack' in result['reason']
-    assert not connected.writes
+    assert result['status'] == 'posted'
+    assert connected.writes[0]['in_reply_to'] == TARGET
+    assert connected.writes[0]['kind'] == 'ack'
 
 async def test_bad_priority_refused_by_schema(client, connected):
     result = await client.call_tool('send_agent_message', dict(connection=PEER, sender='a', body='x', priority='urgent'), raise_on_error=False)

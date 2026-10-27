@@ -41,25 +41,24 @@ def test_revocation_before_write_stops_send(api):
 
 
 @pytest.mark.parametrize('kind', ['reply', 'ack'])
-def test_multiparty_target_is_exact_peer_not_claimed_association(api, kind):
+def test_multiparty_reply_reference_is_preserved(api, kind):
     add_member(api)
     result = send(api, expected_peer_userids=[PEER, OTHER], kind=kind, in_reply_to=TARGET)
     assert result['status'] == 'posted'
     assert result['record']['in_reply_to'] == TARGET
-    assert result['record']['topic'] == 'test'
+    assert result['record']['topic'] == 'chat'
 
 
-async def test_canonical_send_requires_exact_target_owner(api, monkeypatch):
+async def test_canonical_send_selects_audience_without_proving_target_owner(api, monkeypatch):
     from fulcra_mcp import tools
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     add_member(api)
     args = dict(connection=OUT, sender='test', body='hello', record_id=TARGET,
                 expected_peer_userids=[PEER, OTHER], reply_to=TARGET)
-    assert (await tools.send_agent_message(**args))['status'] == 'rejected'
-    assert not api.writes
-    assert (await tools.send_agent_message(**args, target_peer_userid=OTHER))['status'] == 'rejected'
-    assert not api.writes
+    assert (await tools.send_agent_message(**args))['status'] == 'posted'
+    assert (await tools.send_agent_message(**args, target_peer_userid=OTHER))['status'] == 'posted'
     assert (await tools.send_agent_message(**args, target_peer_userid=PEER))['status'] == 'posted'
+    assert (await tools.send_agent_message(**args, target_peer_userid=OWN))['status'] == 'rejected'
 
 
 def test_duplicate_exact_grants_preserve_audience(api):

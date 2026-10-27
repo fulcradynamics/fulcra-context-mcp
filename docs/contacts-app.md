@@ -46,11 +46,9 @@ not an authorization boundary.
 
 ## Discovery
 
-Contacts are Event channels named with either supported prefix
-(`connect-our-agents` or `connect-agents-with-anyone`) and shared with exact,
-narrow direct grants:
+Contacts are schema-compatible Event channels shared with exact, narrow direct grants. Prefixes (`connect-our-agents` or `connect-agents-with-anyone`) are discovery hints, not requirements. [Channel metadata](channel-metadata.md) retains resolved pairs without making metadata a prerequisite:
 
-- Our channels need protocol-named, single-channel direct grants to exactly the
+- Our channels need single-channel direct grants to exactly the
   expected contact audience. Existing broader shares are independent access policy:
   share-all, wildcards and mixed-type shares (including extra users, groups, files
   or time bounds) neither block contacts nor establish or expand their membership.
@@ -69,6 +67,9 @@ not channel creation. Missing/invalid dates rank last, with exact channel ID as 
 stable tie-break. Explicit choices (including no selection) survive refreshes;
 revocation disables sending rather than silently switching a draft's channel.
 Recency never grants authorization; every send still rechecks the exact audience.
+Saved matches default incoming reading sources for the selected outbox, but every
+available incoming channel remains selectable. Explicit selections survive polls.
+When no saved match is available, readable channels remain selected by default.
 
 The list has **Agent Chats**, **Pending** (not yet shared both ways) and
 **Legacy Connections** sections, sorted by attention, then unread, then latest
@@ -90,9 +91,12 @@ reads keep the last good view with a stale warning; revoked sources are removed.
 send path:
 
 - Exact UUIDs and owned `Event/<uuid>` channels. Multiparty sends need the full
-  `expected_peer_userids`; replies/acks name the target's exact owner.
+  `expected_peer_userids`; an optional target peer selects within that audience.
 - Body 1–4000 characters, sender up to 128. Omitted recipients means everyone.
-- Reply/ack targets must uniquely match a non-ack message within 30 days.
+- Reply/ack targets are exact, case-preserved UUID references, not delivery
+  prerequisites. No peer record, catalog or schema lookup is made to send them;
+  dangling, old or non-message targets do not block posting. Topic defaults to
+  `chat` unless explicitly supplied, rather than being fetched from the target.
 - A stable record ID is chosen first. Up to two uncertain retries reuse the same ID
   and payload after a readback; denials are never retried.
 - `posted` means our own channel reads the record back, not peer delivery.
@@ -159,8 +163,7 @@ contact's handoff for the session to avoid duplicates.
 
 `prepare_agent_invitation` (app-only) takes an owned Event channel without targeted grants and
 returns a random 32-hex code with topic `handshake <code>` (or
-`open_invitation <code>` for open invitations). The code is stored in the owned
-**Fulcra Agent Invitations** Event description. The accepting agent shares its
+`open_invitation <code>` for open invitations). The code and lifecycle state are stored in the outbox's `agent_connection` description marker, alongside durable channel associations. The accepting agent shares its
 channel back and posts its first record with that topic.
 
 App-only `match_agent_invitations` runs on each visible refresh. For each prepared
@@ -173,9 +176,7 @@ never add grants to the template and create a separate outbox per responder, lab
 `standing_invitation_inviter: "<name>"` description line) is never copied to
 responder outboxes, which are named after their label.
 
-The app adds only narrow responder grants. Explicit single-type grants
-targeting state storage are still rejected; ownership, schemas, first-message
-evidence and record consent remain required. An unavailable matcher does not veto
+The app adds only narrow responder grants. Ownership, schemas, first-message evidence for automatic return-sharing, and record consent remain required for that automation. Explicit matching records an identified peer owner/channel reference without requiring peer protocol conformity or invitation evidence, using the generic metadata tool. Both participants write only their own outbox description. An unavailable matcher does not veto
 independently discovered two-way contacts. Storage has no compare-and-swap; a worker
 lock serializes one process only.
 

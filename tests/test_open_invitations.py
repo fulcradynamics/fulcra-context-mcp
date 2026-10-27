@@ -22,10 +22,7 @@ def respond(api, code, peer=PEER):
 
 
 def clone_api(api):
-    original = api.create_data_type.side_effect
     def create(base, body):
-        if body.get('name') == invitations.NAME:
-            return original(base, body)
         id = 'Event/00000000-0000-4000-8000-' + str(100 + len(api.catalog)).zfill(12)
         api.catalog.append(dict(channel(id, OWN), **body))
         api.catalog[-1]['record_spec']['type'] = 'event'  # Inherited from Event by the backend.
@@ -175,10 +172,7 @@ STANDING = 'Event/00000000-0000-4000-8000-000000000040'
 
 @pytest.fixture
 def standing_api(api):
-    create_state = api.create_data_type.side_effect
     def create(base, body):
-        if body.get('name') == invitations.NAME:
-            return create_state(base, body)
         id = STANDING if body['name'] == invitations.STANDING_NAME else 'Event/00000000-0000-4000-8000-' + str(100 + len(api.catalog)).zfill(12)
         api.catalog.append(dict(channel(id, OWN), name=body['name'], description=body['description']))
         return {'id': id}

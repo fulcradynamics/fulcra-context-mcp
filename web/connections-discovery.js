@@ -1,5 +1,6 @@
 import { parseContactIdentifier, threadIdentifier } from './contact-identifier.js';
-import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX, CONNECTION_PREFIXES } from './connection-compatibility.js';
+import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX } from './connection-compatibility.js';
+import { channelMetadata, isInvitationTemplate } from './channel-metadata.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
@@ -26,9 +27,9 @@ export function parseConnections(result) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export const isConnection = e => e.id.startsWith('Event/') && CONNECTION_PREFIXES.some(prefix => e.description?.startsWith(`${prefix} channel`));
+export const isConnection = e => e.id.startsWith('Event/');
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
-const namedShare = s => CONNECTION_PREFIXES.some(prefix => s.datashare_name?.startsWith(prefix));
+
 const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
 export function conversionSources(description, own, peer) {
@@ -80,6 +81,7 @@ export async function discoverThreads(app) {
   const seen = new Set();
   let omitted = 0;
   for (const entry of catalog) {
+    if (isInvitationTemplate(entry)) continue;
     const owner = entry.fulcra_userid || own;
     const key = JSON.stringify([owner, entry.id]);
     if (seen.has(key)) continue;
@@ -90,21 +92,27 @@ export async function discoverThreads(app) {
     const source = { id: entry.id, name: entry.name, fulcra_userid: owner, direction,
       ...(identifier ? { identifier } : {}) };
     const connection = isConnection(entry);
+    if (connection) {
+      const exact = entry.fields ? [entry] : parseConnections(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
+      const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
+      if (!schema || !compatibleSchema(schema)) continue;
+      const pairs = owner === own && channelMetadata(entry.description).peers;
+      if (pairs?.length) source.matchedPeers = pairs;
+    }
     if (owner === own) {
       const covering = shares.outgoing.filter(s => covers(s, entry.id));
-      if (!covering.length) {
-        // The standing open invitation is a template, not a contact.
+      const targeted = covering.filter(s => s.share_all_data !== true
+        && s.data_types?.length === 1 && s.data_types[0] === entry.id);
+      if (!(connection ? targeted : covering).length) {
+        // Broad access does not establish a connection-specific audience.
         if (connection && entry.name !== STANDING_INVITATION) pending.push(source);
         continue;
       }
-      const narrow = covering.filter(s => s.share_all_data !== true
-        && s.data_types?.length === 1 && s.data_types[0] === entry.id
-        && !s.file_paths?.length && !s.file_history_paths?.length);
+      const narrow = targeted.filter(s => !s.file_paths?.length && !s.file_history_paths?.length);
       const grants = narrow.map(directRecipients);
       const recipients = [...new Set(grants.flat())].sort();
       if (!recipients.length || recipients.some(p => !p || p === own) || recipients.length > 32
-        || (!connection && (recipients.length !== 1 || narrow.length !== covering.length))
-        || (connection && !narrow.every(namedShare))) {
+        || (!connection && (recipients.length !== 1 || narrow.length !== covering.length))) {
         omitted++;
         continue;
       }
@@ -116,14 +124,11 @@ export async function discoverThreads(app) {
         peer = 'connection:' + JSON.stringify([own, ...recipients].sort());
       }
     } else if (!shares.incoming.some(s => s.sharing_fulcra_userid === owner
-      && s.grant_type === 'user' && (!connection || namedShare(s)) && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
+      && s.grant_type === 'user' && !s.share_all_data && !s.group_id && !s.time_start && !s.time_end
       && s.data_types?.length === 1 && s.data_types[0] === entry.id)) {
       omitted++; continue;
     }
     if (connection) {
-      const exact = entry.fields ? [entry] : parseConnections(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
-      const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
-      if (!schema || !compatibleSchema(schema)) { omitted++; continue; }
       const setupSession = owner === own && parseSetupSession(entry.description);
       if (setupSession) source.setupSession = setupSession;
       if (owner === own) source.assessment = parseStatus(entry.description);
@@ -154,6 +159,12 @@ export async function discoverThreads(app) {
     }
   }
   for (const thread of threads.values()) {
+    for (const source of thread.sources) {
+      if (source.direction !== 'Incoming') continue;
+      const matchedOutboxes = thread.sources.filter(s => s.direction === 'Outgoing'
+        && s.matchedPeers?.some(p => p.fulcra_userid === source.fulcra_userid && p.data_type === source.id)).map(s => s.id);
+      if (matchedOutboxes.length) Object.assign(source, { matchedOutboxes, association: 'matched' });
+    }
     const identifier = threadIdentifier(thread.participants ? thread.sources.filter(s => s.direction === 'Outgoing') : thread.sources);
     thread.assessment = aggregateStatus(thread.sources);
     if (identifier) thread.identifier = identifier;
@@ -163,7 +174,7 @@ export async function discoverThreads(app) {
       .map(s => s.sharing_fulcra_user_name));
     if (names.size === 1) thread.accountName = [...names][0];
     thread.warnings.push(...warnings);
-    if (thread.participants) thread.warnings.push('Own audience only. Available incoming channels from these owners are shared with us; their association and remote audiences are not verified. Select which incoming channels to read below. Matching names are not proof.');
+    if (thread.participants) thread.warnings.push('Own audience only. Incoming channels may have saved matches; remote audiences are not verified. Select which incoming channels to read below. Matching names are not proof.');
     else if (thread.sources.some(s => s.direction === 'Incoming')) thread.warnings.push('Incoming channel co-recipients are not disclosed by the service; this is not a verified complete roster.');
     for (const direction of ['Incoming', 'Outgoing']) {
       if (!thread.sources.some(s => s.direction === direction)) thread.warnings.push(`Conversation incomplete — missing ${direction.toLowerCase()} channel for this peer.`);

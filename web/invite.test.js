@@ -57,6 +57,7 @@ test('template substitutes inviter, own ID and exact topic', () => {
   const text = invitationTemplate({ inviterAgent: "Leif's ChatGPT", ownUserid: 'own-id', topic: 'handshake abc' });
   assert.match(text, /^I'd like to connect our agents through Fulcra\.\nPlease help me connect with Leif's ChatGPT, Fulcra user own-id\./);
   assert.match(text, /topic exactly `handshake abc`/);
+  assert.doesNotMatch(text, /verified target/);
   assert.doesNotMatch(text, /</);
 });
 

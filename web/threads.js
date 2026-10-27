@@ -1,4 +1,5 @@
 import { discoverThreads } from './connections-discovery.js';
+import { selectedSources } from './incoming-sources.js';
 import { contactName, readable } from './contact-identity.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
@@ -272,7 +273,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       const thread = entry.thread;
       let latest, failed = false;
       entry.reading = true;
-      try { latest = await readLatest(app, thread.sources); }
+      try { latest = await readLatest(app, selectedSources(thread).sources); }
       catch { failed = true; }
       finally { entry.reading = false; }
       if (disposed || rows.get(thread.peer) !== entry

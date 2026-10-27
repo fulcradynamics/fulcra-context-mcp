@@ -12,7 +12,8 @@ from fastmcp.tools.tool import ToolResult
 
 from .tools import get_data_catalog, list_shares
 from .contact_identifier import parse_contact_identifier
-from .connection_compatibility import SHARE_NAME_PREFIX, CHANNEL_PREFIXES
+from .channel_metadata import is_template
+
 
 mentions_mcp = FastMCP("Agents I Know mentions")
 CHANNEL_SCHEMA = json.loads(files('fulcra_mcp').joinpath('static/connection-schema.json').read_text())
@@ -51,7 +52,7 @@ async def _discover_threads() -> dict[str, str]:
         shares = json.loads((await list_shares(direction="both")).removeprefix("Shares: "))
         for entries in catalog.values():
             for entry in entries:
-                if not entry.get('fields') and entry.get('id', '').startswith('Event/') and entry.get('description', '').startswith(CHANNEL_PREFIXES):
+                if not entry.get('fields') and entry.get('id', '').startswith('Event/'):
                     exact = json.loads((await get_data_catalog(data_type=entry['id'],
                         fulcra_userid=entry.get('fulcra_userid') or shares['own_fulcra_userid'])).removeprefix(
                             'Available data types, grouped by compatible tool: '))
@@ -82,7 +83,8 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                     and ("fulcra_userid" not in entry or isinstance(entry["fulcra_userid"], str))):
                 raise ValueError("Invalid catalog identity")
             if (not entry['id'].startswith('Event/')
-                    or not entry.get('description', '').startswith(CHANNEL_PREFIXES)
+                    or is_template(entry.get('description'))
+                    or entry.get('name') == 'connect-our-agents-standing-invitation'
                     or not _compatible_schema(entry)):
                 continue
             peer = entry.get("fulcra_userid") or own
@@ -94,16 +96,13 @@ def _thread_labels(catalog: dict, shares: dict) -> dict[str, str]:
                           and s.get('data_types') == [entry['id']]
                           and not s.get('file_paths') and not s.get('file_history_paths')]
                 grants = [_direct_recipient(s) for s in narrow]
-                if (not grants or any(not g for g in grants)
-                        or not all((s.get('datashare_name') or '').startswith(SHARE_NAME_PREFIX) for s in narrow)):
+                if not grants or any(not g for g in grants):
                     continue
                 recipients = sorted({p for g in grants for p in g})
                 if own in recipients or len(recipients) > 32:
                     continue
                 peer = recipients[0] if len(recipients) == 1 else 'connection:' + json.dumps(sorted([own, *recipients]), separators=(',', ':'))
             elif not any(s.get('sharing_fulcra_userid') == peer and s.get('grant_type') == 'user'
-                         and isinstance(s.get('datashare_name'), str)
-                         and s['datashare_name'].startswith(SHARE_NAME_PREFIX)
                          and not any(s.get(k) for k in ('share_all_data', 'group_id', 'time_start', 'time_end'))
                          and s.get('data_types') == [entry['id']] for s in shares['incoming']):
                 continue
