@@ -1,4 +1,4 @@
-"""Private contact preferences stored in one owned Event data type's description.
+"""Contact preferences stored in one owned Event data type's description.
 
 The description holds a JSON document: global values plus per-connection
 overrides keyed by ``<own Event connection>|<peer user ID>``. Values are user
@@ -84,12 +84,11 @@ def find_type(api, own):
     return min(entries, key=lambda e: e['id']) if entries else None
 
 
-def _check_private(api, entry):
-    shares = api.get_datashares()
-    covering = {'*', 'Event', 'Event/*'} | ({entry['id']} if entry else set())
-    for share in shares:
-        if share.get('share_all_data') or covering & set(share.get('fulcra_data_types') or []):
-            raise ValueError('Preferences may be shared; repair privacy first.')
+def _check_state_shares(api, entry):
+    # Do not deliberately use state as a shared channel.
+    for share in api.get_datashares():
+        if entry and not share.get('share_all_data') and share.get('fulcra_data_types') == [entry['id']]:
+            raise ValueError('State storage has a targeted share; use separate storage.')
 
 
 def _parse(entry):
@@ -112,7 +111,7 @@ def _state(api):
     if not isinstance(own, str) or not own:
         raise ValueError('Missing authenticated account.')
     entry = find_type(api, own)
-    _check_private(api, entry)
+    _check_state_shares(api, entry)
     return own, entry, _parse(entry)
 
 

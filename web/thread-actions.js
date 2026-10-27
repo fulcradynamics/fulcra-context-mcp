@@ -1,5 +1,6 @@
 import { clearPostedDraft, matchesPost, messageId, postRecord } from './connection-send.js';
 import { unreadMessages } from './unread.js';
+import { availableSources, resolveOutbox, selectedSources, sourceKey } from './incoming-sources.js';
 import { icon, Send } from './icons.js';
 import { sessionHandoff } from './setup-session.js';
 import { showToast, continueMessage, spinButton } from './toast.js';
@@ -103,7 +104,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
       ? `Send replies to ${name}; Continue in ${host || 'chat'} to work on it there.`
       : `Send replies to ${name} directly. Continue in chat isn’t available on this host.`;
     if (hint.textContent !== hintText) hint.textContent = hintText;
-    const outgoing = (current.thread?.sources.filter(s => s.direction === 'Outgoing') ?? [])
+    const outgoing = (current.thread ? availableSources(current.thread).filter(s => s.direction === 'Outgoing') : [])
       .sort((a, b) => (b.sharedAt ?? 0) - (a.sharedAt ?? 0) || a.id.localeCompare(b.id));
     const identity = JSON.stringify(outgoing);
     if (identity !== sourceIdentity) {
@@ -117,7 +118,7 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
         outbox.append(option);
       }
       draft.outbox = outgoing.some(s => s.id === draft.outbox) ? draft.outbox
-        : draft.outbox === undefined ? outgoing[0]?.id ?? '' : '';
+        : draft.outbox === undefined && current.thread ? resolveOutbox(current.thread)?.id ?? '' : '';
       outbox.value = draft.outbox;
     }
     const selected = outgoing.find(s => s.id === outbox.value);
@@ -143,15 +144,16 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     handoff.disabled = sending || !supported || lifecycle.pending || draft.handoffUncertain || !isCurrent() || !context();
   };
   input.addEventListener('input', () => { draft.value = input.value; draft.version++; update(); });
-  outbox.addEventListener('change', () => { draft.outbox = outbox.value; update(); });
+  outbox.addEventListener('change', () => { draft.outbox = outbox.value; changed('sources'); update(); });
   lifecycle.onChange = update;
   send.addEventListener('click', async () => {
     update(); if (send.disabled) return;
     // Sending answers the newest unread message and acknowledges the rest.
-    // Answers name the target's sender; the server finds targets on their channel.
+    // Reply references come from displayed records, without a server target lookup.
     const audience = view().thread?.expectedPeerUserids;
     const acknowledgementAddress = ackAddress();
-    const unread = unreadMessages(view().result?.messages ?? [], draft.acks), target = unread.at(-1);
+    const allowed = selectedSources(view().thread, draft.excludedSources, source.id).sources.map(sourceKey);
+    const unread = unreadMessages((view().result?.messages ?? []).filter(m => allowed.includes(sourceKey(m.source))), draft.acks), target = unread.at(-1);
     const peer = target?.source.fulcra_userid ?? audience?.[0] ?? peerId(), mid = messageId(), startedAt = Date.now();
     const envelope = { id: mid, sender: view().viewingAgent, kind: target ? 'reply' : 'message', priority: 'P2',
       topic: target?.record.topic ?? 'chat', body: input.value, ...(target ? { in_reply_to: target.record.id } : {}) };

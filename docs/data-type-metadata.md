@@ -39,16 +39,12 @@ Concurrent clients may race after preflight or verification.
 
 `create_data_type`, `update_data_type`, `create_share`, `list_shares` and
 `get_data_catalog` behave the same for every type, including the contacts app's
-`Fulcra Agent Invitations` and `Fulcra Contact Preferences` stores. A user may
+`Fulcra Contact Preferences` store and channel descriptions. A user may
 share or rename those types like any other; ordinary authentication, ownership
 and input validation still apply.
 
-The contacts app keeps its own checks: before reading or writing either store it
-refuses to continue while any outgoing grant covers it (share-all, `*`, `Event`,
-`Event/*` or the exact type). So a user who shares a store has disclosed its
-contents to the recipients, and invitations or preferences stop working until
-that share is deleted. Nothing is deleted or rewritten automatically.
+The contacts app checks exact targeted shares on its preferences store, independently of broader access policy. Invitations and durable owner/channel pairs live on the owned outbox using [channel metadata](channel-metadata.md), not a separate store. Metadata records matching decisions; it neither grants access nor requires a particular way of resolving the pair. Nothing is deleted or shared automatically by the generic metadata tool.
 
-Description markers (`[mesh_identifier: …]`, `[contact_status: …]`,
+Description markers (`[agent_connection: …]`, `[mesh_identifier: …]`, `[contact_status: …]`,
 `converted_from_mesh: […]`, `standing_invitation_inviter: …`) are found by token,
 not by line, so they parse the same from raw and whitespace-folded descriptions.

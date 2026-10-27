@@ -46,7 +46,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
    if(name==='get_message_check_status'){reply(r.id,window.checkStatus?{structuredContent:window.checkStatus}:{isError:true});return;}
    if(name==='create_agent_invitation'){reply(r.id,window.failInvite?{isError:true,content:[{type:'text',text:'Synthetic denial.'}]}:{structuredContent:{status:'prepared',own_userid:own,code:'0123456789abcdef0123456789abcdef',topic:'handshake 0123456789abcdef0123456789abcdef',data_type:out,identifier:a.recipient_name+"'s agent",shared_with:a.recipient_userid??null}});return;}
    if(name==='prepare_standing_agent_invitation'){if(a.inviter_name!==undefined)window.standingName=a.inviter_name;reply(r.id,window.failStanding?{isError:true,content:[{type:'text',text:'Synthetic denial.'}]}:{structuredContent:{status:'prepared',own_userid:own,code:'f'.repeat(32),topic:'open_invitation '+'f'.repeat(32),data_type:'Event/standing',inviter_name:window.standingName??''}});return;}
-   if(name==='end_agent_contact'){window.excludeOut=true;reply(r.id,{structuredContent:{ended:true,archived:a.archive,status:'ended'}});return;}
+   if(name==='end_agent_contact'){window.excludeOut=true;reply(r.id,{structuredContent:{ended:true,archived:a.archive,status:'ended',broader_access_remains:window.remainingBroadAccess??false}});return;}
    if(name==='match_agent_invitations'){
     const respond=()=>reply(r.id,{structuredContent:{results:window.invitationMatches ?? []}});
     if(window.holdMatches)window.releaseMatch=respond;else respond();
@@ -72,9 +72,19 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(window.contactStatus?'[contact_status: '+JSON.stringify(window.contactStatus)+']\n':'')+'[mesh_identifier: "'+(window.unnamed ? peer : 'Weekend')+'"]',...schema})),
     ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
    if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
+    ...(window.extraOutgoing ?? []),
     ...(window.navigationContact ? [{share_all_data:false,file_paths:[],file_history_paths:[],data_types:['Event/navigation-out'],with_user_ids:['navigation-peer'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
     ...(window.direct ? [{share_all_data:false,file_paths:[],file_history_paths:[],data_types:[out.slice(0,-1)+'9'],with_user_ids:[peer],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
     ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({created_at: id === out ? '2026-10-10T12:00:00Z' : '2026-10-12T12:00:00Z',share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',file_paths:[],file_history_paths:[],data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',file_paths:[],file_history_paths:[],data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
+   if (window.pairedChannels && discovery) {
+    const secondOut = out.slice(0,-1)+'8', secondIn = incoming.slice(0,-1)+'9';
+    if (name === 'get_data_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
+     [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]].map(([id, owner, match]) => ({id, name: id, fulcra_userid: owner, ...schema,
+      description: match ? '[agent_connection: '+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+']' : ''}))});
+    else text = 'Shares: ' + JSON.stringify({own_fulcra_userid:own,
+     outgoing:[out,secondOut].map(id=>({share_all_data:false,data_types:[id],with_user_ids:[peer]})),
+     incoming:[incoming,secondIn].map(id=>({sharing_fulcra_userid:peer,grant_type:'user',data_types:[id]}))});
+   }
    if(name==='get_records') {
     if(window.failReads) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
     const records = window.emptyRecords || a.data_type.startsWith('Event/navigation-') ? [] : a.fulcra_userid?[
@@ -82,8 +92,10 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     {id:a.fulcra_userid+'-2',start_time:'2026-10-13T11:01:00Z',sender:'SharedName',kind:'message',body:'Other agent message',recipients:['ChatGPT','<script>bad</script>']},
     {id:a.fulcra_userid+'-3',start_time:'2026-10-13T11:02:00Z',sender:'SharedName',kind:'message',body:'Broadcast message',recipients:['all']}
     ]:window.ownRecords;
-    text=`Records for ${a.data_type} from start to end: `+JSON.stringify(a.latest ? records.slice(-1) : records);
+    const selectedRecords = window.pairedChannels ? (a.fulcra_userid ? [{id:a.data_type+'-message', start_time:a.data_type === incoming ? '2026-10-13T11:00:00Z' : '2026-10-13T11:59:00Z', sender:'Peer',kind:'message',body:a.data_type === incoming ? 'First paired message' : 'Second paired message'}] : []) : records;
+    text=`Records for ${a.data_type} from start to end: `+JSON.stringify(a.latest ? selectedRecords.slice(-1) : selectedRecords);
    }
+   if (discovery && window.unmarkedChannels) text = text.replaceAll('connect-agents-with-anyone', 'Project');
    const respond=()=>reply(r.id,{content:[{type:'text',text}]});
    if(discovery && window.holdDiscovery)window.heldDiscovery.push(respond);
    else if(name==='get_records' && (window.holdReads === true

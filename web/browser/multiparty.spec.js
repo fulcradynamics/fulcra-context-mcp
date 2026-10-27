@@ -28,9 +28,9 @@ test('incoming selection remains selectable across polling and context includes 
  await boxes.first().check(); await page.clock.runFor(11000);
  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
  await ui.getByRole('button',{name:'Continue in synthetic',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>JSON.stringify(window.contexts))).toContain('remote audiences are unverified');
+ await expect.poll(()=>page.evaluate(()=>JSON.stringify(window.contexts))).toContain('remote audiences are not verified');
  const context=await page.evaluate(()=>JSON.stringify(window.contexts));
- expect(context).toContain('remote audiences are unverified');
+ expect(context).toContain('remote audiences are not verified');
  expect(context).toContain(incoming); expect(context).toContain(own);
 });
 test('revoked selected outbox never silently switches draft to another channel',async({page})=>{

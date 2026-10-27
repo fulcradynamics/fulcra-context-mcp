@@ -49,12 +49,12 @@ async def test_multiparty_overrides_require_exact_audience(backend, store):
         assert readback.structured_content['values']['attention_peer_membership_announcements'] is False
 
 
-@pytest.mark.parametrize('option', ['peer', 'schema', 'invalid', 'broad_grant', 'revoked'])
+@pytest.mark.parametrize('option', ['peer', 'schema', 'invalid', 'broad_only', 'revoked'])
 async def test_override_rejects_unowned_or_invalid(backend, store, option):
     if option == 'peer': backend['row']['fulcra_userid'] = PEER
     if option == 'schema': backend['schema'] = {'properties': {}}
-    if option == 'broad_grant':
-        backend['shares'].append(dict(share_all_data=True, fulcra_data_types=[], permissions=[]))
+    if option == 'broad_only':
+        backend['shares'][:] = [dict(share_all_data=True, fulcra_data_types=[], permissions=[])]
     if option == 'revoked': backend['shares'].clear()
     overrides = {'autonomous_replies': True} if option == 'invalid' else {'notifications': 'none'}
     async with Client(mcp) as client:
