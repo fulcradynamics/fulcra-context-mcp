@@ -4,6 +4,15 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.3 release notes
+
+- Serve `/openai/mcp` with the same OAuth but without `get_location`, `get_sleep`,
+  `get_workouts` or `get_time_series`; `/mcp` retains every tool. Provide the
+  endpoint's path-form protected-resource metadata.
+- Serve the OpenAI domain verification challenge from `OPENAI_APPS_CHALLENGE`.
+- Mark `send_agent_message` destructive, matching the app send interface.
+- Retain flexible channel matching, independent broad sharing and contacts UI v81.
+
 ## 1.19.1 release notes
 
 - Reply and acknowledgement references no longer require target lookup, target

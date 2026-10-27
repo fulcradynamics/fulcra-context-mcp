@@ -14,17 +14,17 @@ get_sleep get_location get_calendar_events list_files list_shares get_user_info
 open_file_manager open_agent_contacts open_agent_contacts_home search_agent_contacts
 get_fulcra_settings get_contact_preferences get_message_check_status get_groups read_file
 """.split())
-# Tools that exist on main keep main's readOnly/destructive hints; this only
-# makes them explicit.
+# Additive operations do not carry the destructive hint.
 ADDITIVE = set("""
 create_data_type restore_data_type prepare_agent_invitation create_group
-record_data send_agent_message write_file restore_file create_share join_group
+record_data write_file restore_file create_share join_group
 start_file_upload upload_file_chunk
 """.split())
 # Preparation only adds a private code; standing preparation can overwrite a
 # saved name. Matching creates return grants, unlike read-only contact discovery.
+# Both send interfaces are destructive because a sent message cannot be unsent.
 DESTRUCTIVE = set("""
-update_data_type send_agent_contact_message end_agent_contact set_contact_identifier
+update_data_type send_agent_message send_agent_contact_message end_agent_contact set_contact_identifier
 set_contact_status archive_data_type delete_records create_agent_invitation
 prepare_standing_agent_invitation match_agent_invitations delete_file delete_share
 leave_group update_fulcra_settings set_contact_preferences
