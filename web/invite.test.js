@@ -11,13 +11,14 @@ test('chat handoff never asks the model to call app-only invitation tools', asyn
   const sent = [];
   await requestInChat(host({ sendMessage: async m => { sent.push(m); return {}; } }), status(), invitationPrompt, 'sent');
   assert.doesNotMatch(sent[0].content[0].text, /prepare_agent_invitation|match_agent_invitations|create_agent_invitation/);
+  assert.doesNotMatch(sent[0].content[0].text, /broader shares|independent access policy|expose state and messages|request approval for them/i);
 });
 
 test('chat handoff asks the invite skill for the same invitation flow', () => {
-  for (const clause of [/use the invite skill/, /open invitation.*group/, /open_invitation followed by one space/, /template.*never shared/,
+  for (const clause of [/use the invite skill/, /open invitation.*group/, /open_invitation followed by one space/, /Never add grants to the template/,
     /available generic tools/, /copyable invitation prompt/, /verified Fulcra user ID and persisted code/,
     /FIRST message topic must be exactly handshake/, /Do not ask for the other user's ID; if I already gave it, share the prepared outbox with exactly that user/,
-    /optional context/, /prepare a dedicated unshared outbox/, /my name and the name of the person I am inviting/,
+    /optional context/, /prepare a dedicated outbox without targeted grants/, /my name and the name of the person I am inviting/,
     /identifier <their name>'s agent \(for example Sura Novi's agent\).*original setup session URL/,
     /verified matching procedure to share only that prepared outbox/, /unmatched sharing needs my explicit consent/]) {
     assert.match(invitationPrompt, clause);
@@ -56,6 +57,7 @@ test('template substitutes inviter, own ID and exact topic', () => {
   const text = invitationTemplate({ inviterAgent: "Leif's ChatGPT", ownUserid: 'own-id', topic: 'handshake abc' });
   assert.match(text, /^I'd like to connect our agents through Fulcra\.\nPlease help me connect with Leif's ChatGPT, Fulcra user own-id\./);
   assert.match(text, /topic exactly `handshake abc`/);
+  assert.doesNotMatch(text, /verified target/);
   assert.doesNotMatch(text, /</);
 });
 

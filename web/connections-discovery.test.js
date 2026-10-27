@@ -105,19 +105,14 @@ test('only catalog groups compatible with get_records are readable', () => {
   assert.deepEqual(parseConnections(text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types that cannot be queried (used only when recording data)': [entry('x')] }))), []);
 });
 
-test('orphans and self do not become threads; broad/mixed grants cannot hide behind a narrow grant', async () => {
+test('orphans and self do not become threads; targeted group grants fail closed', async () => {
   for (const extra of [
-
-    { ...grant('own'), data_types: ['Event/own', 'StepCount'] },
-    { share_all_data: true },
     { ...grant('own'), with_group_ids: ['group'] },
-    { ...grant('own'), file_paths: ['/'] },
-
   ]) {
     const result = await load([entry('own'), entry('orphan'), entry('self', 'me'), entry('incoming', 'peer')], [grant('own'), extra, grant('self', 'me')]);
     assert.deepEqual(result.selections.map(t => t.peer), ['peer']);
     assert.equal(result.selections[0].sources.length, 1);
-    assert.match(result.warnings.join(' '), new RegExp(`${extra.share_all_data ? 3 : 2} own outboxes omitted`));
+    assert.match(result.warnings.join(' '), /2 own outboxes omitted/);
     assert.match(result.selections[0].warnings.join(' '), /missing outgoing/i);
   }
 });

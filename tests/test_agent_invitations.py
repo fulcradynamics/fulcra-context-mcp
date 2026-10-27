@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from fulcra_api import connections
 from fulcra_mcp import agent_invitations as invitations
+from fulcra_mcp.channel_metadata import parse_metadata
 
 OWN = '00000000-0000-4000-8000-000000000001'
 PEER = '00000000-0000-4000-8000-000000000002'
@@ -64,7 +65,7 @@ def test_prepare_persists_random_unique_code_and_reuses_it(api):
     assert len(first['code']) == 32 and first['own_userid'] == OWN
     assert first == invitations.prepare(api, OUT)
     assert first['topic'] == 'handshake ' + first['code']
-    assert first['code'] in api.catalog[-1]['description']
+    assert first['code'] in api.catalog[0]['description']
     api.create_datashare.assert_not_called()
 
 
@@ -85,15 +86,6 @@ def test_unrelated_unnamed_direct_grant_does_not_block_matching(api):
     api.get_shared_datasets.return_value.append(dict(incoming(),
         datashare_name=None, fulcra_data_types=['file:/shared/']))
     assert invitations.match(api)['results'][0]['status'] == 'matched'
-
-
-def test_sibling_reply_target_ignores_unnamed_grant(api):
-    from datetime import datetime, timezone
-    from fulcra_mcp.connection import _target
-    handshake(api, 'a' * 32)
-    api.get_shared_datasets.return_value.insert(0, dict(incoming(),
-        datashare_name=None, fulcra_data_types=['file:/shared/']))
-    assert _target(api, PEER, OTHER, datetime(2026, 10, 2, tzinfo=timezone.utc))['id'] == OTHER
 
 
 def test_sibling_mentions_ignore_unnamed_grant():
@@ -121,7 +113,7 @@ def test_failure_diagnostics_do_not_expose_exception_data(api, caplog, failure, 
     api.create_datashare.assert_not_called()
 
 
-@pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'broad'])
+@pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'targeted'])
 def test_unsafe_evidence_never_shares(api, mode):
     code = invitations.prepare(api, OUT)['code']
     handshake(api, code)
@@ -140,7 +132,7 @@ def test_unsafe_evidence_never_shares(api, mode):
         api.catalog.append(channel(IN, OTHER)); api.get_shared_datasets.return_value.append(incoming(OTHER)); handshake(api, code, OTHER)
     if mode == 'schema': api.v1_catalog_schema.return_value = {}
     if mode == 'read_failure': api.get_shared_datasets.side_effect = TimeoutError
-    if mode == 'broad': api.get_datashares.return_value = [dict(share_all_data=True, fulcra_data_types=[])]
+    if mode == 'targeted': api.get_datashares.return_value = [dict(share_all_data=False, fulcra_data_types=[OUT])]
     assert not any(r['status'] == 'matched' for r in invitations.match(api)['results'])
     api.create_datashare.assert_not_called()
 
@@ -152,7 +144,7 @@ def test_unsafe_evidence_never_shares(api, mode):
     {'time_start': '2020-01-01T00:00:00Z'},
     {'time_end': '2099-01-01T00:00:00Z'},
     {'share_all_data': True},
-    {'datashare_name': None},
+
 ])
 def test_incoming_grant_must_remain_narrow_and_direct(api, change):
     code = invitations.prepare(api, OUT)['code']
@@ -183,7 +175,7 @@ def test_http_history_failure_is_sanitized_and_preserves_prepared_consent(api, c
     assert result['diagnostic'] == dict(stage='handshake_history', category='http', http_status=422)
     assert code not in json.dumps(result) + caplog.text
     assert 'private body' not in json.dumps(result) + caplog.text
-    assert json.loads(api.catalog[-1]['description'])['invitations'][OUT]['state'] == 'prepared'
+    assert parse_metadata(api.catalog[0]['description'])['invitation']['state'] == 'prepared'
     api.create_datashare.assert_not_called()
 
 
@@ -218,9 +210,7 @@ def test_codes_are_unique_and_collision_fails_closed(api, monkeypatch):
 
 def test_duplicate_stored_code_fails_closed(api):
     code = invitations.prepare(api, OUT)['code']; handshake(api, code)
-    document = json.loads(api.catalog[-1]['description'])
-    document['invitations'][OUT[:-1] + '1'] = dict(document['invitations'][OUT])
-    api.catalog[-1]['description'] = json.dumps(document)
+    api.catalog.append(dict(api.catalog[0], id=OUT[:-1] + '1'))
     assert invitations.match(api)['status'] == 'unavailable'
     api.create_datashare.assert_not_called()
 
@@ -278,10 +268,7 @@ NEW = 'Event/00000000-0000-4000-8000-000000000030'
 
 @pytest.fixture
 def creating(api):
-    create_state = api.create_data_type.side_effect
     def create(base, body):
-        if body.get('name') == invitations.NAME:
-            return create_state(base, body)
         api.catalog.append(dict(channel(NEW, OWN), name=body['name'], description=body['description']))
         return dict(id=NEW)
     api.create_data_type.side_effect = create
@@ -294,7 +281,7 @@ def test_create_labels_new_outbox_and_prepares_unshared_code(creating):
     assert result['topic'] == 'handshake ' + result['code'] and result['shared_with'] is None
     entry = next(e for e in creating.catalog if e['id'] == NEW)
     assert entry['name'] == 'Leif with Lucian'
-    assert entry['description'].startswith('connect-our-agents channel\n[mesh_identifier: ')
+    assert 'connect-our-agents channel\n[mesh_identifier: ' in entry['description']
     creating.create_datashare.assert_not_called()
 
 

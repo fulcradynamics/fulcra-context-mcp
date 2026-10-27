@@ -7,7 +7,7 @@ export function buildThreadContext(peer, range, result) {
     selected_sources: result.sources?.map(({ id, fulcra_userid, direction, association, expectedPeerUserids }) =>
       ({ id, fulcra_userid, direction, association, expected_peer_userids: expectedPeerUserids })),
     ...(result.participants ? { thread_id: peer, participants: result.participants,
-      roster_scope: 'Exact own-channel audience only. Incoming owner/type channels are shared with us; association and remote audiences are unverified.' } : { peer_fulcra_userid: peer }),
+      roster_scope: 'Exact own-channel audience only. Incoming owner/type channels are shared with us; saved matches record own decisions, not remote audiences.' } : { peer_fulcra_userid: peer }),
     range, warnings: result.warnings,
     addressing: { viewing_agent: result.viewingAgent ?? 'chatgpt', meaning: 'Case-sensitive agent names, not verified humans. All readers can read all history.' },
     completeness: result.warnings.length ? 'partial' : 'complete for applied range',

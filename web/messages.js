@@ -1,7 +1,7 @@
 import { createThreadComposer } from './thread-composer.js';
 import { contactName, readable, contactIdentity } from './contact-identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
-import { incomingSelector, selectedSources } from './incoming-sources.js';
+import { incomingSelector, selectedSources, availableSources, sourceKey } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
 import { readConversation, readLatest } from './conversation.js';
 import { createMessageList } from './message-list.js';
@@ -45,11 +45,13 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!selected) return;
     acknowledgeOnOpen = false;
     const draft = drafts.get(selected.peer);
-    draft.excludedSources = [...new Set([...(draft.excludedSources ?? []).filter(k => k !== key), ...(!checked ? [key] : [])])];
+    const excluded = draft.excludedSources ?? availableSources(selected).filter(s => s.direction === 'Incoming'
+      && !selected.sources.some(t => sourceKey(t) === sourceKey(s))).map(sourceKey);
+    draft.excludedSources = [...new Set([...excluded.filter(k => k !== key), ...(!checked ? [key] : [])])];
     contextLifecycle.invalidate();
     // Selection changes invalidate reads, not the mounted composer's lifetime.
     sourceGeneration++;
-    selected = selectedSources(selected, draft.excludedSources);
+    selected = selectedSources(selected, draft.excludedSources, draft.outbox);
     if (displayed) {
       displayed = { ...displayed,
         messages: displayed.messages.filter(m => selected.sources.some(s => s.id === m.source.id && s.fulcra_userid === m.source.fulcra_userid)),
@@ -76,10 +78,10 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!choice || thread !== selected) return;
     endButton.disabled = true; status.textContent = `Ending contact with ${name}…`;
     try {
-      await endContact(app, thread, choice.archive);
+      const ended = await endContact(app, { ...thread, sources: availableSources(thread) }, choice.archive);
       if (thread !== selected) return;
       onBack();
-      doc.querySelector('#status').textContent = `Ended contact with ${name}.`;
+      doc.querySelector('#status').textContent = `Ended contact with ${name}.` + (ended.broaderAccessRemains ? ' Broader shares remain and may still allow access to these messages.' : '');
     } catch (error) {
       if (thread === selected) status.textContent = `Could not end contact with ${name}: ${error.message}`;
     } finally { endButton.disabled = false; requestRefresh(); }
@@ -211,7 +213,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       let provenance = item.querySelector('.message-source');
       if (!provenance) { provenance = doc.createElement('span'); provenance.className = 'message-source'; meta.append(provenance); }
       provenance.hidden = !selected?.participants;
-      provenance.textContent = selected?.participants ? `${readable(selected.participants.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — association unverified` : '';
+      provenance.textContent = selected?.participants ? `${readable(selected.participants.find(p => p.id === source.fulcra_userid)?.name, 'Contact')} — ${source.association === 'matched' ? 'saved match' : 'association unverified'}` : '';
       // Optimistic send state for outgoing posts.
       let badge = item.querySelector('.send-badge');
       if (state && !badge) { badge = doc.createElement('span'); badge.className = 'send-badge'; meta.append(badge); }
@@ -264,7 +266,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     rosterWarning.textContent = thread.warnings.filter(w => /audiences|co-recipients/.test(w)).join(' ');
     rosterWarning.hidden = !rosterWarning.textContent;
     converted.hidden = !thread.convertedFrom?.length;
-    endButton.hidden = Boolean(thread.participants) || !thread.sources.some(s => s.direction === 'Outgoing');
+    endButton.hidden = Boolean(thread.participants) || !availableSources(thread).some(s => s.direction === 'Outgoing');
     refreshLegacyHandoff();
   };
   // The thread's current topic (latest meaningful one), shown under the name.
@@ -325,7 +327,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
     if (unavailable) {
       lastSuccess = undefined;
-      selected = { ...selected, sources: [], convertedFrom: [], assessment: undefined };
+      selected = { ...selected, sources: [], availableSources: [], convertedFrom: [], assessment: undefined };
       contextLifecycle.invalidate();
     }
     render(displayed, canSend);
@@ -338,12 +340,12 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
     try {
       const available = discovery.threads.find(t => t.peer === selected.peer);
-      if (available) incoming.update(available, drafts.get(selected.peer)?.excludedSources);
-      const thread = available && selectedSources(available, drafts.get(selected.peer)?.excludedSources);
+      if (available) incoming.update(available, drafts.get(selected.peer)?.excludedSources, drafts.get(selected.peer)?.outbox);
+      const thread = available && selectedSources(available, drafts.get(selected.peer)?.excludedSources, drafts.get(selected.peer)?.outbox);
       if (thread) discovery = { ...discovery, threads: discovery.threads.map(t => t.peer === thread.peer ? thread : t) };
       const sourcesRemoved = selected.sources.some(s => !thread?.sources.some(t => t.id === s.id && t.fulcra_userid === s.fulcra_userid));
       if (sourcesRemoved || JSON.stringify(selected.convertedFrom) !== JSON.stringify(thread?.convertedFrom)) contextLifecycle.invalidate();
-      selected = thread ?? { ...selected, sources: [], convertedFrom: [], assessment: undefined };
+      selected = thread ?? { ...selected, sources: [], availableSources: [], convertedFrom: [], assessment: undefined };
       setTitle(selected);
       // Exclude revoked channels immediately, including when a new range fails.
       if (displayed) {
@@ -447,11 +449,24 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     messageList.clear();
     visibleMessages = []; liveTopic = '';
     if (!drafts.has(thread.peer)) drafts.set(thread.peer, { value: '', version: 0 });
-    incoming.update(thread, drafts.get(thread.peer).excludedSources);
-    selected = selectedSources(thread, drafts.get(thread.peer).excludedSources);
+    incoming.update(thread, drafts.get(thread.peer).excludedSources, drafts.get(thread.peer).outbox);
+    selected = selectedSources(thread, drafts.get(thread.peer).excludedSources, drafts.get(thread.peer).outbox);
     updateComposer = createThreadComposer(app, composer, () => generation === selectionGeneration, contextLifecycle, presentation, drafts.get(thread.peer),
       () => ({ thread: generation === selectionGeneration ? selected : undefined, result: displayed, ready, viewingAgent: activeViewer }),
-      () => { if (generation === selectionGeneration && selected && displayed) render(displayed, ready); });
+      reason => {
+        if (generation !== selectionGeneration || !selected) return;
+        if (reason === 'sources') {
+          const draft = drafts.get(selected.peer);
+          acknowledgeOnOpen = false;
+          contextLifecycle.invalidate(); sourceGeneration++;
+          selected = selectedSources(selected, draft.excludedSources, draft.outbox);
+          incoming.update(selected, draft.excludedSources, draft.outbox);
+          if (displayed) displayed = { ...displayed, messages: displayed.messages.filter(m => selected.sources.some(s => sourceKey(s) === sourceKey(m.source))), warnings: selected.warnings };
+          ready = false;
+          requestRefresh();
+        }
+        if (displayed) render(displayed, ready);
+      });
     updateComposer(thread.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
     setTitle(thread);
     history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
