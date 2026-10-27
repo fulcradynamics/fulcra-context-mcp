@@ -1,5 +1,6 @@
 """Regression coverage for invitation matching and private covering grants."""
 import json
+from fulcra_mcp.channel_metadata import parse_metadata
 import pytest
 from test_agent_invitations import api, handshake, invitations, OWN, PEER, OTHER, OUT, IN, STATE
 
@@ -35,7 +36,7 @@ def test_completed_invitation_leaves_later_lifecycle_to_discovery(api):
     code = invitations.prepare(api, OUT)['code']
     handshake(api, code)
     assert invitations.match(api)['results'][0]['status'] == 'matched'
-    assert json.loads(api.catalog[-1]['description'])['invitations'][OUT]['state'] == 'completed'
+    assert parse_metadata(api.catalog[0]['description'])['invitation']['state'] == 'completed'
     api.get_datashares.return_value[0]['permissions'].append({'allowed_fulcra_userid': OTHER})
     api.get_shared_datasets.side_effect = AssertionError('Completed invitations need no history scan')
     assert invitations.match(api) == {'results': []}
@@ -49,12 +50,12 @@ def test_completion_save_failure_retains_consumed_no_retry_state(api):
     handshake(api, code)
     update = api.update_data_type.side_effect
     def fail_completion(base, id, body):
-        if json.loads(body['description'])['invitations'][OUT]['state'] == 'completed':
+        if parse_metadata(body['description'])['invitation']['state'] == 'completed':
             raise TimeoutError
         update(base, id, body)
     api.update_data_type.side_effect = fail_completion
     assert invitations.match(api)['results'][0]['status'] == 'pending'
-    assert json.loads(api.catalog[-1]['description'])['invitations'][OUT]['state'] == 'consumed'
+    assert parse_metadata(api.catalog[0]['description'])['invitation']['state'] == 'consumed'
     api.get_datashares.return_value = []
     assert invitations.match(api)['results'][0]['status'] == 'pending'
     api.create_datashare.assert_called_once()
@@ -71,7 +72,7 @@ def test_uncertain_attempt_does_not_accept_expanded_audience(api):
     assert invitations.match(api)['results'][0]['status'] == 'pending'
     api.get_datashares.return_value[0]['permissions'].append({'allowed_fulcra_userid': OTHER})
     assert invitations.match(api)['results'][0]['status'] == 'pending'
-    assert json.loads(api.catalog[-1]['description'])['invitations'][OUT]['state'] == 'consumed'
+    assert parse_metadata(api.catalog[0]['description'])['invitation']['state'] == 'consumed'
     api.create_datashare.assert_called_once()
 
 
@@ -79,7 +80,7 @@ def test_uncertain_attempt_does_not_accept_expanded_audience(api):
     {'share_all_data': True}, {'data_types': ['Event']},
     {'data_types': ['Event/*']}, {'data_types': ['*']}, {'data_types': [STATE]},
 ])
-async def test_shared_invitation_storage_stops_invitation_work(api, monkeypatch, grant):
+async def test_only_targeted_state_shares_stop_invitation_work(api, monkeypatch, grant):
     from fastmcp import Client
     from fulcra_mcp import tools
     from fulcra_mcp.main import mcp
@@ -93,8 +94,7 @@ async def test_shared_invitation_storage_stops_invitation_work(api, monkeypatch,
     api.create_datashare.assert_called_once()
     api.get_datashares.return_value.append({'share_all_data': 'share_all_data' in grant,
                                             'fulcra_data_types': grant.get('data_types', [])})
-    with pytest.raises(ValueError, match='may be shared'):
-        invitations.prepare(api, OUT)
+    assert invitations.prepare(api, OUT)['status'] == 'prepared'
 
 
 @pytest.mark.parametrize('grant', [{'data_types': [OUT]}, {'file_paths': ['/shared/']}])

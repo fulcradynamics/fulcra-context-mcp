@@ -104,9 +104,7 @@ async def test_notification_labels_roundtrip_to_canonical_storage(storage):
             assert values['attention_new_matched_contact'] is False
 
 
-@pytest.mark.parametrize('share', [dict(share_all_data=True, fulcra_data_types=[]),
-    dict(share_all_data=False, fulcra_data_types=['Event/*']),
-    dict(share_all_data=False, fulcra_data_types=[PREFS])])
+@pytest.mark.parametrize('share', [dict(share_all_data=False, fulcra_data_types=[PREFS])])
 def test_shared_preferences_fail_closed(storage, share):
     api, _ = storage
     policy.update(api, {'notifications': 'none'})
@@ -115,6 +113,19 @@ def test_shared_preferences_fail_closed(storage, share):
         policy.read(api)
     with pytest.raises(ValueError):
         policy.update(api, {'notifications': 'all_messages'})
+
+
+@pytest.mark.parametrize('share', [dict(share_all_data=True),
+    dict(fulcra_data_types=['Event/*']), dict(fulcra_data_types=[PREFS, 'StepCount'])])
+def test_broad_shares_allow_preference_creation_and_updates(storage, share):
+    api, _ = storage
+    api.get_datashares.return_value = [share]
+    policy.update(api, {'notifications': 'none'})
+    assert policy.read(api)['notifications'] == 'none'
+    policy.update(api, {'notifications': 'all_messages'})
+    assert policy.read(api)['notifications'] == 'all_messages'
+    api.create_datashare.assert_not_called()
+    api.delete_datashare.assert_not_called()
 
 
 @pytest.mark.parametrize('description', ['not json', '{"version":2,"global_preferences":{},"overrides":{}}',
@@ -151,7 +162,7 @@ async def test_user_can_share_preferences_and_app_then_refuses_them(storage):
             'name': 'x', 'with_user_ids': [PEER], 'data_types': [PREFS]})
     assert result.content[0].text.startswith('Created share')
     api.get_datashares.return_value = [{'share_all_data': False, 'fulcra_data_types': [PREFS]}]
-    with pytest.raises(ValueError, match='may be shared'):
+    with pytest.raises(ValueError, match='targeted share'):
         policy.read(api)
 
 

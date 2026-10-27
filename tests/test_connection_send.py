@@ -67,10 +67,10 @@ def test_invalid_never_writes(api, extra):
     assert send(api, **extra)['status'] == 'rejected'
     assert api.writes == []
 
-def test_reply_and_ack_inherit_topic_and_reject_acks(api):
-    assert send(api, kind='reply', in_reply_to=TARGET)['record']['topic'] == 'test'
+def test_reply_and_ack_accept_references_without_inheriting_topic(api):
+    assert send(api, kind='reply', in_reply_to=TARGET)['record']['topic'] == 'chat'
     api.rows = []; api.target['kind'] = 'ack'
-    assert send(api, kind='ack', in_reply_to=TARGET)['status'] == 'rejected'
+    assert send(api, kind='ack', in_reply_to=TARGET)['status'] == 'posted'
 
 def test_retries_same_payload_and_never_auth_denial(api):
     api.failure = TimeoutError()
@@ -89,24 +89,49 @@ def test_successful_upload_is_not_repeated_while_ingestion_is_pending(api, monke
     assert len(api.writes) == 1
 
 
-def test_broad_grant_blocks_even_if_not_named_connection(api):
+def test_broad_grant_does_not_block_connection(api):
     api.shares.append(dict(id=TARGET, share_all_data=True, fulcra_data_types=[], permissions=[]))
-    assert send(api)['status'] == 'rejected'
-    assert not api.writes
+    assert send(api)['status'] == 'posted'
+    assert len(api.writes) == 1
 
 @pytest.mark.parametrize('change', [dict(grant_type='group'), dict(sharing_fulcra_userid=OWN), dict(fulcra_data_types=[IN, OUT]), dict(time_start='2026-01-01')])
-def test_reply_target_requires_exact_direct_peer_grant(api, change):
+def test_reply_reference_does_not_require_incoming_grant(api, change):
     grants = api.get_shared_datasets()
     grants[0].update(change)
     api.get_shared_datasets = lambda: grants
-    assert send(api, kind='ack', in_reply_to=TARGET)['status'] == 'rejected'
-    assert not api.writes
+    assert send(api, kind='ack', in_reply_to=TARGET)['status'] == 'posted'
 
 def test_old_reply_target_and_artifact_validation(api):
     api.target['start_time'] = '2000-01-01T00:00:00+00:00'
-    assert send(api, kind='reply', in_reply_to=TARGET)['status'] == 'rejected'
+    assert send(api, kind='reply', in_reply_to=TARGET)['status'] == 'posted'
+    api.writes = []; api.rows = []
     assert send(api, artifacts=[{'unexpected':'field'}])['status'] == 'rejected'
     assert not api.writes
+
+@pytest.mark.parametrize('tool', ['send_agent_contact_message', 'send_agent_message'])
+@pytest.mark.parametrize('kind', ['reply', 'ack'])
+async def test_explicit_reference_never_reads_peer(api, monkeypatch, tool, kind):
+    from fulcra_mcp import tools
+    def forbidden(*args, **kwargs):
+        raise AssertionError('No peer lookup is needed to send')
+    api.get_shared_datasets = forbidden
+    api.v1_catalog_schema = forbidden
+    resolve = api.resolve_data_type
+    def own_only(channel, fulcra_userid):
+        assert fulcra_userid == OWN
+        return resolve(channel, fulcra_userid)
+    api.resolve_data_type = own_only
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
+    target = 'ABCDEFAB-0000-4000-8000-000000000006'
+    args = dict(sender='test', body='hello')
+    if tool == 'send_agent_contact_message':
+        args.update(peer_userid=PEER, outbox=OUT, mid=MID, kind=kind, in_reply_to=target)
+    else:
+        args.update(connection=OUT, record_id=MID, **{('reply_to' if kind == 'reply' else 'ack'): target})
+    result = await getattr(tools, tool)(**args)
+    assert result['status'] == 'posted'
+    assert result['record']['in_reply_to'] == target
+
 
 async def test_event_identifier_preserves_conversion_provenance(api, monkeypatch):
     import json

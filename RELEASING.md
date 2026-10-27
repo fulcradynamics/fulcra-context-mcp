@@ -4,13 +4,42 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## 1.18.9 release notes
+## 1.19.2 release notes
 
-- Serve `/openai/mcp` for the OpenAI plugin: the same server and OAuth without
-  `get_location`, `get_sleep`, `get_workouts` and `get_time_series`, which are
-  absent from discovery and refused when called. `get_records` and
-  `get_data_catalog` are unchanged. The endpoint has its own path-form
-  protected-resource metadata. `/mcp` keeps every tool.
+- Serve `/openai/mcp` with the same OAuth but without `get_location`, `get_sleep`,
+  `get_workouts` or `get_time_series`; `/mcp` retains every tool. Provide the
+  endpoint's path-form protected-resource metadata.
+- Serve the OpenAI domain verification challenge from `OPENAI_APPS_CHALLENGE`.
+- Mark `send_agent_message` destructive, matching the app send interface.
+- Retain flexible channel matching, independent broad sharing and contacts UI v81.
+
+## 1.19.1 release notes
+
+- Reply and acknowledgement references no longer require target lookup, target
+  kind/age checks or proof of target ownership. Preserve exact reference spelling.
+- Explicit pairing records peer owner/channel references without peer protocol
+  checks. Saved UI matches are overridable defaults; newest-outbox selection and
+  readable-channel fallback remain available. Ship contacts UI v81.
+
+## 1.19.0 release notes
+
+- Channel/share prefixes are discovery hints, not requirements for resolved sends,
+  replies, discovery or invitation matching.
+- Invitation codes/state and multiple resolved peer/channel pairs live on the own
+  outbox description; generic metadata updates support explicit matching and both
+  sides of a connection without reciprocal metadata requirements.
+- Preserve other description metadata and invitation consumption; exclude open
+  templates from contacts and sends. Ship contacts UI v80.
+
+## 1.18.10 release notes
+
+- Existing broader shares no longer block discovery, mentions, sends, invitation
+  preparation or matching, even with extra users, groups, files or time bounds.
+  Only narrow protocol grants establish the expected contact audience.
+- End contact removes and verifies only narrow grants, preserves broader sharing
+  and discloses remaining access. Ownership, narrow-route validation and message
+  consent are unchanged; new shares remain narrow only.
+- Ship contacts UI v79.
 
 ## 1.18.7 release notes
 
