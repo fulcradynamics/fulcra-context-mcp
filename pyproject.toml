@@ -1,6 +1,6 @@
 [project]
 name = "fulcra-context-mcp"
-version = "1.19.3"
+version = "1.19.4"
 description = "Fulcra Context MCP Server"
 license = "Apache-2.0"
 authors = [

@@ -4,6 +4,11 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.4 release notes
+
+- The Invite someone template mentions that ChatGPT users can add the Fulcra
+  plugin. Ship contacts UI v82.
+
 ## 1.19.3 release notes
 
 - Serve `/openai/mcp` with the same OAuth but without `get_location`, `get_sleep`,
