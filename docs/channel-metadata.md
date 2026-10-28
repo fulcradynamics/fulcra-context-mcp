@@ -2,21 +2,21 @@
 
 Prefixes such as `connect-our-agents channel` and protocol-named shares are discovery hints, not eligibility requirements. Explicit pairing records an exact peer owner and data type reference on our own outbox. The peer need not use our schema, metadata, prefixes or invitation protocol. Sending validates our outgoing record and intended audience, not the peer's protocol or reply target. Missing, malformed or stale pairing metadata does not invalidate an independently resolved send.
 
-## Public description marker
+## Public description field
 
-Store one `[agent_connection: <JSON object>]` on the OWN outbox description:
+Store one `Connection details: <JSON object>` on the OWN outbox description, following the [exact description format](channel-description-format.md), including dual-read legacy support:
 
 ```text
-[agent_connection: {"version":1,"peers":[{"fulcra_userid":"00000000-0000-0000-0000-000000000002","data_type":"Event/00000000-0000-0000-0000-000000000020"}]}]
+Connection details: {"version":1,"peers":[{"fulcra_userid":"00000000-0000-0000-0000-000000000002","data_type":"Event/00000000-0000-0000-0000-000000000020"}]}
 Project notes
-[mesh_identifier: "Alex"]
+Contact label: "Alex"
 ```
 
 Example identities are synthetic. `peers` is an optional array of incoming owner/channel pairs, allowing multiple peers and multiple channels per peer. UUIDs are exact lowercase hex 8-4-4-4-12; channels are `Event/<UUID>`. The containing outbox owner and ID come from the catalog. These pairs record resolved decisions, not membership or authorization. Current narrow outgoing grants still define the expected audience; broad shares neither veto nor widen it.
 
 Both inviter and invitee save their own pair when the return channel is available and resolved. Neither side needs symmetrical metadata or permission to edit a peer's channel. Model workflows use `update_data_type` with `expected_description`, require `verified=true` and independently reread the exact channel. No additional model tool is needed. Match, send, invitation and sharing consent remain distinct.
 
-Find the marker by token even in whitespace-folded catalog descriptions, JSON-decode its object, then require `]`. Replace only that span, or prepend it and a newline when absent. Preserve unrelated text, unknown metadata keys, labels (the final `mesh_identifier` suffix), preferences, setup-session and conversion metadata. Malformed metadata stops editing that marker, not an independently authorized send. The stale-description guard and process lock are not cross-worker compare-and-swap.
+Find the field outside JSON values even in whitespace-folded catalog descriptions and decode exactly one JSON object. Read legacy markers as well; refuse malformed or duplicate targets, including mixed spellings. Replace only that span with the named field, or append it with a newline when absent. Preserve unrelated bytes, unknown metadata keys, labels, preferences, setup-session and conversion metadata. Malformed metadata stops editing that field, not an independently authorized send. The stale-description guard and process lock are not cross-worker compare-and-swap.
 
 ## Invitations
 

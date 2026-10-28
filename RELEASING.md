@@ -4,6 +4,16 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.4 release notes
+
+- Write human-readable channel metadata fields; continue reading legacy markers.
+  Preserve unrelated bytes and reject malformed/duplicate targeted fields. No
+  bulk or read-triggered migration; matching and live-share authority are unchanged.
+- Clarify the contacts opener as a browse/control panel, with optional skill
+  discovery for chat invitations, sends and message checks. Ship contacts UI v82.
+- See [the exact description format and unrun native cases](docs/channel-description-format.md).
+  No classifier-warning outcome is asserted.
+
 ## 1.19.3 release notes
 
 - Serve `/openai/mcp` with the same OAuth but without `get_location`, `get_sleep`,

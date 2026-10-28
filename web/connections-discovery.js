@@ -1,5 +1,6 @@
 import { parseContactIdentifier, threadIdentifier } from './contact-identifier.js';
-import { LEGACY_OUTBOX_PATTERN, CONVERSION_PREFIX } from './connection-compatibility.js';
+import { LEGACY_OUTBOX_PATTERN } from './connection-compatibility.js';
+import { fieldSpan } from './description-fields.js';
 import { channelMetadata, isInvitationTemplate } from './channel-metadata.js';
 import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
@@ -34,10 +35,8 @@ const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [
 
 export function conversionSources(description, own, peer) {
   // Catalog listings fold whitespace, so the marker need not be on its own line.
-  const parts = (description ?? '').split(CONVERSION_PREFIX);
-  if (parts.length !== 2) return [];
   try {
-    const refs = JSON.parse(parts[1].match(/^\[[^\]]*\]/)?.[0]);
+    const refs = fieldSpan(description, 'converted_from_mesh')?.[2];
     const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
     if (!Array.isArray(refs) || refs.length > 32 || !refs.every(r => r && new RegExp('^MomentAnnotation/' + uuid + '$').test(r.id)
       && [own, peer].includes(r.fulcra_userid))) return [];

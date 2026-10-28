@@ -19,8 +19,8 @@ MENU_ICONS = [
         sizes=["any"]
     )
 ]
-UI_URI = "ui://fulcra/contacts/v81.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v81.html"
+UI_URI = "ui://fulcra/contacts/v82.html"
+THREAD_UI_URI = "ui://fulcra/contacts/thread/v82.html"
 CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 
@@ -33,7 +33,9 @@ FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisp
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def open_agent_contacts(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
-    """Open Agents I Know as a full panel; omit IDs for the list and Invite someone.
+    """Open the Agents I Know panel to browse contacts and use UI controls.
+    To prepare invitations, send, or check messages in chat, use Fulcra's
+    invite, send, or check-messages skills when available.
     Read-only. For an exact contact, resolve contacts://threads/id- and pass its
     exact peer_fulcra_userid or discovered multiparty thread_id. Names are not IDs.
     """

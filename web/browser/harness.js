@@ -80,7 +80,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     const secondOut = out.slice(0,-1)+'8', secondIn = incoming.slice(0,-1)+'9';
     if (name === 'get_data_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
      [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]].map(([id, owner, match]) => ({id, name: id, fulcra_userid: owner, ...schema,
-      description: match ? '[agent_connection: '+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+']' : ''}))});
+      description: match ? (window.namedFields ? 'Connection details: ' : '[agent_connection: ')+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+(window.namedFields ? '' : ']') : ''}))});
     else text = 'Shares: ' + JSON.stringify({own_fulcra_userid:own,
      outgoing:[out,secondOut].map(id=>({share_all_data:false,data_types:[id],with_user_ids:[peer]})),
      incoming:[incoming,secondIn].map(id=>({sharing_fulcra_userid:peer,grant_type:'user',data_types:[id]}))});

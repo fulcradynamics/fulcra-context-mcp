@@ -281,7 +281,7 @@ def test_create_labels_new_outbox_and_prepares_unshared_code(creating):
     assert result['topic'] == 'handshake ' + result['code'] and result['shared_with'] is None
     entry = next(e for e in creating.catalog if e['id'] == NEW)
     assert entry['name'] == 'Leif with Lucian'
-    assert 'connect-our-agents channel\n[mesh_identifier: ' in entry['description']
+    assert 'Agent contact channel\nContact label: ' in entry['description']
     creating.create_datashare.assert_not_called()
 
 

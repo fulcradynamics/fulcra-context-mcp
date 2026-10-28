@@ -148,7 +148,7 @@ async def test_event_identifier_preserves_conversion_provenance(api, monkeypatch
     result = json.loads(await tools.set_contact_identifier(OUT, 'New'))
     assert result['verified'] and result['changed']
     assert len(updates) == 1
-    assert entry['description'] == description.replace('"Old"', '"New"')
+    assert entry['description'] == description.replace('[mesh_identifier: "Old"]', 'Contact label: "New"')
 
 
 def _with_status(api, attention):
@@ -183,7 +183,7 @@ def test_status_clears_from_whitespace_folded_description(api):
     api.description = re.sub(r'\s+', ' ', api.description + '\n[mesh_identifier: "Alex"]')
     result = send(api)
     assert result['status_cleared'] is True
-    assert api.description == 'connect-agents-with-anyone channel [mesh_identifier: "Alex"]'
+    assert api.description == 'connect-agents-with-anyone channel  [mesh_identifier: "Alex"]'
 
 
 def test_ack_leaves_status_alone(api):
@@ -222,4 +222,4 @@ async def test_ui_and_agent_sends_remove_status_without_changing_other_metadata(
         args.update(connection=OUT, record_id=MID)
     result = await getattr(tools, tool)(**args)
     assert result['status'] == 'posted' and result['status_cleared'] is True
-    assert api.description == 'connect-agents-with-anyone channel\n[mesh_identifier: "Alex"]'
+    assert api.description == 'connect-agents-with-anyone channel\n\n[mesh_identifier: "Alex"]'

@@ -37,7 +37,7 @@ it in a local discovery copy and rechecks live grants before writing.
 
 ## Stored markers
 
-Keep `[mesh_identifier: ...]`, `converted_from_mesh: ...`, the
+Preserve contact labels and conversion provenance under the [description format](channel-description-format.md), reading both legacy and named fields. Keep the
 `/connect-our-agents/connection-checks/` state root and legacy `Mesh Outbox` names
 unchanged. They are wire identifiers shared with the plugin and with released
 `fulcra-mesh` data.

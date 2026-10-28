@@ -1,10 +1,10 @@
 // Shared description contract with the packaged connection skill. Navigation only.
+import { fieldSpan } from './description-fields.js';
 export function parseSetupSession(description) {
-  if (typeof description !== 'string') return;
-  const markers = description.match(/\[connection_setup_session:/g);
-  if (markers?.length !== 1) return;
-  const match = description.match(/\[connection_setup_session: "(codex:\/\/threads\/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"\]/);
-  return match?.[1];
+  try {
+    const value = fieldSpan(description, 'connection_setup_session')?.[2];
+    return typeof value === 'string' && /^codex:\/\/threads\/[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(value) ? value : undefined;
+  } catch { return undefined; }
 }
 
 export function sessionHandoff(request, context, url) {

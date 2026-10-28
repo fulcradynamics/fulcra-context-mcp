@@ -68,8 +68,11 @@ def test_unrelated_event_is_skipped_only_after_successful_resolution(api, failur
         assert all(other not in call.args[0] for call in api.fulcra_v1_records.call_args_list)
 
 
-def test_invitation_lives_on_outbox_and_preserves_other_metadata(api):
-    original = 'Project notes\n[connection_setup_session: "codex://threads/00000000-0000-4000-8000-000000000001"]\n[mesh_identifier: "Alex"]'
+@pytest.mark.parametrize('original', [
+    'Project notes\n[connection_setup_session: "codex://threads/00000000-0000-4000-8000-000000000001"]\n[mesh_identifier: "Alex"]',
+    'Agent contact channel\nSetup conversation: "codex://threads/00000000-0000-4000-8000-000000000001"\nContact label: "Alex"',
+])
+def test_invitation_lives_on_outbox_and_preserves_other_metadata(api, original):
     api.catalog[0]['description'] = original
     prepared = invitations.prepare(api, OUT)
     assert prepared['code'] in api.catalog[0]['description']
@@ -77,12 +80,14 @@ def test_invitation_lives_on_outbox_and_preserves_other_metadata(api):
     from fulcra_mcp.channel_metadata import parse_metadata, write_metadata
     metadata = parse_metadata(api.catalog[0]['description'])
     assert metadata['invitation']['state'] == 'prepared'
-    assert write_metadata(api.catalog[0]['description'], None) == original
+    assert write_metadata(api.catalog[0]['description'], None) == original + '\n'
     handshake(api, prepared['code'])
     assert invitations.match(api)['results'][0]['status'] == 'matched'
     metadata = parse_metadata(api.catalog[0]['description'])
     assert metadata['peers'] == [{'fulcra_userid': PEER, 'data_type': IN}]
     assert metadata['invitation']['state'] == 'completed'
+    assert 'Connection details: ' in api.catalog[0]['description']
+    assert api.catalog[0]['description'].startswith(original + '\n')
     assert api.catalog[1]['description'] == 'connect-our-agents channel'
 
 
@@ -126,7 +131,7 @@ def test_multiple_peers_and_unrelated_metadata_survive_matching(api):
     value = parse_metadata(api.catalog[0]['description'])
     assert value['peers'] == existing['peers'] + [{'fulcra_userid': PEER, 'data_type': IN}]
     assert value['extension'] == {'keep': True}
-    assert api.catalog[0]['description'].endswith('Notes\n[mesh_identifier: "Alex"]')
+    assert api.catalog[0]['description'].startswith('Notes\n[mesh_identifier: "Alex"]\nConnection details: ')
 
 
 def test_preparing_another_outbox_does_not_rewrite_completed_decisions(api):

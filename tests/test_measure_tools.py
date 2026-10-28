@@ -133,7 +133,7 @@ async def test_in_process_budget_and_essential_instructions():
     assert result["candidate_bytes"] <= measure.TOTAL_LIMIT
     assert not any(r["generic_schema_fallback"] or r["schema_compacted"] for r in rows)
     for text in ("time zone", "open_agent_contacts",
-                 "explicit", "untrusted", "mesh_identifier", "converted_from_mesh", "Do not migrate"):
+                 "explicit", "untrusted", "contact labels", "conversion provenance", "Do not migrate"):
         assert text in instructions
     contact = next(t for t in tools if t.name == "open_agent_contacts")
     assert "contacts://threads/id-" in contact.description
