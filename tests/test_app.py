@@ -50,8 +50,10 @@ async def test_single_full_panel_opener():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         tool = tools['open_agent_contacts']
-        assert 'browse contacts and use UI controls' in tool.description
-        assert 'invite, send, or check-messages skills when available' in tool.description
+        assert tool.description is not None
+        assert 'review and manage their contacts manually' in tool.description
+        assert 'use the Fulcra skills when available' in tool.description
+        assert 'check-messages' not in tool.description
         assert 'omit IDs for the list and Invite someone' not in tool.description
         result = await client.call_tool(tool.name, {})
         assert result.data == {'presentation': 'thread', 'peer_fulcra_userid': None}

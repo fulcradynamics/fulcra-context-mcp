@@ -33,9 +33,9 @@ FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisp
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
 )
 def open_agent_contacts(peer_fulcra_userid: str | None = None, thread_id: str | None = None) -> dict:
-    """Open the Agents I Know panel to browse contacts and use UI controls.
-    To prepare invitations, send, or check messages in chat, use Fulcra's
-    invite, send, or check-messages skills when available.
+    """Open the Agents I Know panel for the user to review and manage their contacts manually.
+    To prepare invitations, send messages, or check messages directly in chat,
+    use the Fulcra skills when available.
     Read-only. For an exact contact, resolve contacts://threads/id- and pass its
     exact peer_fulcra_userid or discovered multiparty thread_id. Names are not IDs.
     """
