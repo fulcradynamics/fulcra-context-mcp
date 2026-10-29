@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { discoverThreads, parseConnections } from './connections-discovery.js';
 import { channelFixture, shareFixture, incomingFixtures } from './connection-fixtures.js';
 
-test('identifier is display only, outgoing preferred, stable type-ID tie break and fallback', async () => {
-  const labeled = (id, owner, label) => ({ ...entry(id, owner), description: `Prose [mesh_identifier: ${JSON.stringify(label)}]` });
+for (const named of [false, true]) test(`identifier is display only, outgoing preferred, stable type-ID tie break and fallback; named=${named}`, async () => {
+  const labeled = (id, owner, label) => ({ ...entry(id, owner), description: named ? `Agent contact channel Contact label: ${JSON.stringify(label)}` : `Prose [mesh_identifier: ${JSON.stringify(label)}]` });
   const catalog = [labeled('z', 'me', 'Other own'), labeled('a', 'me', '<b>Trip</b>'),
     labeled('incoming', 'peer', 'Incoming label'), labeled('same', 'other', '<b>Trip</b>'), entry('none', 'unknown')];
   for (const items of [catalog, [...catalog].reverse()]) {
@@ -49,9 +49,9 @@ test('sharing account names are labeled without inventing agent names or groupin
 });
 
 const entry = (id, owner) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
-test('setup links belong only to eligible own outgoing channels', async () => {
+for (const named of [false, true]) test(`setup links belong only to eligible own outgoing channels; named=${named}`, async () => {
   const url = 'codex://threads/00000000-0000-0000-0000-000000000001';
-  const linked = (id, owner) => ({ ...entry(id, owner), description: `[connection_setup_session: "${url}"]` });
+  const linked = (id, owner) => ({ ...entry(id, owner), description: named ? `Setup conversation: "${url}"` : `[connection_setup_session: "${url}"]` });
   const result = await load([linked('own'), linked('incoming', 'peer')], [grant('own')]);
   const sources = result.selections[0].sources;
   assert.equal(sources.find(s => s.direction === 'Outgoing').setupSession, url);
@@ -69,9 +69,9 @@ test('eligible outboxes retain newest valid covering grant creation time', async
   ]);
   assert.equal(result.selections[0].sources.find(s => s.id === 'Event/new').sharedAt, Date.parse('2026-10-12T12:00:00Z'));
 });
-test('assessment uses only verified own channels, never peer-authored status', async () => {
+for (const named of [false, true]) test(`assessment uses only verified own channels, never peer-authored status; named=${named}`, async () => {
   const assessed = (id, owner, attention) => ({ ...entry(id, owner), description:
-    `[contact_status: ${JSON.stringify({attention, reason:'Decision needed', assessed_at:'2026-10-13T12:00:00Z'})}]` });
+    `${named ? 'Contact status: ' : '[contact_status: '}${JSON.stringify({attention, reason:'Decision needed', assessed_at:'2026-10-13T12:00:00Z'})}${named ? '' : ']'}` });
   const peerOnly = await load([assessed('incoming', 'peer', true)]);
   assert.equal(peerOnly.selections[0].assessment.attention, null);
   assert.equal(peerOnly.selections[0].sources[0].assessment, undefined);

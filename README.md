@@ -42,6 +42,10 @@ metadata tools include:
 - `update_data_type`: update an owned active v1 Event/Metric type's name or
   description with user authorization and independent readback. It does not
   change schemas, records or shares; uncertain writes require reconciliation.
+- `create_agent_invitation`: create an owned single-person channel and secure
+  persisted invitation code, optionally sharing only that outbox with a supplied
+  exact recipient ID. No message is sent. Reconcile errors before another call;
+  do not fall back to generic channel creation.
 
 App-only implementation tools are not part of the public model-facing reference.
 

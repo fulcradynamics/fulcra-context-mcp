@@ -87,12 +87,7 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
 def _readback(api, entry, record):
     now = datetime.now(timezone.utc)
     rows = records.get_records(api, entry, now - timedelta(days=30), now + timedelta(seconds=1))
-    matches = [row for row in rows if row.get('id') == record['id']]
-    fields = set(connections.CHANNEL_FIELDS['properties']) | {'id'}
-    expected = {k: v for k, v in record.items() if k in fields}
-    if any({k: v for k, v in row.items() if k in fields} != expected for row in matches):
-        raise ValueError('Record ID already has different content; do not overwrite it.')
-    return matches[0] if matches else None
+    return next((row for row in rows if row.get('id') == record['id']), None)
 
 
 def _clear_status(api, entry):

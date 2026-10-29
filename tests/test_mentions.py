@@ -134,7 +134,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
         assert "Agents I Know: open_agent_contacts({})." in instructions
         assert "explicit task wins" in instructions
         assert "mentions authorize opening only, not sends/shares/edits" in instructions
-        assert "mesh_identifier/converted_from_mesh" in instructions
+        assert "contact labels and conversion provenance; read legacy and named fields" in instructions
         assert "Do not migrate user data without explicit consent" in instructions
         contact = next(t for t in await client.list_tools() if t.name == "open_agent_contacts")
         assert "resolve contacts://threads/id-" in contact.description

@@ -960,17 +960,17 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
         raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
 
 
-@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+@tools_mcp.tool(app={"visibility": ["model", "app"]}, annotations={
     "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def create_agent_invitation(inviter_name: str, recipient_name: str,
                                   recipient_userid: str | None = None) -> dict:
-    """Create a new outbox labeled <recipient>'s agent and prepare its single-person
-    invitation code; with recipient_userid, share the outbox with exactly that user.
+    """Create a Fulcra invitation the user can share with another person to connect their agents.
+    Returns the saved invitation details; does not send it or establish a connection.
 
     Args:
         inviter_name: The user's name.
         recipient_name: The invited person's name.
-        recipient_userid: Optional exact Fulcra user ID of the invited person.
+        recipient_userid: Optional exact Fulcra user ID; shares only the invitation outbox with that user immediately.
     """
     from .agent_invitations import create
     try:
