@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
+import pytest
 from fulcra_api.core import FulcraAPI
 from fulcra_api.credentials import FulcraCredentials
 
@@ -12,7 +13,8 @@ from conftest import FAKE_USER_ID
 from test_direct_connection_send import ARGS, ENV, GRANT, OUTBOX, PEER
 
 
-async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypatch):
+@pytest.mark.parametrize('null_readback', [False, True])
+async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypatch, null_readback):
     api = FulcraAPI(oidc_audience='https://synthetic.invalid')
     api.fulcra_credentials = FulcraCredentials(access_token='synthetic', access_token_expiration=datetime.now() + timedelta(hours=1))
     monkeypatch.setattr(api, 'get_token_claims', lambda: {'fulcradynamics.com/userid': FAKE_USER_ID})
@@ -43,7 +45,9 @@ async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypat
             assert method == 'GET'
             assert OUTBOX in query['q'][0]
             assert query.get('fulcra_userid', [FAKE_USER_ID]) == [FAKE_USER_ID]
-            return BytesIO(('\n'.join(json.dumps(r) for r in rows)).encode())
+            observed = [dict(artifacts=None, in_reply_to=None, recipients=None, **r)
+                        for r in rows] if null_readback else rows
+            return BytesIO(('\n'.join(json.dumps(r) for r in observed)).encode())
         return BytesIO(json.dumps(result).encode())
     monkeypatch.setattr('urllib.request.urlopen', transport)
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)

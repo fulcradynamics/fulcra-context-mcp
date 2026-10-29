@@ -53,6 +53,43 @@ def api(monkeypatch, request):
 def send(api, **kw):
     return connection.send(api, **(dict(peer_userid=PEER, outbox=OUT, sender='test', body='hello', mid=MID) | kw))
 
+@pytest.mark.parametrize('field', ['artifacts', 'in_reply_to', 'recipients', 'topic', 'priority'])
+def test_readback_optional_absence_is_symmetric(api, field):
+    record = dict(id=MID, sender='test', kind='message', body='hello')
+    api.rows = [dict(record, **{field: None})]
+    assert connection._readback(api, {'fulcra_userid': OWN}, record) == api.rows[0]
+    api.rows = [record]
+    assert connection._readback(api, {'fulcra_userid': OWN}, dict(record, **{field: None})) == record
+
+
+@pytest.mark.parametrize('field', ['sender', 'kind', 'body'])
+def test_readback_missing_required_field_is_a_conflict(api, field):
+    record = dict(id=MID, sender='test', kind='message', body='hello')
+    api.rows = [{k: v for k, v in record.items() if k != field}]
+    with pytest.raises(connection.ContentMismatchError):
+        connection._readback(api, {'fulcra_userid': OWN}, record)
+
+
+@pytest.mark.parametrize('requested, observed', [
+    ({'artifacts': []}, {'artifacts': None}),
+    ({'artifacts': []}, {}),
+    ({'artifacts': [{'path': '/one.txt'}]}, {'artifacts': [{'path': '/two.txt'}]}),
+    ({'recipients': ['one']}, {'recipients': ['two']}),
+    ({'kind': 'reply', 'in_reply_to': TARGET}, {'in_reply_to': MID}),
+])
+def test_preexisting_optional_content_change_never_uploads(api, requested, observed):
+    assert send(api, **requested)['status'] == 'posted'
+    for field in requested:
+        if field not in observed and field != 'kind':
+            api.rows[0].pop(field)
+    api.rows[0].update(observed)
+    api.writes.clear()
+    result = send(api, **requested)
+    assert result['status'] == 'rejected' and result['retryable'] is False
+    assert 'different content' in result['reason']
+    assert not api.writes
+
+
 def test_event_exact_readback_and_same_id(api):
     result = send(api)
     assert result['status'] == 'posted'

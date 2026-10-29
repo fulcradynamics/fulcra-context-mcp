@@ -20,6 +20,56 @@ async def test_sends_on_your_channel_and_reports_verified_id(call, connected):
     assert connected.writes[0]['id'] == MID
     assert connected.writes[0]['body'] == 'hello'
 
+@pytest.mark.parametrize('preexisting', [False, True])
+async def test_null_optional_readback_is_posted_once(call, connected, preexisting):
+    record = dict(id=MID, sender='a', kind='message', body='hello', topic='chat', priority='P2')
+    observed = dict(record, artifacts=None, in_reply_to=None, recipients=None)
+    if preexisting:
+        connected.rows = [observed]
+    else:
+        upload = connected.record_data_type
+        def upload_with_null_readback(*args):
+            result = upload(*args)
+            assert connected.writes == [record]
+            connected.rows = [observed]
+            return result
+        connected.record_data_type = upload_with_null_readback
+    result = json.loads(await call('send_agent_message', dict(
+        connection=OUT, sender='a', body='hello', record_id=MID)))
+    assert result['status'] == 'posted', result
+    assert result['record'] == observed
+    assert len(connected.writes) == (0 if preexisting else 1)
+
+
+@pytest.mark.parametrize('preexisting', [False, True])
+@pytest.mark.parametrize('change', [
+    {'body': 'different'}, {'sender': None}, {'kind': None}, {'body': None},
+    {'recipients': ['another agent']}, {'in_reply_to': TARGET},
+    {'artifacts': [{'path': '/different.txt'}]},
+    {'recipients': []}, {'artifacts': []}, {'topic': None}, {'priority': None},
+])
+async def test_content_mismatch_is_not_authorization_denial(call, connected, preexisting, change):
+    record = dict(id=MID, sender='a', kind='message', body='hello', topic='chat', priority='P2')
+    # A matching duplicate must not hide a conflicting/malformed same-ID row.
+    observed = [record, (dict(record, artifacts=None, in_reply_to=None, recipients=None) | change)]
+    if preexisting:
+        connected.rows = observed
+    else:
+        upload = connected.record_data_type
+        def upload_with_conflict(*args):
+            result = upload(*args)
+            connected.rows = observed
+            return result
+        connected.record_data_type = upload_with_conflict
+    result = json.loads(await call('send_agent_message', dict(
+        connection=OUT, sender='a', body='hello', record_id=MID)))
+    assert result['status'] == ('rejected' if preexisting else 'uncertain'), result
+    assert result['retryable'] is False
+    assert 'different content' in result['reason']
+    assert 'authorization' not in result['reason']
+    assert len(connected.writes) == (0 if preexisting else 1)
+
+
 @pytest.mark.parametrize('topic', [None, 'explicit topic'])
 async def test_reply_uses_supplied_or_default_topic(call, connected, topic):
     result = json.loads(await call('send_agent_message', dict(connection=OUT, sender='a', body='yes', reply_to=TARGET, topic=topic)))

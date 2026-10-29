@@ -84,14 +84,27 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
     return own, entry
 
 
+class ContentMismatchError(ValueError):
+    """The requested record ID is visible with different message content."""
+
+
+def _message_content(record):
+    fields = set(connections.CHANNEL_FIELDS['properties']) | {'id'}
+    # Backend readback may materialize absent top-level optional fields as null.
+    # Include topic/priority, but never erase their non-null defaults or normalize
+    # nested artifact metadata. Empty lists/strings and required fields stay exact.
+    absent_optional = {'artifacts', 'in_reply_to', 'recipients', 'topic', 'priority'}
+    return {k: v for k, v in record.items()
+            if k in fields and not (k in absent_optional and v is None)}
+
+
 def _readback(api, entry, record):
     now = datetime.now(timezone.utc)
     rows = records.get_records(api, entry, now - timedelta(days=30), now + timedelta(seconds=1))
     matches = [row for row in rows if row.get('id') == record['id']]
-    fields = set(connections.CHANNEL_FIELDS['properties']) | {'id'}
-    expected = {k: v for k, v in record.items() if k in fields}
-    if any({k: v for k, v in row.items() if k in fields} != expected for row in matches):
-        raise ValueError('Record ID already has different content; do not overwrite it.')
+    expected = _message_content(record)
+    if any(_message_content(row) != expected for row in matches):
+        raise ContentMismatchError('Record ID already has different content; do not retry or overwrite it.')
     return matches[0] if matches else None
 
 
@@ -175,6 +188,9 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
                 return {**result, 'status': 'uncertain', 'retryable': False,
                         'reason': 'Upload accepted; exact record not yet visible. Poll for this ID; do not submit it again.'}
         return {**result, 'status': 'uncertain', 'reason': 'Exact record not observed. Retry only with the same ID and content; never bypass host denial.'}
+    except ContentMismatchError as exc:
+        return {**result, 'status': 'uncertain' if attempted else 'rejected',
+                'retryable': False, 'reason': str(exc)}
     except Exception as exc:
         if attempted:
             if (isinstance(exc, (ValueError, jsonschema.ValidationError))
