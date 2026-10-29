@@ -39,6 +39,11 @@ async def test_single_person_invitation_discovery(tmp_path, path):
                 for line in response.text.splitlines() if line.startswith("data: "))
     tools = {tool['name']: tool for tool in data['result']['tools']}
     invitation = tools['create_agent_invitation']
+    assert invitation['description'].startswith(
+        'Create a Fulcra invitation the user can share with another person to connect their agents.')
+    assert 'Always creates a new outbox' not in invitation['description']
+    assert 'shares only the invitation outbox with that user immediately' in (
+        invitation['inputSchema']['properties']['recipient_userid']['description'])
     assert set(invitation['_meta']['ui']['visibility']) == {'model', 'app'}
     assert invitation['annotations']['readOnlyHint'] is False
     assert invitation['annotations']['destructiveHint'] is True
