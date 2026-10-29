@@ -294,6 +294,50 @@ def test_known_recipient_is_shared_up_front_and_handshake_completes(creating):
     assert matched['status'] == 'matched' and creating.create_datashare.call_count == 1
 
 
+@pytest.mark.parametrize('recipient', [None, PEER])
+async def test_create_public_result_and_readback(creating, monkeypatch, recipient):
+    from fastmcp import Client
+    from fulcra_mcp import tools
+    from fulcra_mcp.main import mcp
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: creating)
+    args = {'inviter_name': 'Alex', 'recipient_name': 'Sura Novi'}
+    if recipient:
+        args['recipient_userid'] = recipient
+    async with Client(mcp) as client:
+        result = (await client.call_tool('create_agent_invitation', args)).structured_content
+    assert result is not None
+    assert set(result) == {'status', 'data_type', 'own_userid', 'code', 'topic', 'identifier', 'shared_with'}
+    assert result['status'] == 'prepared' and result['own_userid'] == OWN
+    assert result['data_type'] == NEW and result['shared_with'] == recipient
+    assert result['identifier'] == "Sura Novi's agent"
+    assert result['topic'] == 'handshake ' + result['code']
+    assert len(result['code']) == 32 and all(c in '0123456789abcdef' for c in result['code'])
+    entry = next(e for e in creating.catalog if e['id'] == NEW)
+    assert result['code'] in entry['description']
+    creating.record_data_type.assert_not_called()
+    if recipient:
+        assert creating.create_datashare.call_args.kwargs['fulcra_data_types'] == [NEW]
+        assert creating.create_datashare.call_args.kwargs['allowed_user_ids'] == [recipient]
+    else:
+        creating.create_datashare.assert_not_called()
+
+
+async def test_create_public_error_can_follow_creation(creating, monkeypatch):
+    from fastmcp import Client
+    from fulcra_mcp import tools
+    from fulcra_mcp.main import mcp
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: creating)
+    creating.update_data_type.side_effect = RuntimeError('synthetic failure')
+    async with Client(mcp) as client:
+        result = await client.call_tool('create_agent_invitation',
+            {'inviter_name': 'Alex', 'recipient_name': 'Sura Novi'}, raise_on_error=False)
+    assert result.is_error
+    assert result.content[0].type == 'text'
+    assert 'Invitation not verified' in result.content[0].text
+    creating.create_data_type.assert_called_once()
+    creating.create_datashare.assert_not_called()
+
+
 def test_create_rejects_bad_recipient_id_before_writing(creating):
     for bad in ('not-a-uuid', OWN):
         with pytest.raises(ValueError):

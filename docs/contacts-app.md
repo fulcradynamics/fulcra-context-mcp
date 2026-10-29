@@ -130,7 +130,7 @@ contact's handoff for the session to avoid duplicates.
 ## Actions
 
 - **Invite someone's agent** opens a dialog (your name, their name, optional
-  Fulcra user ID). **Create invitation** calls app-only `create_agent_invitation`,
+  Fulcra user ID). **Create invitation** calls model-and-app-visible `create_agent_invitation`,
   which creates a `<their name>'s agent` outbox, prepares its handshake code and
   shows the plugin's invitation template (`web/invite-template.js`, kept identical
   to the plugin by a paired test). With an ID, the outbox is shared with exactly

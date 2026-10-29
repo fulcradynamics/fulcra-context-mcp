@@ -960,12 +960,14 @@ async def prepare_agent_invitation(data_type: str, open_invitation: bool = False
         raise ToolError('Invitation preparation not verified. Reload before retrying; do not invent a code.') from None
 
 
-@tools_mcp.tool(app={"visibility": ["app"]}, annotations={
+@tools_mcp.tool(app={"visibility": ["model", "app"]}, annotations={
     "title": "Create Agent Invitation", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def create_agent_invitation(inviter_name: str, recipient_name: str,
                                   recipient_userid: str | None = None) -> dict:
-    """Create a new outbox labeled <recipient>'s agent and prepare its single-person
-    invitation code; with recipient_userid, share the outbox with exactly that user.
+    """Create an owned channel labeled <recipient>'s agent and securely generate and
+    persist a single-person invitation code. Optional recipient_userid shares only
+    that outbox with that exact user. Sends no message. Always creates a new outbox;
+    on error or uncertainty, reconcile before another call; do not use generic creation.
 
     Args:
         inviter_name: The user's name.

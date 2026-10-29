@@ -30,6 +30,26 @@ async def test_openai_endpoint_hides_health_and_location_tools(tmp_path):
     assert {"get_records", "get_data_catalog"} <= openai
 
 
+@pytest.mark.parametrize("path", ["/mcp", OPENAI_MCP_PATH])
+async def test_single_person_invitation_discovery(tmp_path, path):
+    async with mcp_client(tmp_path) as client:
+        await client.post(path, json=INITIALIZE)
+        response = await client.post(path, json=TOOLS_LIST)
+    data = next(json.loads(line.removeprefix("data: "))
+                for line in response.text.splitlines() if line.startswith("data: "))
+    tools = {tool['name']: tool for tool in data['result']['tools']}
+    invitation = tools['create_agent_invitation']
+    assert set(invitation['_meta']['ui']['visibility']) == {'model', 'app'}
+    assert invitation['annotations']['readOnlyHint'] is False
+    assert invitation['annotations']['destructiveHint'] is True
+    assert invitation['annotations']['openWorldHint'] is True
+    schema = invitation['inputSchema']
+    assert set(schema['properties']) == {'inviter_name', 'recipient_name', 'recipient_userid'}
+    assert set(schema['required']) == {'inviter_name', 'recipient_name'}
+    for name in ('prepare_agent_invitation', 'prepare_standing_agent_invitation', 'match_agent_invitations'):
+        assert tools[name]['_meta']['ui']['visibility'] == ['app']
+
+
 async def test_openai_endpoint_refuses_hidden_tool_calls(tmp_path):
     call = {
         "jsonrpc": "2.0",
