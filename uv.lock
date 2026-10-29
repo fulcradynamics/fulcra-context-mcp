@@ -662,7 +662,7 @@ wheels = [
 
 [[package]]
 name = "fulcra-context-mcp"
-version = "1.19.7"
+version = "1.19.8"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },

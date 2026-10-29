@@ -4,12 +4,13 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## 1.19.7 release notes
+## 1.19.8 release notes
 
-- Verify sends when readback represents omitted optional message fields as null,
-  without equating empty lists or changed content. Report same-ID content conflicts
-  separately from authorization failures; stop further uploads on conflicts.
-- No UI, authorization, schema or retry-policy changes.
+- Verify sends by record ID only within the selected outbox, without comparing
+  payload fields. An existing ID means posted without upload; an ID observed
+  after upload means posted without another retry, even when fields differ.
+- Outgoing schema validation, authorization, absent-ID handling and read-only
+  polling are unchanged. No UI changes.
 
 ## 1.19.4 release notes
 

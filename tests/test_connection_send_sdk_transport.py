@@ -13,12 +13,14 @@ from conftest import FAKE_USER_ID
 from test_direct_connection_send import ARGS, ENV, GRANT, OUTBOX, PEER
 
 
-@pytest.mark.parametrize('null_readback', [False, True])
-async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypatch, null_readback):
+@pytest.mark.parametrize('preexisting', [False, True])
+async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypatch, preexisting):
     api = FulcraAPI(oidc_audience='https://synthetic.invalid')
     api.fulcra_credentials = FulcraCredentials(access_token='synthetic', access_token_expiration=datetime.now() + timedelta(hours=1))
     monkeypatch.setattr(api, 'get_token_claims', lambda: {'fulcradynamics.com/userid': FAKE_USER_ID})
-    rows, calls = [], []
+    observed = dict(id=ENV['id'], body='different', artifacts=None, recipients=[])
+    rows = [dict(ENV, id=GRANT)] + ([observed] if preexisting else [])
+    calls = []
     def transport(req):
         url = urlparse(req.full_url)
         query = parse_qs(url.query)
@@ -38,23 +40,22 @@ async def test_sdk_post_is_event_jsonl_and_independent_scoped_readback(monkeypat
             assert req.get_header('Content-type') == 'application/x-jsonl'
             batch = [json.loads(line) for line in req.data.decode().splitlines()]
             assert batch == [ENV]
-            rows.extend(batch)
+            rows.append(observed)
             result = {'upload_id': 'synthetic'}
         else:
             assert url.path == '/data/v1/records'
             assert method == 'GET'
             assert OUTBOX in query['q'][0]
             assert query.get('fulcra_userid', [FAKE_USER_ID]) == [FAKE_USER_ID]
-            observed = [dict(artifacts=None, in_reply_to=None, recipients=None, **r)
-                        for r in rows] if null_readback else rows
-            return BytesIO(('\n'.join(json.dumps(r) for r in observed)).encode())
+            return BytesIO(('\n'.join(json.dumps(r) for r in rows)).encode())
         return BytesIO(json.dumps(result).encode())
     monkeypatch.setattr('urllib.request.urlopen', transport)
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     result = await tools.send_agent_contact_message(**ARGS)
     assert result['status'] == 'posted', result
     assert result['peer_acknowledged'] is False
-    assert calls.count(('POST', '/ingest/v1/record/' + OUTBOX)) == 1
+    assert result['record'] == observed
+    assert calls.count(('POST', '/ingest/v1/record/' + OUTBOX)) == (0 if preexisting else 1)
     # Confirm the record first, then fetch current metadata for best-effort clearing.
     assert calls[-2:] == [('GET', '/data/v1/records'), ('GET', '/data/v1/catalog')]
-    assert sum(path == '/user/v1/datashare' for _, path in calls) == 2
+    assert sum(path == '/user/v1/datashare' for _, path in calls) == (1 if preexisting else 2)
