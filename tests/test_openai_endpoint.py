@@ -1,12 +1,13 @@
 """OpenAI keeps the plugin contract and its own RFC 9728 path-form discovery;
- native tools have endpoint-local invitation and app-support behavior."""
+ generic tools have endpoint-local invitation and app-support behavior."""
 
 import json
 
 import httpx
 import pytest
 
-from fulcra_mcp.main import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH, app
+from fulcra_mcp.main import app
+from fulcra_mcp.openai_endpoint import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH
 from test_stateless import INITIALIZE, TOOLS_LIST, mcp_client
 
 

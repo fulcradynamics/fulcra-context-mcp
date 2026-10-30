@@ -1,4 +1,4 @@
-# Native invitations
+# Invitation workflow
 
 The `/mcp` endpoint works without installed skills. `/openai/mcp` retains its
 existing instructions, tool registrations, results and UI invitation template.
@@ -69,10 +69,15 @@ and renewed authorization, using existing narrow sharing/message tools.
 
 ## Endpoint and host boundary
 
-`native_endpoint.py` composes endpoint-local invitation wrappers with the shared
-provider, excluding replaced registrations before aggregation. It does not mutate
-shared tool objects. A provider-local FastMCP `ToolTransform` changes only the
-generic sharing description. Core channel creation/preparation, matching and send primitives
+`endpoint.py` provides the default `create_server()` factory for `/mcp` and stdio.
+It composes invitation wrappers from `invitation_workflow.py` with the shared
+provider, excluding replaced registrations before aggregation without mutating
+shared tool objects. `openai_endpoint.py` provides `create_openai_server()` with
+the submitted instructions, health/location filtering and a provider-local
+`ToolTransform` retaining the submitted sharing description. The default wording
+lives in `tools.py`. Both factories use the same identity and common registrations;
+OpenAI retains the shared invitation registrations without the default wrappers.
+Core channel creation/preparation in `agent_invitations.py`, matching and send primitives
 are shared; acceptance requests one send attempt while existing send defaults and
 OpenAI runtime behavior remain unchanged.
 

@@ -116,7 +116,7 @@ async def call(client, name, **args):
     return result.data if result.data is not None else result.content[0].text
 
 
-@pytest.mark.parametrize('matcher', [mcp, openai_mcp], ids=['native', 'openai'])
+@pytest.mark.parametrize('matcher', [mcp, openai_mcp], ids=['generic', 'openai'])
 async def test_two_account_tool_only_lifecycle(accounts, matcher):
     a, b, active = accounts
     async with Client(mcp) as inviter:

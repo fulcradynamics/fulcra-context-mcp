@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 import fulcra_mcp
+from fastmcp import Client
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -17,6 +18,18 @@ from mcp.client.stdio import stdio_client
 async def main():
     installed = Path(fulcra_mcp.__file__).resolve()
     assert 'site-packages' in str(installed), installed
+    from fulcra_mcp.endpoint import create_server
+    from fulcra_mcp.openai_endpoint import create_openai_server, CREATE_SHARE_DESCRIPTION
+
+    # Exercise both packaged factories, including the OpenAI-only override.
+    for factory in (create_server, create_openai_server):
+        async with Client(factory()) as client:
+            discovered = {tool.name: tool for tool in await client.list_tools()}
+            assert ('accept_agent_invitation' in discovered) == (factory is create_server)
+            if factory is create_openai_server:
+                assert discovered['create_share'].description == CREATE_SHARE_DESCRIPTION
+                assert 'get_location' not in discovered
+                assert 'open_agent_contacts' in discovered
     with tempfile.TemporaryDirectory(prefix='wheel-smoke-') as home:
         env = {**os.environ, 'HOME': home, 'XDG_CONFIG_HOME': home,
                'FULCRA_ENVIRONMENT': 'stdio'}

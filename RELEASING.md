@@ -19,7 +19,7 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 - Acceptance records an attempt in owned channel metadata before sharing/sending.
   Re-entry only inspects that attempt. Creation can fail before returning an ID;
   inspect the catalog before another write. No cross-worker atomicity or backend
-  idempotence guarantee. See [native invitation workflow](docs/native-invitations.md).
+  idempotence guarantee. See [invitation workflow](docs/invitation-workflow.md).
 
 ## 1.19.8 release notes
 

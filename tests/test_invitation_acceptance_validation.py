@@ -1,4 +1,4 @@
-"""Public native acceptance validates before sharing or reserving reuse."""
+"""Public invitation acceptance validates before sharing or reserving reuse."""
 import copy
 
 import pytest
@@ -6,7 +6,7 @@ from fastmcp import Client
 from fulcra_api import connections
 from fulcra_mcp.channel_metadata import parse_metadata
 from fulcra_mcp.main import mcp, openai_mcp
-from test_native_lifecycle import accounts, call, OWN, PEER
+from test_invitation_lifecycle import accounts, call, OWN, PEER
 
 
 async def test_target_schema_before_reservation(accounts, monkeypatch):
@@ -59,7 +59,7 @@ async def test_created_validation_failure_does_not_share(accounts, monkeypatch, 
         assert a.writes == before
 
 
-async def test_openai_standing_native_acceptance_openai_match(accounts):
+async def test_openai_standing_generic_acceptance_openai_match(accounts):
     a, b, active = accounts
     async with Client(openai_mcp) as client:
         invite = await call(client, 'prepare_standing_agent_invitation', inviter_name='Alex')

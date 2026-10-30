@@ -53,7 +53,7 @@ metadata tools include:
   exact recipient ID. No message is sent. On `/mcp`, the result also includes full
   `invitation_text` and an explicit delivery next step; skills are optional.
   Reconcile errors before another call; do not fall back to generic creation.
-  See [the native workflow and host-capability boundary](docs/native-invitations.md).
+  See [the invitation workflow and host-capability boundary](docs/invitation-workflow.md).
   `/openai/mcp` keeps its existing plugin contract and invitation UI.
 
 App-only implementation tools are not part of the public model-facing reference.

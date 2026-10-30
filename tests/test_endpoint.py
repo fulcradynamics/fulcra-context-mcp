@@ -1,4 +1,4 @@
-"""Native tool workflows and endpoint contract isolation."""
+"""Default tool workflows and endpoint contract isolation."""
 import json
 from pathlib import Path
 
@@ -21,6 +21,18 @@ async def test_openai_contract_unchanged():
         Path(__file__).with_name('openai_contract.json').read_text())
 
 
+@pytest.mark.parametrize('openai_first', [False, True])
+async def test_fresh_factories_keep_endpoint_contracts_isolated(openai_first):
+    from fulcra_mcp.endpoint import create_server
+    from fulcra_mcp.openai_endpoint import create_openai_server
+
+    factories = [(create_server, mcp), (create_openai_server, openai_mcp)]
+    if openai_first:
+        factories.reverse()
+    for factory, mounted in factories * 2:
+        assert await contract(factory()) == await contract(mounted)
+
+
 @pytest.mark.parametrize('servers', [(mcp, openai_mcp), (openai_mcp, mcp)])
 async def test_share_description_is_endpoint_local(servers, monkeypatch):
     from unittest.mock import Mock
@@ -29,7 +41,7 @@ async def test_share_description_is_endpoint_local(servers, monkeypatch):
     baseline = next(t for t in json.loads(
         Path(__file__).with_name('openai_contract.json').read_text())['tools']
         if t['name'] == 'create_share')
-    native_description = (
+    generic_description = (
         "Share files or data types from this account with other Fulcra users (read-only).\n\n"
         "Recipients read them by passing this user's ID as `fulcra_userid` to the\n"
         "file and data tools; this share does not let them write to this account.\n"
@@ -45,7 +57,7 @@ async def test_share_description_is_endpoint_local(servers, monkeypatch):
             share = next(t for t in await client.list_tools() if t.name == 'create_share')
             actual = share.model_dump(mode='json', exclude_none=True)
             assert actual.pop('description') == (
-                native_description if server is mcp else baseline['description'])
+                baseline['description'] if server is openai_mcp else generic_description)
             assert actual == {k: v for k, v in baseline.items() if k != 'description'}
             result = await client.call_tool('create_share', {
                 'name': 'Authorized folder', 'with_user_ids': ['recipient'],
@@ -62,7 +74,7 @@ async def test_share_description_is_endpoint_local(servers, monkeypatch):
     assert all(result == results[0] for result in results)
 
 
-async def test_generic_native_discovery():
+async def test_default_endpoint_discovery():
     async with Client(mcp) as client:
         tools = await client.list_tools()
         names = [t.name for t in tools]
@@ -99,7 +111,7 @@ async def test_real_fastmcp_http_endpoint_discovery_and_call(tmp_path, path, mon
     from fastmcp.client.transports import StreamableHttpTransport
     from fulcra_mcp.main import app
     from fulcra_mcp import tools
-    from test_native_lifecycle import Account, OWN, PEER
+    from test_invitation_lifecycle import Account, OWN, PEER
     from test_stateless import mcp_client
     api = Account(OWN, {})
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)

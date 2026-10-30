@@ -6,12 +6,15 @@ from fastmcp.apps.config import UI_EXTENSION_ID
 from fastmcp.server.dependencies import get_context
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.providers import FastMCPProvider
-from fastmcp.server.transforms import ToolTransform, Transform
+from fastmcp.server.transforms import Transform
 from fastmcp.tools.tool import ToolResult
-from fastmcp.tools.tool_transform import ToolTransformConfig
 
-from . import native_invitations, tools
+from . import invitation_workflow, server_info, tools
+from .apps import app_mcp
 from .compact_tools import CompactTools
+from .fulcra_settings import settings_mcp
+from .mentions import mentions_mcp
+from .provider import oauth_provider
 
 INSTRUCTIONS = (
     'Use a time zone in time arguments. Start with get_user_info and get_data_catalog for data; '
@@ -24,6 +27,34 @@ INSTRUCTIONS = (
     'Sends and shares require the user\'s authorization; skills are optional.'
 )
 APP_OPENERS = {'open_agent_contacts', 'open_agent_contacts_home'}
+
+
+def _create_server(instructions, tool_provider) -> FastMCP:
+    """Shared identity and registrations; endpoint policy stays with its caller."""
+    server = FastMCP(
+        name=server_info.DISPLAY_NAME,
+        version=server_info.version(),
+        website_url=server_info.website_url(),
+        icons=server_info.icons(),
+        instructions=instructions,
+        auth=oauth_provider,
+        experimental_capabilities={
+            "openai/mentions": {"searchTool": "search_agent_contacts"},
+            "openai/settings": {"readTool": "get_fulcra_settings", "updateTool": "update_fulcra_settings"},
+        },
+    )
+    server.add_provider(tool_provider)
+    server.mount(app_mcp)
+    server.mount(mentions_mcp)
+    server.mount(settings_mcp)
+    return server
+
+
+def create_server() -> FastMCP:
+    """Build the default MCP endpoint, also used for stdio."""
+    server = _create_server(INSTRUCTIONS, FastMCPProvider(compose_tools()))
+    server.add_middleware(ContactAppSupport())
+    return server
 
 
 class ContactAppSupport(Middleware):
@@ -62,17 +93,9 @@ class ReplacedInvitations(Transform):
 
 
 def compose_tools():
-    server = FastMCP('Fulcra native tools')
+    server = FastMCP('Fulcra tools')
     common = FastMCPProvider(tools.tools_mcp)
     common.add_transform(ReplacedInvitations())
-    common.add_transform(ToolTransform({
-        'create_share': ToolTransformConfig(description=(
-            "Share files or data types from this account with other Fulcra users (read-only).\n\n"
-            "Recipients read them by passing this user's ID as `fulcra_userid` to the\n"
-            "file and data tools; this share does not let them write to this account.\n"
-            "Only share what the user authorized."
-        )),
-    }))
     server.add_provider(common)
     server.add_transform(CompactTools())
 
@@ -89,7 +112,7 @@ def compose_tools():
             recipient_name: The invited person's name.
             recipient_userid: Optional exact Fulcra user ID; shares only the invitation outbox with that user immediately.
         """
-        return await asyncio.to_thread(native_invitations.create, tools.get_fulcra_object(),
+        return await asyncio.to_thread(invitation_workflow.create, tools.get_fulcra_object(),
                                        inviter_name, recipient_name, recipient_userid)
 
     @server.tool(app={'visibility': ['model', 'app']}, annotations={
@@ -108,7 +131,7 @@ def compose_tools():
             introduction: User-approved first message, at most 4000 characters.
             response_channel: Optional owned empty Event/<uuid> channel without targeted shares; otherwise create one.
         """
-        return await asyncio.to_thread(native_invitations.accept, tools.get_fulcra_object(),
+        return await asyncio.to_thread(invitation_workflow.accept, tools.get_fulcra_object(),
                                        inviter_userid, topic, sender, introduction, response_channel)
 
     @server.tool(app={'visibility': ['model', 'app']}, annotations={
