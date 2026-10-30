@@ -2,6 +2,8 @@
 
 The `/mcp` endpoint works without installed skills. `/openai/mcp` retains its
 existing instructions, tool registrations, results and UI invitation template.
+The factual `create_share` wording is local to `/mcp`; `/openai/mcp` keeps its
+submitted description. Sharing schemas, annotations and execution are unchanged.
 
 ## Tool-only workflow
 
@@ -69,7 +71,8 @@ and renewed authorization, using existing narrow sharing/message tools.
 
 `native_endpoint.py` composes endpoint-local invitation wrappers with the shared
 provider, excluding replaced registrations before aggregation. It does not mutate
-shared tool objects. Core channel creation/preparation, matching and send primitives
+shared tool objects. A provider-local FastMCP `ToolTransform` changes only the
+generic sharing description. Core channel creation/preparation, matching and send primitives
 are shared; acceptance requests one send attempt while existing send defaults and
 OpenAI runtime behavior remain unchanged.
 

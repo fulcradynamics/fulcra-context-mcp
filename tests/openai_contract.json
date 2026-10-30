@@ -1175,7 +1175,7 @@
     {
       "name": "create_share",
       "title": "Create Share",
-      "description": "Share files or data types from this account with other Fulcra users (read-only).\n\nRecipients read them by passing this user's ID as `fulcra_userid` to the\nfile and data tools; this share does not let them write to this account.\nOnly share what the user authorized.",
+      "description": "Share files or data types from this account with other Fulcra users (read-only).\n\nRecipients read them by passing this user's ID as `fulcra_userid` to the\nfile and data tools; they can never write here. For agent-to-agent\ncoordination, share a folder like \"/shared/<topic>/\" and have the other\nuser share one back; each agent writes to its own account and reads the\nother's. Only share what the user asked to share.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

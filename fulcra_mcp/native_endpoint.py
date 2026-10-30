@@ -6,8 +6,9 @@ from fastmcp.apps.config import UI_EXTENSION_ID
 from fastmcp.server.dependencies import get_context
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.providers import FastMCPProvider
-from fastmcp.server.transforms import Transform
+from fastmcp.server.transforms import ToolTransform, Transform
 from fastmcp.tools.tool import ToolResult
+from fastmcp.tools.tool_transform import ToolTransformConfig
 
 from . import native_invitations, tools
 from .compact_tools import CompactTools
@@ -64,6 +65,14 @@ def compose_tools():
     server = FastMCP('Fulcra native tools')
     common = FastMCPProvider(tools.tools_mcp)
     common.add_transform(ReplacedInvitations())
+    common.add_transform(ToolTransform({
+        'create_share': ToolTransformConfig(description=(
+            "Share files or data types from this account with other Fulcra users (read-only).\n\n"
+            "Recipients read them by passing this user's ID as `fulcra_userid` to the\n"
+            "file and data tools; this share does not let them write to this account.\n"
+            "Only share what the user authorized."
+        )),
+    }))
     server.add_provider(common)
     server.add_transform(CompactTools())
 

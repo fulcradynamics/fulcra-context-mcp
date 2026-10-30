@@ -21,6 +21,47 @@ async def test_openai_contract_unchanged():
         Path(__file__).with_name('openai_contract.json').read_text())
 
 
+@pytest.mark.parametrize('servers', [(mcp, openai_mcp), (openai_mcp, mcp)])
+async def test_share_description_is_endpoint_local(servers, monkeypatch):
+    from unittest.mock import Mock
+    from fulcra_mcp import tools
+
+    baseline = next(t for t in json.loads(
+        Path(__file__).with_name('openai_contract.json').read_text())['tools']
+        if t['name'] == 'create_share')
+    native_description = (
+        "Share files or data types from this account with other Fulcra users (read-only).\n\n"
+        "Recipients read them by passing this user's ID as `fulcra_userid` to the\n"
+        "file and data tools; this share does not let them write to this account.\n"
+        "Only share what the user authorized."
+    )
+    api = Mock()
+    api.create_datashare.return_value = {'datashare': {'datashare_id': 'test-share'}}
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
+    results = []
+    # Repeat discovery after both endpoints have listed and invoked the tool.
+    for server in (*servers, *servers, tools.tools_mcp):
+        async with Client(server) as client:
+            share = next(t for t in await client.list_tools() if t.name == 'create_share')
+            actual = share.model_dump(mode='json', exclude_none=True)
+            assert actual.pop('description') == (
+                native_description if server is mcp else baseline['description'])
+            assert actual == {k: v for k, v in baseline.items() if k != 'description'}
+            result = await client.call_tool('create_share', {
+                'name': 'Authorized folder', 'with_user_ids': ['recipient'],
+                'file_paths': ['/shared/topic/'],
+            })
+            results.append(result.content)
+            api.create_datashare.assert_called_once_with(
+                datashare_name='Authorized folder',
+                fulcra_data_types=['file:/shared/topic/'],
+                allowed_user_ids=['recipient'], allowed_group_ids=None,
+                share_all_data=False, time_start=None, time_end=None,
+            )
+            api.reset_mock()
+    assert all(result == results[0] for result in results)
+
+
 async def test_generic_native_discovery():
     async with Client(mcp) as client:
         tools = await client.list_tools()
