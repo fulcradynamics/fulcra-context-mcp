@@ -40,7 +40,7 @@ def backend(fake, catalog, outgoing=(), incoming=()):
     fake.get_shared_datasets.return_value = incoming
 
 
-async def test_multiparty_native_descriptor_opens_exact_own_audience(fake_fulcra):
+async def test_multiparty_native_descriptor_opens_exact_own_audience(fake_fulcra, app_capabilities):
     backend(fake_fulcra, [entry('a')], outgoing=[{
         'share_all_data': False, 'fulcra_data_types': ['Event/a'],
         'permissions': [{'allowed_fulcra_userid': p} for p in ['peer', 'other']]}])
@@ -125,7 +125,8 @@ async def test_identifier_selection_matches_list_precedence(sources, expected, f
             assert json.loads((await client.read_resource(items[1]["uri"]))[0].text)["title"] == expected
 
 
-async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra):
+async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra, app_capabilities):
+    from fulcra_mcp.main import openai_mcp as mcp
     backend(fake_fulcra, [entry("a", "peer")])
     async with Client(mcp) as client:
         instructions = client.initialize_result.instructions
