@@ -42,10 +42,19 @@ metadata tools include:
 - `update_data_type`: update an owned active v1 Event/Metric type's name or
   description with user authorization and independent readback. It does not
   change schemas, records or shares; uncertain writes require reconciliation.
+- `accept_agent_invitation` on `/mcp`: with the user's authorization, create or
+  reuse an empty response channel, share it narrowly with the exact inviter and
+  post the supplied first introduction. Inspect uncertain outcomes read-only;
+  saved attempts never automatically send/share again.
+- `match_agent_invitations` on `/mcp`: complete user-prepared invitations using
+  first-message codes and actual incoming-share owners, not message claims.
 - `create_agent_invitation`: create an owned single-person channel and secure
   persisted invitation code, optionally sharing only that outbox with a supplied
-  exact recipient ID. No message is sent. Reconcile errors before another call;
-  do not fall back to generic channel creation.
+  exact recipient ID. No message is sent. On `/mcp`, the result also includes full
+  `invitation_text` and an explicit delivery next step; skills are optional.
+  Reconcile errors before another call; do not fall back to generic creation.
+  See [the native workflow and host-capability boundary](docs/native-invitations.md).
+  `/openai/mcp` keeps its existing plugin contract and invitation UI.
 
 App-only implementation tools are not part of the public model-facing reference.
 

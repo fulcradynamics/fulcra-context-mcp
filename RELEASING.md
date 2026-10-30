@@ -4,6 +4,22 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.10 release notes
+
+- `/mcp` supports tool-only invitations without installed skills: ready-to-share
+  invitation text, explicit delivery with `send_agent_message`, authorized
+  acceptance with a first introduction, and inviter completion with matching.
+- Preserve `/openai/mcp` instructions, tools and UI behavior. Generic composition
+  replaces only invitation adapters and adds acceptance; shared domain helpers
+  keep the existing Event message, topic, sharing and matching protocol.
+- Generic contact panel entrypoints require the advertised MCP Apps extension;
+  unsupported direct calls return tool alternatives. Resources and the file
+  manager fallback remain available. No frontend change or UI version bump.
+- Acceptance records an attempt in owned channel metadata before sharing/sending.
+  Re-entry only inspects that attempt. Creation can fail before returning an ID;
+  inspect the catalog before another write. No cross-worker atomicity or backend
+  idempotence guarantee. See [native invitation workflow](docs/native-invitations.md).
+
 ## 1.19.8 release notes
 
 - Verify sends by record ID only within the selected outbox, without comparing

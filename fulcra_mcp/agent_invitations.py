@@ -474,7 +474,7 @@ def standing(api, inviter_name=None):
         return {**prepared, 'inviter_name': _standing_inviter(entry['description'])}
 
 
-def create(api, inviter_name, recipient_name, recipient_userid=None):
+def create(api, inviter_name, recipient_name, recipient_userid=None, *, progress=None):
     """Create a labeled single-person invitation outbox, as the invite skill does,
     then prepare its code. A known recipient ID shares the outbox up front; their
     handshake still completes the match."""
@@ -487,14 +487,20 @@ def create(api, inviter_name, recipient_name, recipient_userid=None):
         own = api.get_fulcra_userid()
         if recipient_userid is not None and (not _uuid(recipient_userid) or recipient_userid == own):
             raise ValueError("Use the other person's exact Fulcra user ID, or leave it blank.")
+        if progress is not None:
+            progress.update(own_userid=own, stage='creating')
         created = data_type_management.create_data_type(
             api, {'id': 'Event', 'api_version': 'v1'}, f'{inviter} with {recipient}',
             description=write_contact_identifier('Agent contact channel', identifier),
             fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
                            'required': connections.CHANNEL_FIELDS['required']})
         data_type = created['id']
+        if progress is not None:
+            progress.update(data_type=data_type, stage='preparing')
         _channel(api, own, data_type, own=True)
         prepared = prepare(api, data_type)
+        if progress is not None:
+            progress.update(prepared, stage='sharing' if recipient_userid else 'prepared')
         if recipient_userid:
             api.create_datashare(datashare_name=f'{SHARE_NAME_PREFIX[-1]}: {identifier}',
                 fulcra_data_types=[data_type], allowed_user_ids=[recipient_userid], share_all_data=False,

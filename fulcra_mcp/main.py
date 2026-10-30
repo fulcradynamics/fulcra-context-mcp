@@ -36,14 +36,16 @@ logger = structlog.getLogger(__name__)
 socket.setdefaulttimeout(settings.http_timeout_seconds)
 
 
-def _server() -> FastMCP:
+def _server(*, native=False) -> FastMCP:
+    from .native_endpoint import INSTRUCTIONS, ContactAppSupport, compose_tools
+
     server = FastMCP(
         # The same identity as server.json and the Server Card (see server_info).
         name=server_info.DISPLAY_NAME,
         version=server_info.version(),
         website_url=server_info.website_url(),
         icons=server_info.icons(),
-        instructions=(
+        instructions=INSTRUCTIONS if native else (
             "Use a time zone in time arguments. Bare @Fulcra: use set-up-agent-contacts for onboarding. "
             "Agents I Know: open_agent_contacts({}). Open Agent Contact: route through open_agent_contacts. "
             "The user's explicit task wins; mentions authorize opening only, not sends/shares/edits. "
@@ -56,17 +58,19 @@ def _server() -> FastMCP:
             "openai/settings": {"readTool": "get_fulcra_settings", "updateTool": "update_fulcra_settings"},
         },
     )
-    server.mount(tools_mcp)
+    server.mount(compose_tools() if native else tools_mcp)
+    if native:
+        server.add_middleware(ContactAppSupport())
     server.mount(app_mcp)
     server.mount(mentions_mcp)
     server.mount(settings_mcp)
     return server
 
 
-mcp = _server()
+mcp = _server(native=True)
 
-# The OpenAI plugin connects here: the same server without the dedicated health
-# and location tools. Generic record and catalog tools stay.
+# Preserve the plugin's registrations and instructions independently of native
+# adapters, still excluding its dedicated health/location tools.
 OPENAI_MCP_PATH = "/openai/mcp"
 OPENAI_HIDDEN_TOOLS = {"get_location", "get_sleep", "get_workouts", "get_time_series"}
 openai_mcp = _server()

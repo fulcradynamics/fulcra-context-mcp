@@ -42,4 +42,7 @@ async def test_public_summaries_cover_model_additions():
     for path in ("README.md", "AGENTS.md"):
         text = (ROOT / path).read_text()
         for name in added:
-            assert f"`{name}`" in text, (path, name)
+            reference = text
+            if path == 'AGENTS.md' and name in {'accept_agent_invitation', 'match_agent_invitations'}:
+                reference = (ROOT / 'docs/native-invitations.md').read_text()
+            assert f"`{name}`" in reference, (path, name)
