@@ -1,0 +1,77 @@
+name: PR Image Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+# Join CI's concurrency group for this PR (CI uses "<workflow name>-<PR number>")
+# so closing the PR cancels any in-flight CI run instead of letting it push a
+# fresh image after this cleanup has finished.
+concurrency:
+  group: CI-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # Drop the PR's preview tag (see /preview in deploy.yml) so its URL stops
+  # serving and no tagged revision is left pointing at the images deleted below.
+  preview:
+    name: Remove Preview Tag
+    runs-on: ubuntu-latest
+    # Service that previews are deployed to. Keep in sync with deploy.yml.
+    environment:
+      name: dev
+      deployment: false
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Remove tag
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          tagged="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format=json \
+            | jq --arg tag "$TAG" '[.status.traffic[]? | select(.tag == $tag)] | length')"
+          if [ "$tagged" -gt 0 ]; then
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --project "$PROJECT" --remove-tags "$TAG" --quiet
+          fi
+
+  cleanup:
+    name: Delete PR Images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Delete images tagged for this PR
+        env:
+          IMAGE: ${{ vars.CONTAINER_IMAGE_PATH }}
+          PREFIX: pr-${{ github.event.pull_request.number }}-
+        run: |
+          gcloud artifacts docker images list "$IMAGE" --include-tags --format=json > "$RUNNER_TEMP/images.json"
+
+          # For each digest carrying a tag for this PR: delete the whole image if
+          # every tag on it belongs to this PR, otherwise remove only the PR tags.
+          jq -r --arg p "$PREFIX" '
+            .[]
+            | (.tags // [] | if type == "string" then split(",") | map(ltrimstr(" ")) else . end) as $tags
+            | ($tags | map(select(startswith($p)))) as $mine
+            | select($mine | length > 0)
+            | if ($tags | length) == ($mine | length)
+              then "image \(.version)"
+              else ($mine[] | "tag \(.)")
+              end
+          ' "$RUNNER_TEMP/images.json" | while read -r kind ref; do
+            case "$kind" in
+              image) gcloud artifacts docker images delete "$IMAGE@$ref" --delete-tags --quiet ;;
+              tag)   gcloud artifacts docker tags delete "$IMAGE:$ref" --quiet ;;
+            esac
+          done
