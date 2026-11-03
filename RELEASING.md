@@ -9,9 +9,9 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 - `/mcp` supports tool-only invitations without installed skills: ready-to-share
   invitation text, explicit delivery with `send_agent_message`, authorized
   acceptance with a first introduction, and inviter completion with matching.
-- Preserve `/openai/mcp` instructions, tools and UI behavior. Generic composition
-  replaces invitation adapters, adds acceptance and locally updates `create_share`
-  wording; OpenAI keeps its submitted sharing description. Shared domain helpers
+- Preserve `/openai/mcp` instructions, tools and UI behavior. `tools.py` owns the
+  standard invitations, acceptance and `create_share` wording; `openai_endpoint.py`
+  owns frozen invitation overrides and its submitted sharing description. Shared domain helpers
   keep the existing Event message, topic, sharing and matching protocol.
 - Generic contact panel entrypoints require the advertised MCP Apps extension;
   unsupported direct calls return tool alternatives. Resources and the file

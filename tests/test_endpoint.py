@@ -74,6 +74,49 @@ async def test_share_description_is_endpoint_local(servers, monkeypatch):
     assert all(result == results[0] for result in results)
 
 
+async def test_standard_provider_invitation_contract():
+    from fulcra_mcp.tools import tools_mcp
+
+    names = {'create_agent_invitation', 'accept_agent_invitation', 'match_agent_invitations'}
+    async with Client(tools_mcp) as client:
+        standard = [t.model_dump(mode='json', exclude_none=True)
+                    for t in await client.list_tools() if t.name in names]
+    expected = [t for t in (await contract(mcp))['tools'] if t['name'] in names]
+    assert {t['name'] for t in standard} == names
+    assert {t['name']: t for t in standard} == {t['name']: t for t in expected}
+
+
+async def test_openai_excludes_direct_acceptance(monkeypatch):
+    from fulcra_mcp import tools
+
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: pytest.fail('Excluded tool accessed account'))
+    async with Client(openai_mcp) as client:
+        result = await client.call_tool('accept_agent_invitation', {
+            'inviter_userid': '00000000-0000-4000-8000-000000000001',
+            'topic': 'handshake ' + 'a' * 32, 'sender': 'Agent', 'introduction': 'Approved',
+        }, raise_on_error=False)
+    assert result.is_error
+    assert 'Unknown tool' in result.content[0].text
+
+
+async def test_standard_provider_prepares_ready_to_share_invitation(monkeypatch):
+    from fulcra_mcp import tools
+    from test_invitation_lifecycle import Account, OWN, PEER
+
+    api = Account(OWN, {})
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
+    async with Client(tools.tools_mcp) as client:
+        result = await client.call_tool('create_agent_invitation', {
+            'inviter_name': 'Alex', 'recipient_name': 'Sura', 'recipient_userid': PEER,
+        })
+    invite = result.data
+    assert invite['prepared'] and invite['shared']
+    assert not invite['sent'] and not invite['connected']
+    assert {OWN, invite['data_type'], invite['code']} <= set(invite['invitation_text'].split())
+    assert invite['delivery']['body'] == invite['invitation_text']
+    assert not api.rows
+
+
 async def test_default_endpoint_discovery():
     async with Client(mcp) as client:
         tools = await client.list_tools()
