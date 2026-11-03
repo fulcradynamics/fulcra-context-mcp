@@ -116,10 +116,12 @@ async def call(client, name, **args):
     return result.data if result.data is not None else result.content[0].text
 
 
-@pytest.mark.parametrize('matcher', [mcp, openai_mcp], ids=['generic', 'openai'])
-async def test_two_account_tool_only_lifecycle(accounts, matcher):
+@pytest.mark.parametrize('server,matcher', [(mcp, mcp), (mcp, openai_mcp),
+                                         (tools.tools_mcp, tools.tools_mcp)],
+                         ids=['generic', 'openai', 'standard-provider'])
+async def test_two_account_tool_only_lifecycle(accounts, server, matcher):
     a, b, active = accounts
-    async with Client(mcp) as inviter:
+    async with Client(server) as inviter:
         invite = await call(inviter, 'create_agent_invitation', inviter_name='Alex', recipient_name='Sura', recipient_userid=PEER)
         assert invite['prepared'] and invite['shared'] and not invite['sent'] and not invite['connected']
         assert not a.rows and not b.writes
@@ -131,7 +133,7 @@ async def test_two_account_tool_only_lifecycle(accounts, matcher):
         assert posted['status'] == 'posted'
         assert a.rows[invite['data_type']][0]['body'] == invite['invitation_text']
     active.set(b)
-    async with Client(mcp) as recipient:
+    async with Client(server) as recipient:
         # The recipient actually reads the delivered invitation through a public tool.
         read = await call(recipient, 'get_records', data_type=invite['data_type'], fulcra_userid=OWN,
                           start_time='2026-01-01T00:00:00Z', end_time='2027-01-01T00:00:00Z')

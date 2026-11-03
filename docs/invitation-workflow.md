@@ -69,17 +69,18 @@ and renewed authorization, using existing narrow sharing/message tools.
 
 ## Endpoint and host boundary
 
-`endpoint.py` provides the default `create_server()` factory for `/mcp` and stdio.
-It composes invitation wrappers from `invitation_workflow.py` with the shared
-provider, excluding replaced registrations before aggregation without mutating
-shared tool objects. `openai_endpoint.py` provides `create_openai_server()` with
-the submitted instructions, health/location filtering and a provider-local
-`ToolTransform` retaining the submitted sharing description. The default wording
-lives in `tools.py`. Both factories use the same identity and common registrations;
-OpenAI retains the shared invitation registrations without the default wrappers.
-Core channel creation/preparation in `agent_invitations.py`, matching and send primitives
-are shared; acceptance requests one send attempt while existing send defaults and
-OpenAI runtime behavior remain unchanged.
+`tools.py` owns the standard tool registrations and descriptions, including
+`create_agent_invitation`, `accept_agent_invitation` and `match_agent_invitations`.
+`endpoint.py` composes that provider for `/mcp` and stdio, preserving discovery
+order and applying the contact UI support gate; it has no invitation implementations.
+`openai_endpoint.py` owns the frozen create/match registrations and submitted
+`create_share` description. Provider-local transforms substitute those registrations
+and exclude generic-only acceptance from both discovery and direct calls, without
+mutating shared tools or registering duplicates. It also retains the submitted
+instructions and health/location filtering. Both factories share identity and
+common registrations. `invitation_workflow.py` and `agent_invitations.py` retain
+the shared domain workflows, matching and channel creation/preparation; send
+primitives, authorization and failure handling are unchanged.
 
 FastMCP 3.4.7's `Context.client_supports_extension` reads the client's initialize
 `capabilities.extensions["io.modelcontextprotocol/ui"]`. Generic contact openers
