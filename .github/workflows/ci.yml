@@ -70,14 +70,6 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "image=$CONTAINER_IMAGE_PATH:$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Generate GitHub API Token
-        id: generate-token
-        uses: actions/create-github-app-token@v3.1.1
-        with:
-          owner: fulcradynamics
-          client-id: ${{ vars.CI_APP_CLIENT_ID }}
-          private-key: ${{ secrets.CI_APP_SECRET_KEY }}
-
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -93,7 +85,6 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          secrets: github_token=${{ steps.generate-token.outputs.token }}
           build-args: FULCRA_VERSION=${{ steps.meta.outputs.tag }}
           tags: ${{ steps.meta.outputs.image }}
           push: true
