@@ -132,13 +132,10 @@ async def test_in_process_budget_and_essential_instructions():
     result = measure.budget(rows)
     assert result["candidate_bytes"] <= measure.TOTAL_LIMIT
     assert not any(r["generic_schema_fallback"] or r["schema_compacted"] for r in rows)
-    for text in ("time zone", "open_agent_contacts",
-                 "explicit", "untrusted", "contact labels", "conversion provenance", "Do not migrate"):
+    for text in ('time zone', 'create_agent_invitation', 'accept_agent_invitation',
+                 'match_agent_invitations', 'untrusted', 'authorization', 'skills are optional'):
         assert text in instructions
-    contact = next(t for t in tools if t.name == "open_agent_contacts")
-    assert "contacts://threads/id-" in contact.description
-    assert "exact peer_fulcra_userid" in contact.description
-    assert "multiparty thread_id" in contact.description
+    assert 'open_agent_contacts' not in {t.name for t in tools}
 
 
 @pytest.mark.parametrize("value", [[], ["bogus"], ["string", "bogus"], ["string", 1], None, 1, "bogus"])

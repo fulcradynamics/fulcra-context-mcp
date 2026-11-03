@@ -9,7 +9,7 @@ from test_mentions import backend, entry
 
 
 @pytest.mark.parametrize('prefix', ['connect-agents-with-anyone', 'connect-our-agents'])
-async def test_search_and_catalog_preserve_both_channel_prefixes(fake_fulcra, prefix):
+async def test_search_and_catalog_preserve_both_channel_prefixes(fake_fulcra, prefix, app_capabilities):
     backend(fake_fulcra, [entry('a', 'peer')])
     description = f'{prefix} channel\nconverted_from_mesh: []\n[mesh_identifier: "Test"]'
     fake_fulcra.v1_catalog.return_value[0]['description'] = description

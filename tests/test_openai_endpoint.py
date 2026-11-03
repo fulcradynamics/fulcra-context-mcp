@@ -1,12 +1,13 @@
-"""The /openai/mcp endpoint: the full server minus the dedicated health and
-location tools, with its own RFC 9728 path-form discovery."""
+"""OpenAI keeps the plugin contract and its own RFC 9728 path-form discovery;
+ generic tools have endpoint-local invitation and app-support behavior."""
 
 import json
 
 import httpx
 import pytest
 
-from fulcra_mcp.main import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH, app
+from fulcra_mcp.main import app
+from fulcra_mcp.openai_endpoint import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH
 from test_stateless import INITIALIZE, TOOLS_LIST, mcp_client
 
 
@@ -26,7 +27,7 @@ async def test_openai_endpoint_hides_health_and_location_tools(tmp_path):
         openai = _tool_names(await client.post(OPENAI_MCP_PATH, json=TOOLS_LIST))
 
     assert OPENAI_HIDDEN_TOOLS <= full
-    assert openai == full - OPENAI_HIDDEN_TOOLS
+    assert openai == (full - OPENAI_HIDDEN_TOOLS - {'accept_agent_invitation'}) | {'open_agent_contacts', 'open_agent_contacts_home'}
     assert {"get_records", "get_data_catalog"} <= openai
 
 
@@ -52,7 +53,8 @@ async def test_single_person_invitation_discovery(tmp_path, path):
     assert set(schema['properties']) == {'inviter_name', 'recipient_name', 'recipient_userid'}
     assert set(schema['required']) == {'inviter_name', 'recipient_name'}
     for name in ('prepare_agent_invitation', 'prepare_standing_agent_invitation', 'match_agent_invitations'):
-        assert tools[name]['_meta']['ui']['visibility'] == ['app']
+        expected = ['model', 'app'] if path == '/mcp' and name == 'match_agent_invitations' else ['app']
+        assert tools[name]['_meta']['ui']['visibility'] == expected
 
 
 async def test_openai_endpoint_refuses_hidden_tool_calls(tmp_path):

@@ -11,7 +11,7 @@ from mcp.client.stdio import stdio_client
 READS = set("""
 get_workouts get_data_catalog get_time_series get_records get_data_updates
 get_sleep get_location get_calendar_events list_files list_shares get_user_info
-open_file_manager open_agent_contacts open_agent_contacts_home search_agent_contacts
+open_file_manager search_agent_contacts
 get_fulcra_settings get_contact_preferences get_message_check_status get_groups read_file
 """.split())
 # Additive operations do not carry the destructive hint.
@@ -25,14 +25,14 @@ start_file_upload upload_file_chunk
 # Both send interfaces are destructive because a sent message cannot be unsent.
 DESTRUCTIVE = set("""
 update_data_type send_agent_message send_agent_contact_message end_agent_contact set_contact_identifier
-set_contact_status archive_data_type delete_records create_agent_invitation
+set_contact_status archive_data_type delete_records create_agent_invitation accept_agent_invitation
 prepare_standing_agent_invitation match_agent_invitations delete_file delete_share
 leave_group update_fulcra_settings set_contact_preferences
 """.split())
 # Public group queries are open-world despite being read-only. Existing-channel
 # sends remain bounded by verified grants, unlike new arbitrary share recipients.
 OPEN_WORLD = {"get_groups", "create_group", "join_group", "leave_group", "create_share",
-              "create_agent_invitation", "match_agent_invitations"}
+              "create_agent_invitation", "accept_agent_invitation", "match_agent_invitations"}
 
 
 async def test_composed_hosted_annotations_over_json_transport():

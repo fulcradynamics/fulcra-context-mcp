@@ -9,6 +9,8 @@ from fastmcp import Client
 from fulcra_mcp import server_info
 from fulcra_mcp.main import mcp
 
+pytestmark = pytest.mark.usefixtures('app_capabilities')
+
 
 @pytest.mark.parametrize("value, enabled", [(None, False), ("false", False), ("true", True), ("on", True), ("off", False), ("TRUE", True), ("0", False)])
 async def test_contacts_debug_resource_env(monkeypatch, value, enabled):

@@ -249,7 +249,7 @@ def test_failed_storage_readback_never_shares(api):
 async def test_public_tools_have_same_auth_and_narrow_results(api, monkeypatch):
     from fastmcp import Client
     from fulcra_mcp import tools
-    from fulcra_mcp.main import mcp
+    from fulcra_mcp.main import openai_mcp as mcp
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     async with Client(mcp) as client:
         listed = {t.name: t for t in await client.list_tools()}
@@ -298,7 +298,7 @@ def test_known_recipient_is_shared_up_front_and_handshake_completes(creating):
 async def test_create_public_result_and_readback(creating, monkeypatch, recipient):
     from fastmcp import Client
     from fulcra_mcp import tools
-    from fulcra_mcp.main import mcp
+    from fulcra_mcp.main import openai_mcp as mcp
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: creating)
     args = {'inviter_name': 'Alex', 'recipient_name': 'Sura Novi'}
     if recipient:
@@ -325,7 +325,7 @@ async def test_create_public_result_and_readback(creating, monkeypatch, recipien
 async def test_create_public_error_can_follow_creation(creating, monkeypatch):
     from fastmcp import Client
     from fulcra_mcp import tools
-    from fulcra_mcp.main import mcp
+    from fulcra_mcp.main import openai_mcp as mcp
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: creating)
     creating.update_data_type.side_effect = RuntimeError('synthetic failure')
     async with Client(mcp) as client:

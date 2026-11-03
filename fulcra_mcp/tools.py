@@ -2392,10 +2392,8 @@ async def create_share(
     """Share files or data types from this account with other Fulcra users (read-only).
 
     Recipients read them by passing this user's ID as `fulcra_userid` to the
-    file and data tools; they can never write here. For agent-to-agent
-    coordination, share a folder like "/shared/<topic>/" and have the other
-    user share one back; each agent writes to its own account and reads the
-    other's. Only share what the user asked to share.
+    file and data tools; this share does not let them write to this account.
+    Only share what the user authorized.
 
     Args:
         name: A short label for the share, shown to recipients.
