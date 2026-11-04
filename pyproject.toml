@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.12",
     "fastmcp>=3.3.0,<4",
-    "fulcra-api @ https://github.com/fulcradynamics/fulcra-api-python/archive/86a65a8b808c82bf36579252ee724ea9ccdd1b55.tar.gz",
+    "fulcra-api>=0.1.58",
     "google-cloud-storage>=2.18",
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.3",
