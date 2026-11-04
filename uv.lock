@@ -646,8 +646,8 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.56"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.58"
+source = { url = "https://github.com/fulcradynamics/fulcra-api-python/archive/86a65a8b808c82bf36579252ee724ea9ccdd1b55.tar.gz" }
 dependencies = [
     { name = "click" },
     { name = "click-option-group" },
@@ -655,10 +655,20 @@ dependencies = [
     { name = "jsonschema" },
     { name = "puremagic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2f/87/5051444f8ccb1f2011f8507b24b0557f6b47aa8b2654caef6268210daafd/fulcra_api-0.1.56.tar.gz", hash = "sha256:1102334c72729be6371c06a700d6c9825df992ee53d4710a8a5b7d6518d2c76b", size = 84915, upload-time = "2026-10-22T20:48:06.802Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/c4/7e6ee263a7adc7d2d64835068df3a8ccc134c30bf7b0811e63b8bb56061c/fulcra_api-0.1.56-py3-none-any.whl", hash = "sha256:3207ca22aa38b091f1482920967396562ac08951048df47e6eb0171048108c56", size = 94399, upload-time = "2026-10-22T20:48:05.927Z" },
+sdist = { hash = "sha256:f2001bedf456af7da39ecb10bb5e0a0179324e7f7cfece357555740e69b80d4c" }
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.2.1" },
+    { name = "click-option-group", specifier = ">=0.5.9" },
+    { name = "dateparser", specifier = ">=1.4.0" },
+    { name = "jsonschema", specifier = ">=4.0.0" },
+    { name = "numpy", marker = "extra == 'pandas'", specifier = ">=2.0.0,<3" },
+    { name = "pandas", marker = "extra == 'pandas'", specifier = ">1.5,<3" },
+    { name = "puremagic", specifier = ">=1.30" },
+    { name = "pyarrow", marker = "extra == 'pandas'", specifier = ">=19.0.0" },
 ]
+provides-extras = ["pandas"]
 
 [[package]]
 name = "fulcra-context-mcp"
@@ -686,7 +696,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.3.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.56" },
+    { name = "fulcra-api", url = "https://github.com/fulcradynamics/fulcra-api-python/archive/86a65a8b808c82bf36579252ee724ea9ccdd1b55.tar.gz" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },
