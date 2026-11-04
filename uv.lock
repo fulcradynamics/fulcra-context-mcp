@@ -646,7 +646,7 @@ server = [
 
 [[package]]
 name = "fulcra-api"
-version = "0.1.56"
+version = "0.1.58"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -655,9 +655,9 @@ dependencies = [
     { name = "jsonschema" },
     { name = "puremagic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2f/87/5051444f8ccb1f2011f8507b24b0557f6b47aa8b2654caef6268210daafd/fulcra_api-0.1.56.tar.gz", hash = "sha256:1102334c72729be6371c06a700d6c9825df992ee53d4710a8a5b7d6518d2c76b", size = 84915, upload-time = "2026-10-22T20:48:06.802Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/76/0d8fb7b0a85e16760c3fe364777fb70cd70b76836b93fb3b36dcce9d67d9/fulcra_api-0.1.58.tar.gz", hash = "sha256:83631dacece07cb311888b24d71bbbe37976e911b69770ed909096aabcc621e2", size = 86530, upload-time = "2026-11-04T19:15:30.925Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/c4/7e6ee263a7adc7d2d64835068df3a8ccc134c30bf7b0811e63b8bb56061c/fulcra_api-0.1.56-py3-none-any.whl", hash = "sha256:3207ca22aa38b091f1482920967396562ac08951048df47e6eb0171048108c56", size = 94399, upload-time = "2026-10-22T20:48:05.927Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/38/2a70b230329e35cd41b1d4458d06294503c73862e0f047c2f07da0ab9845/fulcra_api-0.1.58-py3-none-any.whl", hash = "sha256:23d1f88717c78784371e0ab6ea6401a0726e533d5bb511dda1d579980bf51663", size = 95968, upload-time = "2026-11-04T19:15:29.759Z" },
 ]
 
 [[package]]
@@ -686,7 +686,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=3.3.0,<4" },
-    { name = "fulcra-api", specifier = ">=0.1.56" },
+    { name = "fulcra-api", specifier = ">=0.1.58" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.9.3" },

@@ -33,9 +33,8 @@ async def test_century_windows_real_sdk_and_lossless_rows(call, monkeypatch):
             return BytesIO(json.dumps([dict(id=TYPE, api_version='v1', fulcra_userid=PEER, record_spec={'type': 'event'})]).encode())
         assert url.path == '/data/v1/records'
         parsed = promql_parser.parse(query['q'][0])
-        # The parser accepts negative anchors, but its Python datetime accessor
-        # panics before epoch. Inspect the actual serialized integer instead.
-        end = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(seconds=int(query['q'][0].rsplit('@', 1)[1]))
+        selector = parsed.vector_selector
+        end = selector.at.at - (selector.offset or timedelta())
         start = end - parsed.range
         windows.append((start, end))
         return BytesIO((json.dumps(row) + '\n').encode())
