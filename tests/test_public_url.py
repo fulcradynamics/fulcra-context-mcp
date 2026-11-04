@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 from mcp.server.auth.provider import AccessToken
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from fulcra_mcp import file_transfer, provider
 from fulcra_mcp.main import app, oauth_provider
@@ -88,20 +87,16 @@ async def test_the_issuer_matches_the_url_the_client_used(base_url):
 
 
 @pytest.mark.parametrize(
-    "trusted_hosts, issuer",
+    "base_url, issuer",
     [
-        ("*", f"{PUBLIC}/"),  # FORWARDED_ALLOW_IPS set: the proxy's scheme counts.
-        ("127.0.0.2", "http://public.example/"),  # Unset: the proxy isn't trusted.
+        # TLS ends in front of the container, so the app sees plain http.
+        ("http://public.example", "https://public.example/"),
+        ("http://pr-1---dev-mcp-abc-uw.a.run.app", "https://pr-1---dev-mcp-abc-uw.a.run.app/"),
+        ("http://public.example:8443", "https://public.example:8443/"),
     ],
 )
-async def test_the_scheme_comes_from_a_trusted_proxy(trusted_hosts, issuer):
-    # uvicorn wraps the app in this middleware when it serves it.
-    proxied = ProxyHeadersMiddleware(app, trusted_hosts=trusted_hosts)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=proxied),
-        base_url="http://public.example",
-        headers={"X-Forwarded-Proto": "https"},
-    ) as client:
+async def test_a_public_host_is_always_https(base_url, issuer):
+    async with client_for(base_url) as client:
         doc = (await client.get("/.well-known/oauth-authorization-server")).json()
 
     assert doc["issuer"] == issuer

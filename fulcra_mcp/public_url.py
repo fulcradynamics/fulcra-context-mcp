@@ -4,9 +4,6 @@ One deployment answers on several hostnames (a custom domain, its run.app URL,
 tagged preview revisions), so the OAuth discovery documents, the login redirect
 and file links are all built for the host the client actually used.
 ``OIDC_SERVER_URL`` still overrides that when set.
-
-Behind a proxy that ends TLS, the scheme is only right if uvicorn trusts the
-proxy's X-Forwarded-Proto, so hosted deployments must set FORWARDED_ALLOW_IPS.
 """
 
 from fastmcp.server.dependencies import get_http_request
@@ -16,6 +13,17 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .settings import settings
 
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _request_origin(request: Request) -> str:
+    """The origin a request was sent to. TLS ends in front of a hosted container,
+    so the app sees plain http there: only loopback hosts keep their scheme."""
+    url = request.base_url
+    if url.hostname not in _LOOPBACK_HOSTS:
+        url = url.replace(scheme="https")
+    return str(url).rstrip("/")
+
 
 def public_origin() -> str:
     """This server's origin, with no trailing slash: ``OIDC_SERVER_URL`` if set,
@@ -24,7 +32,7 @@ def public_origin() -> str:
     if settings.oidc_server_url:
         return settings.oidc_server_url.rstrip("/")
     try:
-        return str(get_http_request().base_url).rstrip("/")
+        return _request_origin(get_http_request())
     except RuntimeError:
         return f"http://localhost:{settings.port}"
 
@@ -49,7 +57,7 @@ class PublicOriginMiddleware:
         # This runs outside FastMCP's request context, so public_origin() can't
         # see the request here.
         override = (settings.oidc_server_url or "").rstrip("/")
-        origin = override or str(Request(scope).base_url).rstrip("/")
+        origin = override or _request_origin(Request(scope))
         if origin == self.advertised_origin:
             await self.app(scope, receive, send)
         else:
