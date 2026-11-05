@@ -31,3 +31,29 @@ test('fullscreen hosts are never asked to change mode', async ({page}) => {
   await page.clock.runFor(500);
   expect(await page.evaluate(() => window.displayRequests)).toEqual([]);
 });
+
+const hostContextChanged = (page, params) => page.evaluate(params => document.querySelector('iframe').contentWindow
+  .postMessage({jsonrpc:'2.0',method:'ui/notifications/host-context-changed',params}, '*'), params);
+
+test('closing fullscreen shows Expand, which asks for fullscreen again', async ({page}) => {
+  const ui = await open(page, 900, {...readOnlyThread, displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen']});
+  await expect.poll(() => page.evaluate(() => window.displayRequests)).toEqual(['fullscreen']);
+  await expect(ui.locator('#expand')).toBeHidden();
+  await hostContextChanged(page, {displayMode: 'inline'});
+  await expect(ui.locator('html')).toHaveAttribute('data-display-mode', 'inline');
+  await expect(ui.getByRole('button', {name: 'Expand', exact: true})).toBeVisible();
+  await hostContextChanged(page, {theme: 'dark'});
+  await expect(ui.locator('#expand')).toBeVisible();
+  await ui.locator('#expand').click();
+  await expect.poll(() => page.evaluate(() => window.displayRequests)).toEqual(['fullscreen', 'fullscreen']);
+  await expect(ui.locator('#expand')).toBeHidden();
+});
+
+test('Expand stays hidden without a fullscreen mode to offer', async ({page}) => {
+  const ui = await open(page, 900, {...readOnlyThread, displayMode: 'inline'});
+  await expect(ui.locator('#messages li')).toHaveCount(6);
+  await expect(ui.locator('#expand')).toBeHidden();
+  const full = await open(page, 900, readOnlyThread);
+  await expect(full.locator('#messages li')).toHaveCount(6);
+  await expect(full.locator('#expand')).toBeHidden();
+});

@@ -2,7 +2,7 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import { setupInvite } from './invite.js';
 import { setupThreads } from './threads.js';
 import { receiveEntrypoint } from './entrypoint.js';
-import { icon, UserPlus, Link } from './icons.js';
+import { icon, UserPlus, Link, Maximize2 } from './icons.js';
 import { setupCheckStatus } from './check-status.js';
 import { showToast, continueMessage } from './toast.js';
 import { hostLabel } from './host-label.js';
@@ -18,7 +18,22 @@ function applySafeArea(context) {
     document.documentElement.style.setProperty(`--host-safe-${side}`, `${Math.max(0, context.safeAreaInsets[side])}px`);
   }
 }
-app.addEventListener('hostcontextchanged', applySafeArea);
+// Hosts that show the app inline (Claude) can still offer fullscreen; the button
+// asks again after the user closes it. ChatGPT is fullscreen only, so it stays hidden.
+const expandButton = document.querySelector('#expand');
+expandButton.prepend(icon(Maximize2, 'btn-icon'));
+const canExpand = context => context?.displayMode === 'inline' && context.availableDisplayModes?.includes('fullscreen');
+const requestFullscreen = () => app.requestDisplayMode({ mode: 'fullscreen' })
+  .then(({ mode }) => onHostContext({ displayMode: mode }), () => {});
+// The SDK's host context doesn't record granted display modes, so keep our own.
+let hostState = {};
+function onHostContext(changed) {
+  hostState = { ...hostState, ...changed };
+  applySafeArea(changed);
+  expandButton.hidden = !canExpand(hostState);
+}
+expandButton.addEventListener('click', requestFullscreen);
+app.addEventListener('hostcontextchanged', onHostContext);
 // A chat handoff shows a spinner on the button, then a "Request sent to <host>"
 // toast — the global toast persists (guidance) while the inline one auto-dismisses.
 const notifySent = description => {
@@ -35,13 +50,10 @@ const openInviteButtons = [...document.querySelectorAll('#open-invite, #open-inv
 for (const button of openInviteButtons) button.prepend(icon(Link, 'btn-icon'));
 setupInvite(app, inviteButtons, document.querySelector('#status'), { notifySent }, openInviteButtons).then(connected => {
   const context = app.getHostContext();
-  applySafeArea(context);
+  onHostContext(context);
   // ChatGPT opens fullscreen from its own resource metadata; other hosts need the
   // standard request. A declined request leaves the inline layout, which still fits.
-  if (context?.displayMode === 'inline' && context.availableDisplayModes?.includes('fullscreen')) {
-    app.requestDisplayMode({ mode: 'fullscreen' })
-      .then(({ mode }) => applySafeArea({ displayMode: mode }), () => {});
-  }
+  if (canExpand(context)) requestFullscreen();
   const status = document.querySelector('#connection-status');
   if (!connected) {
     status.textContent = 'Could not load Agent Contacts: host connection failed. Reopen the app to retry.';

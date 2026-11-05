@@ -19,6 +19,7 @@ import {
   History,
   ChevronDown,
   Link,
+  Maximize2,
 } from 'lucide';
 
 // Builds a decorative inline SVG. Icons are always paired with visible text, so
@@ -52,4 +53,5 @@ export {
   History,
   ChevronDown,
   Link,
+  Maximize2,
 };
