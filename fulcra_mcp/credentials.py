@@ -107,6 +107,78 @@ def _save_stdio_credentials(creds: FulcraCredentials):
     path.write_text(creds.to_json())
 
 
+# Device-code login for stdio runs on a background thread so the server keeps
+# answering requests while the user signs in. State is guarded by _login_lock.
+_login_lock = threading.Lock()
+_login_thread: threading.Thread | None = None
+_login_prompt: tuple[str, str] | None = None  # (uri, code)
+_login_prompted = threading.Event()
+PROMPT_WAIT_SECONDS = 30
+
+
+def _run_stdio_login(api: FulcraAPI):
+    global stdio_fulcra, _login_thread, _login_prompt
+
+    def _stderr_prompt(device_code: str, uri: str, code: str):
+        global _login_prompt
+        _login_prompt = (uri, code)
+        _login_prompted.set()
+        webbrowser.open_new_tab(uri)
+        # stdout carries the JSON-RPC stream in stdio mode.
+        print(
+            f"Use your browser to log in to Fulcra. If a tab does not open "
+            f"automatically, visit this URL: {uri}\n"
+            f"Verify that the code displayed matches: {code}",
+            file=sys.stderr,
+        )
+
+    try:
+        creds = api.oidc.authorize_via_device_flow(prompt_callback=_stderr_prompt)
+        if creds:
+            api.fulcra_credentials = creds
+            _save_stdio_credentials(creds)
+            stdio_fulcra = api
+            logger.info("stdio_login_complete")
+        else:
+            logger.warning("stdio_login_failed")
+    except Exception as exc:
+        logger.warning("stdio_login_error", exc_info=exc)
+    finally:
+        with _login_lock:
+            _login_thread = None
+            _login_prompt = None
+            _login_prompted.clear()
+
+
+def _stdio_login_pending() -> FulcraAPI:
+    """Start (or join) the background device-code login, then raise a
+    ToolError telling the caller where to sign in. Never waits on the user."""
+    global _login_thread
+    with _login_lock:
+        if _login_thread is None:
+            _login_prompted.clear()
+            _login_thread = threading.Thread(
+                target=_run_stdio_login,
+                args=(SynchronizedFulcraAPI(**fulcra_api_kwargs()),),
+                daemon=True,
+            )
+            _login_thread.start()
+    # Waits only for the device-code request, not for the user.
+    _login_prompted.wait(PROMPT_WAIT_SECONDS)
+    prompt = _login_prompt
+    if prompt is None:
+        raise ToolError(
+            "Fulcra sign-in is starting but no login code is available yet. "
+            "Call this tool again in a few seconds."
+        )
+    uri, code = prompt
+    raise ToolError(
+        f"Not signed in to Fulcra. Ask the user to open {uri} and confirm the "
+        f"code {code}, then call this tool again. Sign-in finishes in the "
+        "background."
+    )
+
+
 def get_fulcra_object() -> FulcraAPI:
     """
     Get or create an active `FulcraAPI` object.
@@ -135,24 +207,7 @@ def get_fulcra_object() -> FulcraAPI:
             )
             return stdio_fulcra
 
-        # stdout carries the JSON-RPC stream in stdio mode, so the device-flow
-        # prompt must go to stderr (FulcraAPI.authorize() prints to stdout).
-        def _stderr_prompt(device_code: str, uri: str, code: str):
-            webbrowser.open_new_tab(uri)
-            print(
-                f"Use your browser to log in to Fulcra. If a tab does not open "
-                f"automatically, visit this URL: {uri}\n"
-                f"Verify that the code displayed matches: {code}",
-                file=sys.stderr,
-            )
-
-        stdio_fulcra = SynchronizedFulcraAPI(**fulcra_api_kwargs())
-        stdio_fulcra.fulcra_credentials = stdio_fulcra.oidc.authorize_via_device_flow(
-            prompt_callback=_stderr_prompt
-        )
-        if stdio_fulcra.fulcra_credentials:
-            _save_stdio_credentials(stdio_fulcra.fulcra_credentials)
-        return stdio_fulcra
+        return _stdio_login_pending()
 
     mcp_access_token = get_access_token()
     if not mcp_access_token:
