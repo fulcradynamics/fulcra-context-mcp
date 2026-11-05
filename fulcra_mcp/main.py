@@ -21,6 +21,7 @@ from .endpoint import create_server
 from .logging_config import configure_logging
 from .openai_endpoint import OPENAI_MCP_PATH, create_openai_server
 from .provider import oauth_provider
+from .public_url import PublicOriginMiddleware
 from .settings import settings
 
 configure_logging(settings.log_format)
@@ -420,6 +421,7 @@ class MCPErrorLoggingMiddleware:
 
 app.add_middleware(OpenAIWorkaroundMiddleware)
 app.add_middleware(MCPErrorLoggingMiddleware)
+app.add_middleware(PublicOriginMiddleware, advertised_origin=str(oauth_provider.base_url))
 app.mount(OPENAI_MCP_PATH, openai_asgi_app)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)

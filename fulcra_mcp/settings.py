@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     # changed atomically across instances go through the GCS API instead of the
     # mount, which can't do that.
     state_bucket: str | None = None
-    oidc_server_url: str = "http://localhost:4499"
+    # Overrides the origin taken from each request's Host (see public_url.py).
+    oidc_server_url: str | None = None
     fulcra_environment: str = "stdio"
     fulcra_contacts_debug: bool = False
     # Domain verification token from the OpenAI plugin portal, served at
