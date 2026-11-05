@@ -112,17 +112,18 @@ def _save_stdio_credentials(creds: FulcraCredentials):
 _login_lock = threading.Lock()
 _login_thread: threading.Thread | None = None
 _login_prompt: tuple[str, str] | None = None  # (uri, code)
-_login_prompted = threading.Event()
-PROMPT_WAIT_SECONDS = 30
+# Why the last login attempt ended without credentials; reported once, then
+# cleared so the next call starts a fresh attempt.
+_login_error: str | None = None
 
 
 def _run_stdio_login(api: FulcraAPI):
-    global stdio_fulcra, _login_thread, _login_prompt
+    global stdio_fulcra, _login_thread, _login_prompt, _login_error
 
     def _stderr_prompt(device_code: str, uri: str, code: str):
         global _login_prompt
-        _login_prompt = (uri, code)
-        _login_prompted.set()
+        with _login_lock:
+            _login_prompt = (uri, code)
         webbrowser.open_new_tab(uri)
         # stdout carries the JSON-RPC stream in stdio mode.
         print(
@@ -132,6 +133,7 @@ def _run_stdio_login(api: FulcraAPI):
             file=sys.stderr,
         )
 
+    error = None
     try:
         creds = api.oidc.authorize_via_device_flow(prompt_callback=_stderr_prompt)
         if creds:
@@ -140,36 +142,41 @@ def _run_stdio_login(api: FulcraAPI):
             stdio_fulcra = api
             logger.info("stdio_login_complete")
         else:
+            error = "the sign-in expired or was not approved"
             logger.warning("stdio_login_failed")
     except Exception as exc:
+        error = str(exc) or type(exc).__name__
         logger.warning("stdio_login_error", exc_info=exc)
     finally:
         with _login_lock:
             _login_thread = None
             _login_prompt = None
-            _login_prompted.clear()
+            _login_error = error
 
 
 def _stdio_login_pending() -> FulcraAPI:
-    """Start (or join) the background device-code login, then raise a
-    ToolError telling the caller where to sign in. Never waits on the user."""
-    global _login_thread
+    """Start (or join) the background device-code login and raise a ToolError
+    saying where things stand. Never waits, since this runs on the event loop."""
+    global _login_thread, _login_error
     with _login_lock:
         if _login_thread is None:
-            _login_prompted.clear()
+            error, _login_error = _login_error, None
+            if error is not None:
+                raise ToolError(
+                    f"Fulcra sign-in failed: {error}. Call this tool again "
+                    "to start a new sign-in."
+                )
             _login_thread = threading.Thread(
                 target=_run_stdio_login,
                 args=(SynchronizedFulcraAPI(**fulcra_api_kwargs()),),
                 daemon=True,
             )
             _login_thread.start()
-    # Waits only for the device-code request, not for the user.
-    _login_prompted.wait(PROMPT_WAIT_SECONDS)
-    prompt = _login_prompt
+        prompt = _login_prompt
     if prompt is None:
         raise ToolError(
-            "Fulcra sign-in is starting but no login code is available yet. "
-            "Call this tool again in a few seconds."
+            "Fulcra sign-in is starting; no login code is ready yet. Call "
+            "this tool again in a few seconds."
         )
     uri, code = prompt
     raise ToolError(
