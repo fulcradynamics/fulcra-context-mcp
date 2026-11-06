@@ -430,8 +430,6 @@ class FulcraOAuthProvider(OAuthProvider):
             raise HTTPException(400, "failed to exchange code for token")
 
         new_code = f"mcp_{secrets.token_hex(16)}"
-        # AnyUrl, not AnyHttpUrl: native clients register app-scheme redirects,
-        # such as Claude Desktop's claude://claude.ai/mcp-auth-callback/sdk.
         auth_code = AuthorizationCode(
             code=new_code,
             client_id=client_id,
