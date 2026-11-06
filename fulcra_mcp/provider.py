@@ -21,7 +21,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, AnyUrl
 
 from .public_url import public_origin
 from .settings import settings
@@ -425,21 +425,21 @@ class FulcraOAuthProvider(OAuthProvider):
                 has_refresh_token=fulcra.fulcra_credentials.refresh_token is not None,
                 expires_at=str(fulcra.fulcra_credentials.access_token_expiration),
             )
-
-            new_code = f"mcp_{secrets.token_hex(16)}"
-            auth_code = AuthorizationCode(
-                code=new_code,
-                client_id=client_id,
-                redirect_uri=AnyHttpUrl(redirect_uri),
-                redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
-                expires_at=time.time() + 300,
-                scopes=OIDC_SCOPES,
-                code_challenge=code_challenge,
-            )
-            self.auth_codes[new_code] = auth_code
         except Exception as e:
             logger.error("oauth2 code exchange failure", exc_info=e)
             raise HTTPException(400, "failed to exchange code for token")
+
+        new_code = f"mcp_{secrets.token_hex(16)}"
+        auth_code = AuthorizationCode(
+            code=new_code,
+            client_id=client_id,
+            redirect_uri=AnyUrl(redirect_uri),
+            redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
+            expires_at=time.time() + 300,
+            scopes=OIDC_SCOPES,
+            code_challenge=code_challenge,
+        )
+        self.auth_codes[new_code] = auth_code
 
         del self.state_mapping[state]
         return construct_redirect_uri(redirect_uri, code=new_code, state=state)
