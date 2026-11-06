@@ -190,6 +190,10 @@ main {
    composer's gray secondary button (a touch larger than the rail CTAs). */
 #open-invite { flex: none; background: var(--raised); color: #fff; font-weight: 500; }
 #open-invite:hover:not(:disabled) { background: #2d2d34; }
+/* Inline hosts only: reopens fullscreen after the user closes it. The auto margin
+   keeps it beside "Copy open invitation" rather than centred by space-between. */
+#expand { flex: none; margin-left: auto; background: transparent; color: var(--text-primary); border: 1px solid var(--raised); font-weight: 500; }
+#expand:hover { background: var(--raised); }
 .brand-identity { display: flex; align-items: center; gap: 12px; }
 #invite { margin-left: auto; }
 .brand img { flex: none; }

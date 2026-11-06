@@ -4,6 +4,19 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## Unreleased
+
+- Serve `/claude/mcp` for Claude's connector and plugin (`claude_endpoint.py`): the
+  standard tools and instructions plus Claude guidance, contact panel entrypoints
+  always listed (Claude hosts render them; stateless HTTP loses the advertised
+  capability), and no `get_location`, `get_sleep`, `get_workouts` or
+  `get_time_series`. The invitation-first tool order moves out of the panel gate
+  so both endpoints use it.
+- Contacts UI v83: hosts that show the panel inline with fullscreen available
+  (Claude) get an Expand button, so the panel can return to fullscreen after the
+  user leaves it. ChatGPT is fullscreen only and never shows it. The panel still
+  requests fullscreen once on open. Every endpoint's UI URIs change to v83.
+
 ## 1.19.10 release notes
 
 - `/mcp` supports tool-only invitations without installed skills: ready-to-share

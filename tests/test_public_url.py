@@ -31,7 +31,7 @@ def client_for(base_url: str, **kwargs) -> httpx.AsyncClient:
     )
 
 
-@pytest.mark.parametrize("mount", ["", "/mcp", "/MCP", "/openai/mcp"])
+@pytest.mark.parametrize("mount", ["", "/mcp", "/MCP", "/openai/mcp", "/claude/mcp"])
 async def test_authorization_server_metadata_uses_the_request_host(mount):
     async with client_for(PUBLIC) as client:
         response = await client.get(f"{mount}/.well-known/oauth-authorization-server")
@@ -51,6 +51,7 @@ async def test_authorization_server_metadata_uses_the_request_host(mount):
         ("/.well-known/oauth-protected-resource", f"{PUBLIC}/"),
         ("/.well-known/oauth-protected-resource/mcp", f"{PUBLIC}/mcp"),
         ("/.well-known/oauth-protected-resource/openai/mcp", f"{PUBLIC}/openai/mcp"),
+        ("/.well-known/oauth-protected-resource/claude/mcp", f"{PUBLIC}/claude/mcp"),
     ],
 )
 async def test_protected_resource_metadata_uses_the_request_host(path, resource):

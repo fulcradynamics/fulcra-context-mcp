@@ -99,4 +99,7 @@ openers are hidden/no-op, while direct resource reads still work. In-process and
 stdio sessions retain capabilities and expose/invoke the original openers for
 advertised app support. We do not add a capability cache, infer support from the
 endpoint, or alter stateless transport/authentication to make UI discovery work.
-The existing OpenAI endpoint is not gated.
+The existing OpenAI endpoint is not gated, and neither is `/claude/mcp`: it serves
+only Claude's connector and plugin, whose hosts render MCP Apps, so it lists the
+openers rather than inferring support per request. It also hides the deprecated
+health/location tools, as `/openai/mcp` does.
