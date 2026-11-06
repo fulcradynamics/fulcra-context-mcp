@@ -4,7 +4,7 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## Unreleased
+## 1.19.12 release notes
 
 - Serve `/claude/mcp` for Claude's connector and plugin (`claude_endpoint.py`): the
   standard tools and instructions plus Claude guidance, contact panel entrypoints
@@ -16,6 +16,11 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
   (Claude) get an Expand button, so the panel can return to fullscreen after the
   user leaves it. ChatGPT is fullscreen only and never shows it. The panel still
   requests fullscreen once on open. Every endpoint's UI URIs change to v83.
+- `/claude/mcp` directory readiness: the contact panel, mention search and
+  settings tools get annotation titles and parameter descriptions there only
+  (`DirectoryMetadata`), and its 401 points at its own path-form metadata, whose
+  resource is `/claude/mcp`. `/mcp` and `/openai/mcp` are unchanged.
+  `test_directory_readiness.py` also checks `/claude/mcp`, app-only tools included.
 
 ## 1.19.10 release notes
 

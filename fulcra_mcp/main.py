@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.session import ServerSession
 from pydantic import AnyHttpUrl
+from starlette.datastructures import MutableHeaders
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
@@ -392,6 +393,39 @@ MCP_PATHS = (
 )
 
 
+class PathFormChallengeMiddleware:
+    """Point /claude/mcp's 401 at its own path-form metadata document.
+
+    The endpoints are built at "/", so their 401 challenges all name the root
+    document, whose resource is "<base>/". Claude's directory requires the
+    declared resource to equal the URL the user connected to, which the
+    path-form document above does.
+    """
+
+    MOUNTS = {CLAUDE_MCP_PATH: CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/": CLAUDE_MCP_PATH}
+    ROOT_DOCUMENT = '/.well-known/oauth-protected-resource"'
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        mount = self.MOUNTS.get(scope["path"]) if scope["type"] == "http" else None
+        if mount is None:
+            await self.app(scope, receive, send)
+            return
+
+        async def rewriting_send(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                challenge = headers.get("www-authenticate")
+                if challenge:
+                    headers["www-authenticate"] = challenge.replace(
+                        self.ROOT_DOCUMENT, f'/.well-known/oauth-protected-resource{mount}"')
+            await send(message)
+
+        await self.app(scope, receive, rewriting_send)
+
+
 class MCPErrorLoggingMiddleware:
     """Log the body of 4xx responses on the MCP endpoint.
 
@@ -438,6 +472,7 @@ class MCPErrorLoggingMiddleware:
 
 app.add_middleware(OpenAIWorkaroundMiddleware)
 app.add_middleware(MCPErrorLoggingMiddleware)
+app.add_middleware(PathFormChallengeMiddleware)
 app.add_middleware(PublicOriginMiddleware, advertised_origin=str(oauth_provider.base_url))
 app.mount(OPENAI_MCP_PATH, openai_asgi_app)
 app.mount(CLAUDE_MCP_PATH, claude_asgi_app)
