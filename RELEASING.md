@@ -4,6 +4,13 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.13 release notes
+
+- Fix sign-in from Claude Desktop, on every endpoint: `/callback` rejected
+  app-scheme redirect URIs (`claude://claude.ai/mcp-auth-callback/sdk`) and
+  answered `failed to exchange code for token` after the Auth0 exchange had
+  succeeded. That error now covers only the Auth0 exchange.
+
 ## 1.19.12 release notes
 
 - Serve `/claude/mcp` for Claude's connector and plugin (`claude_endpoint.py`): the
