@@ -88,12 +88,15 @@ async def test_claude_endpoint_refuses_hidden_tool_calls(tmp_path):
     assert "Unknown tool" in response.text
 
 
-async def test_claude_endpoint_requires_auth():
+@pytest.mark.parametrize("path", [CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/"])
+async def test_claude_endpoint_requires_auth(path):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(CLAUDE_MCP_PATH, json=TOOLS_LIST)
+        response = await client.post(path, json=TOOLS_LIST)
     assert response.status_code == 401
-    assert "resource_metadata=" in response.headers["www-authenticate"]
+    # Its own path-form document, whose resource is the URL Claude connected to.
+    challenge = response.headers["www-authenticate"]
+    assert f'/.well-known/oauth-protected-resource{CLAUDE_MCP_PATH}"' in challenge
 
 
 @pytest.mark.parametrize("path", [CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/"])
