@@ -1,0 +1,28 @@
+{
+  pkgs ? import <nixpkgs> { },
+}:
+let
+  python = pkgs.python314;
+  pythonEnv = python.withPackages (
+    pythonPkgs: with pythonPkgs; [
+      uv
+      pip
+      pytest
+      ruff
+    ]
+  );
+in
+pkgs.mkShell {
+  packages = [ pythonEnv ];
+  env = {
+    UV_PYTHON = pythonEnv.python.interpreter;
+    UV_PYTHON_DOWNLOADS = "never";
+  };
+  shellHook = ''
+    export VIRTUAL_ENV=.venv
+    export PATH="$VIRTUAL_ENV/bin/:$PATH"
+
+    # LD_LIBRARY_PATH magic for NixOS/nix-ld environments
+    [ -n "''${NIX_LD_LIBRARY_PATH:-}" ] && export LD_LIBRARY_PATH="$NIX_LD_LIBRARY_PATH" || true
+  '';
+}
