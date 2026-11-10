@@ -1,0 +1,327 @@
+name: Deploy
+
+# Triggered by a comment on an open PR. issue_comment workflows always run the
+# copy of this file on the default branch, so a PR cannot change who is allowed
+# to deploy or how.
+#
+#   /deploy <environment>  Deploy the PR head to <environment>'s service and
+#                          send all traffic to it, using <environment>'s
+#                          runtime config. Not allowed for prod.
+#   /preview <environment> Deploy the PR head to the preview service (dev) as a
+#                          revision with no traffic, tagged pr-<number>, using
+#                          <environment>'s runtime config. For example,
+#                          `/preview prod` runs the PR against the prod API.
+#
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  # A job's environment must be known before it starts and expressions can't
+  # slice strings, so the command is parsed out in its own job.
+  parse:
+    name: Check Command
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
+      (startsWith(github.event.comment.body, '/deploy ') ||
+       startsWith(github.event.comment.body, '/preview '))
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    outputs:
+      target: ${{ steps.cmd.outputs.target }}
+      config: ${{ steps.cmd.outputs.config }}
+      revision_tag: ${{ steps.cmd.outputs.revision_tag }}
+    steps:
+      - name: Generate GitHub API Token
+        id: generate-token
+        uses: actions/create-github-app-token@v3.1.1
+        with:
+          owner: fulcradynamics
+          client-id: ${{ vars.CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CI_APP_SECRET_KEY }}
+
+      # Checked before any environment is referenced, so non-members can't
+      # trigger an environment's protection rules or read its variables.
+      # Both the commenter and whoever started this run attempt must be in the
+      # team: a re-run keeps the original comment but deploys the PR head as of
+      # the re-run, so a re-run by someone else would otherwise bypass this.
+      - name: Check team membership
+        id: membership
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          for user in "$COMMENTER" "$TRIGGERING_ACTOR"; do
+            # 404s for non-members (and if the app lacks org "Members: read").
+            state="$(gh api "orgs/fulcradynamics/teams/eng/memberships/$user" --jq .state 2>/dev/null || true)"
+            if [ "$state" != "active" ]; then
+              echo "::error::$user is not an active member of fulcradynamics/eng"
+              exit 1
+            fi
+          done
+
+      # After the membership check, so non-members can't make the bot react
+      # or reply.
+      - name: Acknowledge comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes --silent
+
+      # CI doesn't build fork PRs, but reject them explicitly rather than
+      # relying on the image lookup failing.
+      - name: Reject fork PRs
+        id: fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          head_repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.repo.full_name // ""')"
+          if [ "$head_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "reason=PRs from forks can't be deployed." >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Parse command
+        id: cmd
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ github.event.comment.body }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          # Service that previews are deployed to. Keep in sync with pr-cleanup.yml.
+          PREVIEW_TARGET: dev
+        run: |
+          # Leading alphanumeric so "." / ".." can't turn the lookup below into a
+          # different API path.
+          if [[ ! "$BODY" =~ ^/(deploy|preview)\ ([A-Za-z0-9][A-Za-z0-9._-]*)$ ]]; then
+            echo "reason=Usage: \`/deploy <environment>\` or \`/preview <environment>\`" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          config="${BASH_REMATCH[2]}"
+          if [ "${BASH_REMATCH[1]}" = "preview" ]; then
+            target="$PREVIEW_TARGET"
+            revision_tag="pr-$PR_NUMBER"
+          else
+            # Prod isn't deployed from PRs; it can still be previewed against.
+            if [ "$config" = "prod" ]; then
+              echo "reason=\`/deploy prod\` isn't allowed from a PR. Use \`/preview prod\` to test against prod." >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            target="$config"
+            revision_tag=""
+          fi
+
+          # Referencing a missing environment from a job silently creates it,
+          # so only accept ones that already exist.
+          for environment in "$target" "$config"; do
+            if ! gh api "repos/$GITHUB_REPOSITORY/environments/$environment" --silent 2>/dev/null; then
+              echo "reason=Unknown environment \`$environment\`." >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done
+          {
+            echo "target=$target"
+            echo "config=$config"
+            echo "revision_tag=$revision_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report rejection
+        if: failure() && steps.membership.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REASON: ${{ steps.fork.outputs.reason || steps.cmd.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --body "Deploy rejected: ${REASON:-see run.} [Details]($RUN_URL)"
+
+  # A job can only read variables from its own environment, so the runtime
+  # config is read in a job attached to the config environment and passed on.
+  config:
+    name: Load ${{ needs.parse.outputs.config }} config
+    needs: parse
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.parse.outputs.config }}
+      deployment: false
+    outputs:
+      fulcra_environment: ${{ steps.vars.outputs.fulcra_environment }}
+      fulcra_oidc_domain: ${{ steps.vars.outputs.fulcra_oidc_domain }}
+      fulcra_api: ${{ steps.vars.outputs.fulcra_api }}
+      oidc_client_id: ${{ steps.vars.outputs.oidc_client_id }}
+      openai_apps_challenge: ${{ steps.vars.outputs.openai_apps_challenge }}
+    steps:
+      - name: Read runtime config
+        id: vars
+        env:
+          CONFIG: ${{ needs.parse.outputs.config }}
+          FULCRA_ENVIRONMENT: ${{ vars.FULCRA_ENVIRONMENT }}
+          FULCRA_OIDC_DOMAIN: ${{ vars.FULCRA_OIDC_DOMAIN }}
+          FULCRA_API: ${{ vars.FULCRA_API }}
+          OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
+          OPENAI_APPS_CHALLENGE: ${{ vars.OPENAI_APPS_CHALLENGE }}
+        run: |
+          # OPENAI_APPS_CHALLENGE is optional; unset serves a 404.
+          for v in FULCRA_ENVIRONMENT FULCRA_OIDC_DOMAIN FULCRA_API OIDC_CLIENT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Environment $CONFIG is missing the $v variable"
+              exit 1
+            fi
+          done
+          {
+            echo "fulcra_environment=$FULCRA_ENVIRONMENT"
+            echo "fulcra_oidc_domain=$FULCRA_OIDC_DOMAIN"
+            echo "fulcra_api=$FULCRA_API"
+            echo "oidc_client_id=$OIDC_CLIENT_ID"
+            echo "openai_apps_challenge=$OPENAI_APPS_CHALLENGE"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: >-
+      ${{ needs.parse.outputs.revision_tag && 'Preview on' || 'Deploy to' }}
+      ${{ needs.parse.outputs.target }}
+      (${{ needs.parse.outputs.config }} config)
+    needs: [parse, config]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.parse.outputs.target }}
+      deployment: false
+    # Keyed on the service, so previews and deploys to it don't race.
+    concurrency:
+      group: deploy-${{ needs.parse.outputs.target }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      deployments: write
+      id-token: write
+      pull-requests: write
+    env:
+      TARGET: ${{ needs.parse.outputs.target }}
+      CONFIG: ${{ needs.parse.outputs.config }}
+      REVISION_TAG: ${{ needs.parse.outputs.revision_tag }}
+    steps:
+      # Workflows can't `needs:` jobs in another workflow, so check CI's result
+      # for the PR head via the API. build (which pushes) needs test, so a green
+      # run also guarantees the head's image was pushed.
+      - name: Check CI passed for PR head
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          head_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${head_sha::7}" >> "$GITHUB_OUTPUT"
+
+          # Runs are returned newest first; a re-run of the same commit wins.
+          result="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$head_sha&event=pull_request&per_page=1" \
+            --jq '.workflow_runs[0] | if . == null then "missing" else (.conclusion // .status) end')"
+          if [ "$result" != "success" ]; then
+            echo "reason=CI for \`${head_sha::7}\` is not green (\`$result\`)." >> "$GITHUB_OUTPUT"
+            echo "::error::CI for $head_sha is $result"
+            exit 1
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Resolve PR head image
+        id: image
+        env:
+          CONTAINER_IMAGE_PATH: ${{ vars.CONTAINER_IMAGE_PATH }}
+          TAG: pr-${{ github.event.issue.number }}-${{ steps.ci.outputs.short_sha }}
+        run: |
+          digest="$(gcloud artifacts docker images describe "$CONTAINER_IMAGE_PATH:$TAG" --format='value(image_summary.digest)')"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # Deploy by digest so a later push to the same tag can't change what runs.
+          echo "ref=$CONTAINER_IMAGE_PATH@$digest" >> "$GITHUB_OUTPUT"
+
+      # Create our own deployment manually since comment triggers are tied to the default branch ref
+      # This allows us to properly relate a environment deployment to the PR branch we triggered it from
+      - name: Create GitHub deployment
+        id: deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.ci.outputs.head_sha }}
+          TAG: ${{ steps.image.outputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # Previews share one transient "preview" environment so each PR's
+          # preview isn't marked inactive by another PR's.
+          environment="$TARGET"
+          transient=false
+          if [ -n "$REVISION_TAG" ]; then
+            environment=preview
+            transient=true
+          fi
+          # required_contexts is empty because CI was already checked above.
+          id="$(jq -n --arg ref "$SHA" --arg env "$environment" --arg desc "$TAG ($CONFIG config)" --argjson transient "$transient" \
+              '{ref: $ref, environment: $env, description: $desc, auto_merge: false, required_contexts: [], transient_environment: $transient}' \
+            | gh api -X POST "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" \
+            -f state=in_progress -f log_url="$RUN_URL" --silent
+
+      - name: Deploy
+        id: deploy
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          FULCRA_ENVIRONMENT: ${{ needs.config.outputs.fulcra_environment }}
+          FULCRA_OIDC_DOMAIN: ${{ needs.config.outputs.fulcra_oidc_domain }}
+          FULCRA_API: ${{ needs.config.outputs.fulcra_api }}
+          OIDC_CLIENT_ID: ${{ needs.config.outputs.oidc_client_id }}
+          OPENAI_APPS_CHALLENGE: ${{ needs.config.outputs.openai_apps_challenge }}
+        run: |
+          for v in PROJECT REGION SERVICE; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Environment $TARGET is missing a variable for $v (GCP_PROJECT_ID, GCP_REGION, CLOUD_RUN_SERVICE)"
+              exit 1
+            fi
+          done
+
+          # "^|^" switches gcloud's list delimiter from "," to "|".
+          env_vars="^|^FULCRA_ENVIRONMENT=$FULCRA_ENVIRONMENT|FULCRA_OIDC_DOMAIN=$FULCRA_OIDC_DOMAIN|FULCRA_API=$FULCRA_API|OIDC_CLIENT_ID=$OIDC_CLIENT_ID"
+          args=(--image "$IMAGE" --region "$REGION" --project "$PROJECT" --quiet)
+          if [ -n "$OPENAI_APPS_CHALLENGE" ]; then
+            env_vars+="|OPENAI_APPS_CHALLENGE=$OPENAI_APPS_CHALLENGE"
+          else
+            args+=(--remove-env-vars OPENAI_APPS_CHALLENGE)
+          fi
+          args+=(--update-env-vars "$env_vars")
+          if [ -n "$REVISION_TAG" ]; then
+            # Moves the tag to the new revision and leaves live traffic alone.
+            args+=(--no-traffic --tag "$REVISION_TAG")
+          fi
+          gcloud run deploy "$SERVICE" "${args[@]}"
+
+          url="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format=json \
+            | jq -r --arg tag "$REVISION_TAG" 'if $tag == "" then .status.url else (.status.traffic[] | select(.tag == $tag) | .url) end')"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Update GitHub deployment status
+        if: always() && steps.deployment.outputs.id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.deployment.outputs.id }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+          URL: ${{ steps.deploy.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # outcome is "skipped"/"cancelled" if the job stopped before or during the deploy.
+          state=failure
+          [ "$OUTCOME" = "success" ] && state=success
+          gh api -X POST "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses" \
+            -f state="$state" -f log_url="$RUN_URL" -f environment_url="$URL" -F auto_inactive=true --silent

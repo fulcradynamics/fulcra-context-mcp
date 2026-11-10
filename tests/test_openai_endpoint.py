@@ -1,12 +1,13 @@
-"""The /openai/mcp endpoint: the full server minus the dedicated health and
-location tools, with its own RFC 9728 path-form discovery."""
+"""OpenAI keeps the plugin contract and its own RFC 9728 path-form discovery;
+ generic tools have endpoint-local invitation and app-support behavior."""
 
 import json
 
 import httpx
 import pytest
 
-from fulcra_mcp.main import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH, app
+from fulcra_mcp.main import app
+from fulcra_mcp.openai_endpoint import OPENAI_HIDDEN_TOOLS, OPENAI_MCP_PATH
 from test_stateless import INITIALIZE, TOOLS_LIST, mcp_client
 
 
@@ -26,8 +27,34 @@ async def test_openai_endpoint_hides_health_and_location_tools(tmp_path):
         openai = _tool_names(await client.post(OPENAI_MCP_PATH, json=TOOLS_LIST))
 
     assert OPENAI_HIDDEN_TOOLS <= full
-    assert openai == full - OPENAI_HIDDEN_TOOLS
+    assert openai == (full - OPENAI_HIDDEN_TOOLS - {'accept_agent_invitation'}) | {'open_agent_contacts', 'open_agent_contacts_home'}
     assert {"get_records", "get_data_catalog"} <= openai
+
+
+@pytest.mark.parametrize("path", ["/mcp", OPENAI_MCP_PATH])
+async def test_single_person_invitation_discovery(tmp_path, path):
+    async with mcp_client(tmp_path) as client:
+        await client.post(path, json=INITIALIZE)
+        response = await client.post(path, json=TOOLS_LIST)
+    data = next(json.loads(line.removeprefix("data: "))
+                for line in response.text.splitlines() if line.startswith("data: "))
+    tools = {tool['name']: tool for tool in data['result']['tools']}
+    invitation = tools['create_agent_invitation']
+    assert invitation['description'].startswith(
+        'Create a Fulcra invitation the user can share with another person to connect their agents.')
+    assert 'Always creates a new outbox' not in invitation['description']
+    assert 'shares only the invitation outbox with that user immediately' in (
+        invitation['inputSchema']['properties']['recipient_userid']['description'])
+    assert set(invitation['_meta']['ui']['visibility']) == {'model', 'app'}
+    assert invitation['annotations']['readOnlyHint'] is False
+    assert invitation['annotations']['destructiveHint'] is True
+    assert invitation['annotations']['openWorldHint'] is True
+    schema = invitation['inputSchema']
+    assert set(schema['properties']) == {'inviter_name', 'recipient_name', 'recipient_userid'}
+    assert set(schema['required']) == {'inviter_name', 'recipient_name'}
+    for name in ('prepare_agent_invitation', 'prepare_standing_agent_invitation', 'match_agent_invitations'):
+        expected = ['model', 'app'] if path == '/mcp' and name == 'match_agent_invitations' else ['app']
+        assert tools[name]['_meta']['ui']['visibility'] == expected
 
 
 async def test_openai_endpoint_refuses_hidden_tool_calls(tmp_path):

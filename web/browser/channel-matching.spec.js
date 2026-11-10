@@ -14,9 +14,9 @@ test('ordinary descriptions and share names retain usable contacts after refresh
   await expect(ui.locator('#messages')).toContainText('Broadcast message');
 });
 
-test('two saved pairs select exact history and reply through the corresponding outbox', async ({page}) => {
+for (const named of [false, true]) test(`two saved pairs select exact history and reply through the corresponding outbox; named=${named}`, async ({page}) => {
   const ui = await open(page, 900, {listOnly: true, autoSelect: false});
-  await page.evaluate(() => { window.pairedChannels = true; });
+  await page.evaluate(named => { window.pairedChannels = true; window.namedFields = named; }, named);
   await page.clock.runFor(11000);
   await ui.locator('#connections .thread-row').click();
   await ui.locator('#advanced-toggle').click();

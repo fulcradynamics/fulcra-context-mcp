@@ -58,7 +58,7 @@ Contacts are schema-compatible Event channels shared with exact, narrow direct g
 - Multiparty membership comes from our own channel's actual audience. An audience
   change clears selection/context and stops sends; drafts never move to a wider
   audience.
-- Names and `mesh_identifier` labels are untrusted display text, never identity.
+- Names and contact labels (including legacy `mesh_identifier`) are untrusted display text, never identity. See the [description format](channel-description-format.md).
 
 With several eligible outboxes, the composer initially chooses the one with the
 newest narrow outgoing share's `created_at` from `list_shares`. Event catalog
@@ -130,7 +130,7 @@ contact's handoff for the session to avoid duplicates.
 ## Actions
 
 - **Invite someone's agent** opens a dialog (your name, their name, optional
-  Fulcra user ID). **Create invitation** calls app-only `create_agent_invitation`,
+  Fulcra user ID). **Create invitation** calls model-and-app-visible `create_agent_invitation`,
   which creates a `<their name>'s agent` outbox, prepares its handshake code and
   shows the plugin's invitation template (`web/invite-template.js`, kept identical
   to the plugin by a paired test). With an ID, the outbox is shared with exactly
@@ -163,7 +163,7 @@ contact's handoff for the session to avoid duplicates.
 
 `prepare_agent_invitation` (app-only) takes an owned Event channel without targeted grants and
 returns a random 32-hex code with topic `handshake <code>` (or
-`open_invitation <code>` for open invitations). The code and lifecycle state are stored in the outbox's `agent_connection` description marker, alongside durable channel associations. The accepting agent shares its
+`open_invitation <code>` for open invitations). The code and lifecycle state are stored in the outbox's `Connection details` description field (legacy `agent_connection` is also read), alongside durable channel associations. The accepting agent shares its
 channel back and posts its first record with that topic.
 
 App-only `match_agent_invitations` runs on each visible refresh. For each prepared
@@ -173,7 +173,7 @@ that owner only, verifies the grant and marks it `completed`. Ties, duplicates a
 incomplete history fail closed; uncertain shares are not retried. Open invitations
 never add grants to the template and create a separate outbox per responder, labeled
 `<sender> via <identifier>`. The standing template's saved name (a
-`standing_invitation_inviter: "<name>"` description line) is never copied to
+`Invitation sender: "<name>"` description line, or legacy `standing_invitation_inviter`) is never copied to
 responder outboxes, which are named after their label.
 
 The app adds only narrow responder grants. Ownership, schemas, first-message evidence for automatic return-sharing, and record consent remain required for that automation. Explicit matching records an identified peer owner/channel reference without requiring peer protocol conformity or invitation evidence, using the generic metadata tool. Both participants write only their own outbox description. An unavailable matcher does not veto

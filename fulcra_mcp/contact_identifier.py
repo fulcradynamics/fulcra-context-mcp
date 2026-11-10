@@ -1,17 +1,7 @@
-"""Display-only connection labels in an optional JSON-string description suffix.
-
-Never use these untrusted labels for authorization, grouping, or routing.
-"""
-import json
+"""Display-only channel labels, never authorization, grouping, or routing."""
 import unicodedata
 
-from .connection_compatibility import IDENTIFIER_TOKEN
-
-TOKEN = IDENTIFIER_TOKEN
-PREFIX = TOKEN + ": "
-# Suffix whitespace is exactly JSON whitespace, shared with the JS parser.
-# Do not use default strip()/trim(): their Unicode whitespace sets differ.
-SUFFIX_WHITESPACE = " \t\r\n"
+from .description_fields import FIELDS, WHITESPACE, field_span, write_field
 
 
 def validate_identifier(identifier: str) -> str:
@@ -22,25 +12,16 @@ def validate_identifier(identifier: str) -> str:
     return identifier
 
 
-def _marker(description: str | None) -> tuple[int, int, str] | None:
-    if description is None:
-        return None
-    if not isinstance(description, str):
-        raise ValueError("description must be text")
-    start = description.find(TOKEN)
-    if start < 0:
-        return None
-    # Decode the JSON string, not a bracket/quote regex: both can be in labels.
-    if not description.startswith(PREFIX, start):
-        raise ValueError("Malformed contact identifier marker")
-    try:
-        value, end = json.JSONDecoder().raw_decode(description, start + len(PREFIX))
-        validate_identifier(value)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("Malformed contact identifier marker") from exc
-    if description[end:end + 1] != "]" or description[end + 1:].strip(SUFFIX_WHITESPACE):
-        raise ValueError("Multiple or malformed contact identifier markers; expected one suffix")
-    return start, end + 1, value
+def _marker(description):
+    marker = field_span(description, 'mesh_identifier')
+    if marker:
+        validate_identifier(marker[2])
+        start, end, _ = marker
+        if description.startswith('[mesh_identifier', start):
+            tail = description[end:].strip(WHITESPACE)
+            if tail and not any(tail.startswith(label + ':') for label in FIELDS.values()):
+                raise ValueError('Legacy label must be a suffix or precede named fields.')
+    return marker
 
 
 def parse_contact_identifier(description: str | None) -> str | None:
@@ -50,15 +31,5 @@ def parse_contact_identifier(description: str | None) -> str | None:
 
 def write_contact_identifier(description: str | None, identifier: str) -> str:
     validate_identifier(identifier)
-    marker = _marker(description)
-    description = description or ""
-    if marker and marker[2] == identifier:
-        return description
-    # Escape whitespace within the JSON string so catalog whitespace folding
-    # cannot change the value (including repeated spaces and Unicode spaces).
-    quoted = json.dumps(identifier, ensure_ascii=True).replace(" ", "\\u0020")
-    suffix = PREFIX + quoted + "]"
-    if marker:
-        start, end, _ = marker
-        return description[:start] + suffix + description[end:]
-    return description + ("\n" if description else "") + suffix
+    _marker(description)
+    return write_field(description, 'mesh_identifier', identifier)

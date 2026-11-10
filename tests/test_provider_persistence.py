@@ -25,6 +25,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyHttpUrl
 
 import fulcra_mcp.credentials as credentials_module
+import fulcra_mcp.provider as provider_module
 from fulcra_mcp.provider import OIDC_SCOPES, FulcraOAuthProvider
 from fulcra_mcp.settings import settings
 
@@ -182,6 +183,40 @@ async def test_exchange_without_login_state_fails_loudly(state_path):
         await p.exchange_authorization_code(CLIENT, code)
     assert excinfo.value.error == "invalid_grant"
     assert not list((state_path).glob("access_tokens/*"))
+
+
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "https://claude.ai/api/mcp/auth_callback",
+        # Claude Desktop's native sign-in; prod rejected it until this test.
+        "claude://claude.ai/mcp-auth-callback/sdk",
+    ],
+)
+async def test_callback_returns_to_the_registered_redirect(state_path, monkeypatch, redirect_uri):
+    class FakeFulcraAPI:
+        def __init__(self, **kwargs):
+            self.fulcra_credentials = None
+
+        def authorize_with_authorization_code(self, code, redirect_uri):
+            self.fulcra_credentials = fresh_creds("v1")
+
+    monkeypatch.setattr(provider_module, "FulcraAPI", FakeFulcraAPI)
+    p = make_provider()
+    p.state_mapping["state-1"] = {
+        "callback_url": "http://localhost:4499/callback",
+        "redirect_uri": redirect_uri,
+        "code_challenge": "challenge",
+        "redirect_uri_provided_explicitly": "True",
+        "client_id": CLIENT.client_id,
+    }
+
+    location = await p.handle_callback("auth0-code", "state-1")
+
+    assert location.startswith(redirect_uri + "?")
+    (code,) = p.auth_codes.values()
+    assert str(code.redirect_uri) == redirect_uri
+    assert "state-1" not in p.state_mapping
 
 
 # --- get_fulcra_object (hosted branch) ---------------------------------------

@@ -28,11 +28,12 @@ def test_shared_parser_fixtures(fixture):
 
 def test_marker_preserves_every_other_byte():
     result = write_status(DESCRIPTION, STATUS)
-    assert result.endswith('[mesh_identifier: "Travel"]')
+    assert result.startswith(DESCRIPTION + '\nContact status: ')
     assert parse_status(result) == STATUS
     updated = write_status(result, STATUS | {'attention': False})
     assert parse_status(updated)['attention'] is False
-    assert updated.replace('[contact_status: ' + json.dumps(STATUS | {'attention': False}, separators=(',', ':')) + ']\n', '') == DESCRIPTION
+    from fulcra_mcp.contact_status import remove_status
+    assert remove_status(updated) == DESCRIPTION + '\n'
 
 
 @pytest.mark.parametrize('description', [None, '', '[contact_status: bad]', '[contact_status: {}]',
@@ -92,8 +93,8 @@ async def test_real_sdk_unicode_roundtrip(backend):
     assert result['assessment']['reason'] == reason
     assert parse_status(backend['row']['description']) == result['assessment']
     assert backend['calls'][-1] == ('GET', '/data/v1/catalog')
-    marker = '[contact_status: ' + json.dumps(result['assessment'], separators=(',', ':')) + ']\n'
-    assert backend['row']['description'].replace(marker, '') == DESCRIPTION
+    from fulcra_mcp.contact_status import remove_status
+    assert remove_status(backend['row']['description']) == DESCRIPTION + '\n'
 
 
 async def test_real_sdk_transport_preservation_and_independent_readback(backend):

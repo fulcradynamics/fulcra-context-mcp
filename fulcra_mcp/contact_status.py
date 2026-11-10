@@ -1,10 +1,8 @@
 """Optional, untrusted last-assessment display metadata, never routing authority."""
-import json
+
 import re
 from datetime import datetime
 from .contact_identifier import validate_identifier
-
-TOKEN = '[contact_status:'
 
 
 def validate_status(value):
@@ -19,45 +17,31 @@ def validate_status(value):
 
 
 def _marker(description):
-    """(start, end, value) of the single status marker, wherever whitespace
-    folding put it, or None if absent or malformed."""
-    if not isinstance(description, str) or description.count(TOKEN) != 1:
-        return None
-    start = description.index(TOKEN)
-    try:
-        if description[start + len(TOKEN)] != ' ':
-            return None
-        value, end = json.JSONDecoder().raw_decode(description, start + len(TOKEN) + 1)
-        validate_status(value)
-    except (ValueError, TypeError, IndexError):
-        return None
-    return (start, end + 1, value) if description[end:end + 1] == ']' else None
+    from .description_fields import field_span
+    marker = field_span(description, 'contact_status')
+    if marker:
+        validate_status(marker[2])
+    return marker
 
 
 def parse_status(description):
-    marker = _marker(description)
-    return marker[2] if marker else None
+    try:
+        marker = _marker(description)
+        return marker[2] if marker else None
+    except (ValueError, TypeError):
+        return None
 
 
 def remove_status(description):
-    """The description without its status marker and the whitespace before it."""
-    start, end, _ = _marker(description)
-    return description[:start].rstrip(' \t\r\n') + description[end:]
+    from .description_fields import write_field
+    _marker(description)
+    return write_field(description, 'contact_status', None)
 
 
 def write_status(description, value):
+    from .description_fields import write_field
     validate_status(value)
     if not isinstance(description, str):
         raise ValueError('Missing description; refusing metadata replacement.')
-    marker = '[contact_status: ' + json.dumps(value, separators=(',', ':')) + ']'
-    if TOKEN in description:
-        if parse_status(description) is None:
-            raise ValueError('Malformed status; refusing metadata replacement.')
-        start, end, _ = _marker(description)
-        return description[:start] + marker + description[end:]
-    # Insert before the final label suffix; every existing byte stays unchanged.
-    from .contact_identifier import _marker as label_marker
-    label = label_marker(description)
-    index = label[0] if label else len(description)
-    before = description[:index]
-    return before + ('' if before.endswith('\n') else '\n') + marker + ('\n' if label else '') + description[index:]
+    _marker(description)
+    return write_field(description, 'contact_status', value)

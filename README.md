@@ -5,7 +5,7 @@
 
 This is an MCP server that provides tools and resources to call the Fulcra API using [`fulcra-api`](https://github.com/fulcradynamics/fulcra-api-python).
 
-There is a public instance of this server running at `https://mcp.fulcradynamics.com/mcp`. The OpenAI plugin connects to `https://mcp.fulcradynamics.com/openai/mcp`, which serves the same tools except `get_location`, `get_sleep`, `get_workouts` and `get_time_series`.  See [https://docs.fulcradynamics.com/](https://docs.fulcradynamics.com/) to get started quickly.  This repo is primarily for users who need to run the server locally, want to see under the hood, or want to help contribute.
+There is a public instance of this server running at `https://mcp.fulcradynamics.com/mcp`. The OpenAI plugin connects to `https://mcp.fulcradynamics.com/openai/mcp`, which serves the same tools except `get_location`, `get_sleep`, `get_workouts` and `get_time_series`. Claude's connector and plugin connect to `https://mcp.fulcradynamics.com/claude/mcp`: the `/mcp` tools without those four, with the contact panels always offered.  See [https://docs.fulcradynamics.com/](https://docs.fulcradynamics.com/) to get started quickly.  This repo is primarily for users who need to run the server locally, want to see under the hood, or want to help contribute.
 
 When run on its own (or when `FULCRA_ENVIRONMENT` is set to `stdio`), it acts as a local MCP server using the stdio transport.  Otherwise, it acts as a remote server using the Streamable HTTP transport.  It handles the OAuth2 callback, but doesn't leak the exchanged tokens to MCP clients.  Instead, it maintains a mapping table and runs its own OAuth2 service between MCP clients.
 
@@ -42,6 +42,19 @@ metadata tools include:
 - `update_data_type`: update an owned active v1 Event/Metric type's name or
   description with user authorization and independent readback. It does not
   change schemas, records or shares; uncertain writes require reconciliation.
+- `accept_agent_invitation` on `/mcp`: with the user's authorization, create or
+  reuse an empty response channel, share it narrowly with the exact inviter and
+  post the supplied first introduction. Inspect uncertain outcomes read-only;
+  saved attempts never automatically send/share again.
+- `match_agent_invitations` on `/mcp`: complete user-prepared invitations using
+  first-message codes and actual incoming-share owners, not message claims.
+- `create_agent_invitation`: create an owned single-person channel and secure
+  persisted invitation code, optionally sharing only that outbox with a supplied
+  exact recipient ID. No message is sent. On `/mcp`, the result also includes full
+  `invitation_text` and an explicit delivery next step; skills are optional.
+  Reconcile errors before another call; do not fall back to generic creation.
+  See [the invitation workflow and host-capability boundary](docs/invitation-workflow.md).
+  `/openai/mcp` keeps its existing plugin contract and invitation UI.
 
 App-only implementation tools are not part of the public model-facing reference.
 

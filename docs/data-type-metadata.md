@@ -45,6 +45,7 @@ and input validation still apply.
 
 The contacts app checks exact targeted shares on its preferences store, independently of broader access policy. Invitations and durable owner/channel pairs live on the owned outbox using [channel metadata](channel-metadata.md), not a separate store. Metadata records matching decisions; it neither grants access nor requires a particular way of resolving the pair. Nothing is deleted or shared automatically by the generic metadata tool.
 
-Description markers (`[agent_connection: …]`, `[mesh_identifier: …]`, `[contact_status: …]`,
-`converted_from_mesh: […]`, `standing_invitation_inviter: …`) are found by token,
-not by line, so they parse the same from raw and whitespace-folded descriptions.
+Channel metadata uses [human-readable named fields](channel-description-format.md),
+with legacy markers still readable. Fields are found outside decoded JSON values,
+not by line, so raw and whitespace-folded descriptions remain usable. Deliberate
+field edits write the named spelling and preserve all unrelated bytes.

@@ -198,7 +198,7 @@ def test_standing_responders_get_their_own_outbox_without_the_private_name(stand
     assert result['status'] == 'matched' and result['data_type'] != STANDING
     outbox = next(e for e in standing_api.catalog if e['id'] == result['data_type'])
     assert outbox['name'] == 'Alex via Open invitation'
-    assert invitations.STANDING_INVITER not in outbox['description']
+    assert invitations._inviter_marker(outbox['description']) is None
 
 
 def test_standing_name_survives_whitespace_folding(standing_api):
@@ -209,7 +209,7 @@ def test_standing_name_survives_whitespace_folding(standing_api):
     folded = re.sub(r'\s+', ' ', entry['description'])
     assert invitations._standing_inviter(folded) == 'Leif'
     assert parse_contact_identifier(entry['description']) == 'Open invitation'
-    assert invitations.STANDING_INVITER not in invitations._without_inviter(folded)
+    assert invitations._inviter_marker(invitations._without_inviter(folded)) is None
     entry['description'] = folded
     assert invitations.standing(standing_api, 'Sura')['inviter_name'] == 'Sura'
     assert parse_contact_identifier(entry['description']) == 'Open invitation'

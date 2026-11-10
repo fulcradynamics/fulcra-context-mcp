@@ -62,7 +62,16 @@ arguments/results, UI resources and skill bodies are outside this serialized
 budget; keep longer workflows in skills while preserving essential safety and
 routing in tool metadata and backend enforcement.
 
-## Latest measurement (1.17.0)
+## Latest measurement (1.19.5)
+
+Hosted composition, namespace `fulcra`, with `create_agent_invitation` visible to
+model and app: **31 model-visible tools**, **16 app-only**, **47,327 charged bytes**,
+**16,673 shared bytes remaining** when Fulcra is the only plugin. No descriptions
+or instructions are truncated. The OpenAI endpoint separately excludes its four
+dedicated health/location tools. This is local simulation, not native discovery,
+security-warning acceptance or reserved host capacity.
+
+## Earlier measurement (1.17.0)
 
 Against 1.16.1 (`0a86795`), same environment and namespace `fulcra`:
 

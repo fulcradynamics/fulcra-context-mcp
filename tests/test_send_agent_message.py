@@ -10,6 +10,7 @@ def connected(monkeypatch):
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     def own_records(api, entry, *args, **kwargs):
         assert entry['fulcra_userid'] == OWN, 'Sending must not retrieve peer records'
+        assert entry['id'] == OUT
         return api.rows
     monkeypatch.setattr(tools.records, 'get_records', own_records)
     return api
@@ -19,6 +20,28 @@ async def test_sends_on_your_channel_and_reports_verified_id(call, connected):
     assert result['status'] == 'posted' and result['mid'] == MID
     assert connected.writes[0]['id'] == MID
     assert connected.writes[0]['body'] == 'hello'
+
+@pytest.mark.parametrize('preexisting', [False, True])
+async def test_same_id_with_different_fields_is_posted_once(call, connected, preexisting):
+    record = dict(id=MID, sender='a', kind='message', body='hello', topic='chat', priority='P2')
+    observed = dict(id=MID, body='different', sender=None, artifacts=[],
+                    recipients=['another agent'], in_reply_to=TARGET, topic=None, priority='P1')
+    if preexisting:
+        connected.rows = [observed]
+    else:
+        upload = connected.record_data_type
+        def upload_with_different_readback(*args):
+            result = upload(*args)
+            assert connected.writes == [record]
+            connected.rows = [observed]
+            return result
+        connected.record_data_type = upload_with_different_readback
+    result = json.loads(await call('send_agent_message', dict(
+        connection=OUT, sender='a', body='hello', record_id=MID)))
+    assert result['status'] == 'posted', result
+    assert result['record'] == observed
+    assert len(connected.writes) == (0 if preexisting else 1)
+
 
 @pytest.mark.parametrize('topic', [None, 'explicit topic'])
 async def test_reply_uses_supplied_or_default_topic(call, connected, topic):

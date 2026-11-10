@@ -7,18 +7,15 @@ import re
 
 from .connection import UUID_PATTERN, _uuid, channel_entry
 
-MARKER = '[agent_connection: '
+from .description_fields import field_span, write_field
 
 
 def _marker(description):
-    text = description or ''
-    if MARKER not in text:
+    span = field_span(description, 'agent_connection')
+    if not span:
         return None
-    if text.count(MARKER) != 1:
-        raise ValueError('Ambiguous channel metadata.')
-    start = text.index(MARKER)
-    value, end = json.JSONDecoder().raw_decode(text, start + len(MARKER))
-    if text[end:end + 1] != ']' or not isinstance(value, dict) or value.get('version') != 1:
+    start, end, value = span
+    if not isinstance(value, dict) or value.get('version') != 1:
         raise ValueError('Invalid channel metadata.')
     peers = value.get('peers', [])
     if not isinstance(peers, list) or any(
@@ -27,7 +24,7 @@ def _marker(description):
         or not re.fullmatch('Event/' + UUID_PATTERN, p['data_type']) for p in peers
     ):
         raise ValueError('Invalid channel associations.')
-    return start, end + 1, value
+    return start, end, value
 
 
 def parse_metadata(description):
@@ -43,17 +40,11 @@ def is_template(description):
 
 
 def write_metadata(description, metadata):
-    text = description or ''
-    marker = _marker(text)
-    replacement = MARKER + json.dumps(metadata, separators=(',', ':'), ensure_ascii=False) + ']' if metadata else ''
-    if replacement:
-        _marker(replacement)
-    if marker:
-        start, end, _ = marker
-        if not replacement and text[end:end + 1] == '\n':
-            end += 1
-        return text[:start] + replacement + text[end:]
-    return replacement + ('\n' if text else '') + text if replacement else text
+    _marker(description)
+    updated = write_field(description, 'agent_connection', metadata or None)
+    if metadata:
+        _marker(updated)
+    return updated
 
 
 def save_metadata(api, own, data_type, metadata, expected=None):

@@ -10,6 +10,6 @@ CHANNEL_PREFIXES = tuple(f"{name} channel" for name in SHARE_NAME_PREFIX)
 
 # Preserve stored provenance; current tools are advertised without historical aliases.
 CONNECTION_GUIDANCE = (
-    "Keep mesh_identifier/converted_from_mesh. "
+    "Preserve contact labels and conversion provenance; read legacy and named fields. "
     "Do not migrate user data without explicit consent."
 )

@@ -1,4 +1,4 @@
-from fulcra_mcp.main import mcp
+from fulcra_mcp.main import openai_mcp as mcp
 
 
 def test_bare_mention_routes_to_onboarding_without_write_consent():

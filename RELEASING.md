@@ -4,10 +4,70 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
-## 1.19.4 release notes
+## 1.19.14 release notes
 
 - The Invite someone template mentions that ChatGPT users can add the Fulcra
-  plugin. Ship contacts UI v82.
+  plugin. Ship contacts UI v84.
+
+## 1.19.13 release notes
+
+- Fix sign-in from Claude Desktop, on every endpoint: `/callback` rejected
+  app-scheme redirect URIs (`claude://claude.ai/mcp-auth-callback/sdk`) and
+  answered `failed to exchange code for token` after the Auth0 exchange had
+  succeeded. That error now covers only the Auth0 exchange.
+
+## 1.19.12 release notes
+
+- Serve `/claude/mcp` for Claude's connector and plugin (`claude_endpoint.py`): the
+  standard tools and instructions plus Claude guidance, contact panel entrypoints
+  always listed (Claude hosts render them; stateless HTTP loses the advertised
+  capability), and no `get_location`, `get_sleep`, `get_workouts` or
+  `get_time_series`. The invitation-first tool order moves out of the panel gate
+  so both endpoints use it.
+- Contacts UI v83: hosts that show the panel inline with fullscreen available
+  (Claude) get an Expand button, so the panel can return to fullscreen after the
+  user leaves it. ChatGPT is fullscreen only and never shows it. The panel still
+  requests fullscreen once on open. Every endpoint's UI URIs change to v83.
+- `/claude/mcp` directory readiness: the contact panel, mention search and
+  settings tools get annotation titles and parameter descriptions there only
+  (`DirectoryMetadata`), and its 401 points at its own path-form metadata, whose
+  resource is `/claude/mcp`. `/mcp` and `/openai/mcp` are unchanged.
+  `test_directory_readiness.py` also checks `/claude/mcp`, app-only tools included.
+
+## 1.19.10 release notes
+
+- `/mcp` supports tool-only invitations without installed skills: ready-to-share
+  invitation text, explicit delivery with `send_agent_message`, authorized
+  acceptance with a first introduction, and inviter completion with matching.
+- Preserve `/openai/mcp` instructions, tools and UI behavior. `tools.py` owns the
+  standard invitations, acceptance and `create_share` wording; `openai_endpoint.py`
+  owns frozen invitation overrides and its submitted sharing description. Shared domain helpers
+  keep the existing Event message, topic, sharing and matching protocol.
+- Generic contact panel entrypoints require the advertised MCP Apps extension;
+  unsupported direct calls return tool alternatives. Resources and the file
+  manager fallback remain available. No frontend change or UI version bump.
+- Acceptance records an attempt in owned channel metadata before sharing/sending.
+  Re-entry only inspects that attempt. Creation can fail before returning an ID;
+  inspect the catalog before another write. No cross-worker atomicity or backend
+  idempotence guarantee. See [invitation workflow](docs/invitation-workflow.md).
+
+## 1.19.8 release notes
+
+- Verify sends by record ID only within the selected outbox, without comparing
+  payload fields. An existing ID means posted without upload; an ID observed
+  after upload means posted without another retry, even when fields differ.
+- Outgoing schema validation, authorization, absent-ID handling and read-only
+  polling are unchanged. No UI changes.
+
+## 1.19.4 release notes
+
+- Write human-readable channel metadata fields; continue reading legacy markers.
+  Preserve unrelated bytes and reject malformed/duplicate targeted fields. No
+  bulk or read-triggered migration; matching and live-share authority are unchanged.
+- Clarify the contacts opener as a browse/control panel, with optional skill
+  discovery for chat invitations, sends and message checks. Ship contacts UI v82.
+- See [the exact description format and unrun native cases](docs/channel-description-format.md).
+  No classifier-warning outcome is asserted.
 
 ## 1.19.3 release notes
 

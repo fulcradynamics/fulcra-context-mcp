@@ -2,15 +2,30 @@
 
 These enforce the requirements that can be verified without live data:
 annotations, name length, description quality, and docs that match each tool's
-actual signature. See docs/anthropic-review.md.
+actual signature, for the shared tools and for /claude/mcp, the endpoint
+listed in Claude's directory. See
+https://claude.com/docs/connectors/building/review-criteria.
 """
 
 import inspect
 import re
 
+import pytest
+from fastmcp import Client
+
+from fulcra_mcp.claude_endpoint import create_claude_server
+from fulcra_mcp.tools import tools_mcp
+
 # The first description line is what most MCP clients show in tool summaries;
 # README.md asks for roughly one short line.
 MAX_LEAD_LINE = 100
+
+
+@pytest.fixture(params=[lambda: tools_mcp, create_claude_server], ids=["tools", "claude"])
+async def client(request):
+    """The shared tools, and /claude/mcp's full list including app-only tools."""
+    async with Client(request.param()) as c:
+        yield c
 
 
 async def test_every_tool_has_title_and_hint(client):

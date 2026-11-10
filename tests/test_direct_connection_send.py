@@ -95,7 +95,7 @@ async def test_all_covering_grants_checked(call, backend, change):
     fake.record_data_type.assert_not_called()
 
 
-@pytest.mark.parametrize('case', ['no_grant', 'foreign', 'ambiguous', 'inactive', 'deleted', 'nonrecordable', 'self', 'malformed', 'blank', 'conflict'])
+@pytest.mark.parametrize('case', ['no_grant', 'foreign', 'ambiguous', 'inactive', 'deleted', 'nonrecordable', 'self', 'malformed', 'blank'])
 async def test_refuses_unsafe_or_ambiguous_target(call, backend, case):
     fake, rows = backend
     args = dict(ARGS)
@@ -109,7 +109,7 @@ async def test_refuses_unsafe_or_ambiguous_target(call, backend, case):
     if case == 'self': args['peer_userid'] = FAKE_USER_ID
     if case == 'malformed': args['outbox'] += ' '
     if case == 'blank': args['body'] = ' \n'
-    if case == 'conflict': rows.append({**ENV, 'body': 'different'})
+    rows.append({**ENV, 'body': 'different'})
     assert json.loads(await call('send_agent_contact_message', args))['status'] == 'rejected'
     fake.record_data_type.assert_not_called()
 

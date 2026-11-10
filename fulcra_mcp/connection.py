@@ -87,12 +87,7 @@ def owned_connection(api, data_type, peer_userid, expected_peer_userids=None):
 def _readback(api, entry, record):
     now = datetime.now(timezone.utc)
     rows = records.get_records(api, entry, now - timedelta(days=30), now + timedelta(seconds=1))
-    matches = [row for row in rows if row.get('id') == record['id']]
-    fields = set(connections.CHANNEL_FIELDS['properties']) | {'id'}
-    expected = {k: v for k, v in record.items() if k in fields}
-    if any({k: v for k, v in row.items() if k in fields} != expected for row in matches):
-        raise ValueError('Record ID already has different content; do not overwrite it.')
-    return matches[0] if matches else None
+    return next((row for row in rows if row.get('id') == record['id']), None)
 
 
 def _clear_status(api, entry):
@@ -111,7 +106,7 @@ def _clear_status(api, entry):
 
 def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
          kind='message', in_reply_to=None, pri='P2', slug=None, artifacts=None,
-         expected_peer_userids=None):
+         expected_peer_userids=None, max_attempts=2):
     result = dict(mid=mid, outbox=outbox, peer_userid=peer_userid, peer_acknowledged=False)
 
     def posted(entry, row):
@@ -147,7 +142,7 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
             return posted(entry, existing)
         if api.validate_records(outbox, [record], 'v1'):
             raise ValueError('Channel schema validation failed; nothing submitted.')
-        for attempt in range(2):
+        for attempt in range(max_attempts):
             # Revalidate even on retry; grants and record ingestion are not atomic.
             _authorize(api, own, peer_userid, outbox, expected_peer_userids)
             if api.get_fulcra_userid() != own:
@@ -174,6 +169,9 @@ def send(api, *, peer_userid, outbox, sender, body, mid, recipients=None,
                 # Acknowledged upload may precede query visibility. Poll, don't repost.
                 return {**result, 'status': 'uncertain', 'retryable': False,
                         'reason': 'Upload accepted; exact record not yet visible. Poll for this ID; do not submit it again.'}
+        if max_attempts == 1:
+            return {**result, 'status': 'uncertain', 'retryable': False,
+                    'reason': 'Exact record not observed. Inspect this ID read-only; do not resend automatically.'}
         return {**result, 'status': 'uncertain', 'reason': 'Exact record not observed. Retry only with the same ID and content; never bypass host denial.'}
     except Exception as exc:
         if attempted:

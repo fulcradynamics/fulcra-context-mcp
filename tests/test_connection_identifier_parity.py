@@ -18,7 +18,7 @@ def test_suffix_boundaries(case):
         raw = 'Prose\n  folded. [mesh_identifier: "Trip"]' + suffix
         if case['valid']:
             assert parse_contact_identifier(raw) == 'Trip'
-            assert write_contact_identifier(raw, 'Trip') == raw
+            assert write_contact_identifier(raw, 'Trip') == raw.replace('[mesh_identifier: "Trip"]', 'Contact label: "Trip"')
         else:
             with pytest.raises(ValueError):
                 parse_contact_identifier(raw)

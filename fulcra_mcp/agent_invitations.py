@@ -20,7 +20,7 @@ from .channel_metadata import parse_metadata, write_metadata, save_metadata, add
 
 
 STANDING_NAME = 'connect-our-agents-standing-invitation'
-STANDING_INVITER = 'standing_invitation_inviter: '
+
 LOCK = RLock()  # Storage has no compare-and-swap; serialize this worker.
 CODE = re.compile('[0-9a-f]{32}')
 logger = logging.getLogger(__name__)
@@ -411,11 +411,12 @@ def match(api):
 def _inviter_marker(description):
     """(start, end, name) of the saved inviter name, wherever whitespace folding
     put it, or None."""
-    start = (description or '').find(STANDING_INVITER)
-    if start < 0:
-        return None
-    name, end = json.JSONDecoder().raw_decode(description, start + len(STANDING_INVITER))
-    return start, end, name
+    from .description_fields import field_span
+    from .contact_identifier import validate_identifier
+    marker = field_span(description, 'standing_invitation_inviter')
+    if marker:
+        validate_identifier(marker[2])
+    return marker
 
 
 def _standing_inviter(description):
@@ -428,7 +429,7 @@ def _without_inviter(description):
     marker = _inviter_marker(description)
     if not marker:
         return description
-    return description[:marker[0]].rstrip(' \t\r\n') + description[marker[1]:]
+    return description[:marker[0]] + description[marker[1]:]
 
 
 def _standing_entry(api, own):
@@ -455,7 +456,7 @@ def standing(api, inviter_name=None):
         if not entry:
             data_type_management.create_data_type(
                 api, {'id': 'Event', 'api_version': 'v1'}, STANDING_NAME,
-                description=write_contact_identifier(f'{SHARE_NAME_PREFIX[-1]} channel', 'Open invitation'),
+                description=write_contact_identifier('Agent contact channel', 'Open invitation'),
                 fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
                                'required': connections.CHANNEL_FIELDS['required']})
             entry = _standing_entry(api, own)
@@ -464,14 +465,8 @@ def standing(api, inviter_name=None):
         prepared = prepare(api, entry['id'], open_invitation=True)
         entry = _standing_entry(api, own)
         if inviter_name is not None and inviter_name != _standing_inviter(entry['description']):
-            description = _without_inviter(entry['description'])
-            if inviter_name:
-                # Before the final label suffix, which must stay last.
-                from .contact_identifier import _marker
-                label = _marker(description)
-                index = label[0] if label else len(description)
-                description = (description[:index].rstrip(' \t\r\n') + '\n' + STANDING_INVITER
-                               + json.dumps(inviter_name) + ('\n' + description[index:] if label else ''))
+            from .description_fields import write_field
+            description = write_field(entry['description'], 'standing_invitation_inviter', inviter_name or None)
             api.update_data_type('Event', entry['id'].split('/')[1], {'description': description})
             entry = _standing_entry(api, own)
             if not entry or _standing_inviter(entry['description']) != inviter_name:
@@ -479,7 +474,7 @@ def standing(api, inviter_name=None):
         return {**prepared, 'inviter_name': _standing_inviter(entry['description'])}
 
 
-def create(api, inviter_name, recipient_name, recipient_userid=None):
+def create(api, inviter_name, recipient_name, recipient_userid=None, *, progress=None):
     """Create a labeled single-person invitation outbox, as the invite skill does,
     then prepare its code. A known recipient ID shares the outbox up front; their
     handshake still completes the match."""
@@ -492,14 +487,20 @@ def create(api, inviter_name, recipient_name, recipient_userid=None):
         own = api.get_fulcra_userid()
         if recipient_userid is not None and (not _uuid(recipient_userid) or recipient_userid == own):
             raise ValueError("Use the other person's exact Fulcra user ID, or leave it blank.")
+        if progress is not None:
+            progress.update(own_userid=own, stage='creating')
         created = data_type_management.create_data_type(
             api, {'id': 'Event', 'api_version': 'v1'}, f'{inviter} with {recipient}',
-            description=write_contact_identifier(f'{SHARE_NAME_PREFIX[-1]} channel', identifier),
+            description=write_contact_identifier('Agent contact channel', identifier),
             fields_schema={'properties': connections.CHANNEL_FIELDS['properties'],
                            'required': connections.CHANNEL_FIELDS['required']})
         data_type = created['id']
+        if progress is not None:
+            progress.update(data_type=data_type, stage='preparing')
         _channel(api, own, data_type, own=True)
         prepared = prepare(api, data_type)
+        if progress is not None:
+            progress.update(prepared, stage='sharing' if recipient_userid else 'prepared')
         if recipient_userid:
             api.create_datashare(datashare_name=f'{SHARE_NAME_PREFIX[-1]}: {identifier}',
                 fulcra_data_types=[data_type], allowed_user_ids=[recipient_userid], share_all_data=False,

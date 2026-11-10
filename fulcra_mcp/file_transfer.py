@@ -47,6 +47,7 @@ from fastmcp.utilities.mime import UI_MIME_TYPE
 from . import tools
 from .credentials import current_grant_id
 from .file_manager_ui import FILE_MANAGER_HTML
+from .public_url import public_origin
 from .settings import settings
 from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
 from .user_agent import user_agent
@@ -680,7 +681,7 @@ def download_link_for(fulcra, record: dict, path: str, fulcra_userid: str | None
             "expires_at": expires_at,
         },
     )
-    url = f"{settings.oidc_server_url.rstrip('/')}/files/download/{token}"
+    url = f"{public_origin()}/files/download/{token}"
     return {
         "url": url,
         "name": name,
@@ -714,7 +715,7 @@ def make_upload_link(path: str, grant_id: str) -> str:
             "expires_at": time.time() + UPLOAD_LINK_TTL_SECONDS,
         },
     )
-    return f"{settings.oidc_server_url.rstrip('/')}/files/upload/{token}"
+    return f"{public_origin()}/files/upload/{token}"
 
 
 LINK_EXPIRED = "This upload link has expired. Ask for a new one."

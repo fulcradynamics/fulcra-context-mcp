@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # On pull_request events github.sha is the synthetic merge commit; build the
+  # PR head instead so the image matches the SHA in its tag.
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    name: Build and Publish Container Image
+    needs: test
+    # Fork PRs get no secrets or OIDC token, so skip rather than fail.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Compute image tag
+        id: meta
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CONTAINER_IMAGE_PATH: ${{ vars.CONTAINER_IMAGE_PATH }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            tag="pr-${PR_NUMBER}-${SOURCE_SHA::7}"
+          else
+            tag="$SOURCE_SHA"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=$CONTAINER_IMAGE_PATH:$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Configure Docker for Artifact Registry
+        env:
+          CONTAINER_IMAGE_PATH: ${{ vars.CONTAINER_IMAGE_PATH }}
+        # The registry host is the first path segment, e.g. us-west1-docker.pkg.dev.
+        run: gcloud auth configure-docker "${CONTAINER_IMAGE_PATH%%/*}" --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: FULCRA_VERSION=${{ steps.meta.outputs.tag }}
+          tags: ${{ steps.meta.outputs.image }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

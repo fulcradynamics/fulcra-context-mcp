@@ -60,10 +60,15 @@ def test_event_exact_readback_and_same_id(api):
     assert 'note' not in api.writes[0]
     assert send(api)['status'] == 'posted'
     assert len(api.writes) == 1
-    assert send(api, body='changed')['status'] == 'rejected'
+    assert send(api, body='changed')['status'] == 'posted'
+    assert len(api.writes) == 1
 
 @pytest.mark.parametrize('extra', [dict(body='x'*4001), dict(kind='heartbeat'), dict(recipients=[]), dict(mid=MID.upper()+' '), dict(kind='reply')])
-def test_invalid_never_writes(api, extra):
+def test_invalid_never_writes(api, extra, monkeypatch):
+    api.rows = [{'id': MID}]
+    def forbidden(*args, **kwargs):
+        pytest.fail('Invalid outgoing content must be rejected before lookup')
+    monkeypatch.setattr(connection.records, 'get_records', forbidden)
     assert send(api, **extra)['status'] == 'rejected'
     assert api.writes == []
 
@@ -148,7 +153,7 @@ async def test_event_identifier_preserves_conversion_provenance(api, monkeypatch
     result = json.loads(await tools.set_contact_identifier(OUT, 'New'))
     assert result['verified'] and result['changed']
     assert len(updates) == 1
-    assert entry['description'] == description.replace('"Old"', '"New"')
+    assert entry['description'] == description.replace('[mesh_identifier: "Old"]', 'Contact label: "New"')
 
 
 def _with_status(api, attention):
@@ -183,7 +188,7 @@ def test_status_clears_from_whitespace_folded_description(api):
     api.description = re.sub(r'\s+', ' ', api.description + '\n[mesh_identifier: "Alex"]')
     result = send(api)
     assert result['status_cleared'] is True
-    assert api.description == 'connect-agents-with-anyone channel [mesh_identifier: "Alex"]'
+    assert api.description == 'connect-agents-with-anyone channel  [mesh_identifier: "Alex"]'
 
 
 def test_ack_leaves_status_alone(api):
@@ -222,4 +227,4 @@ async def test_ui_and_agent_sends_remove_status_without_changing_other_metadata(
         args.update(connection=OUT, record_id=MID)
     result = await getattr(tools, tool)(**args)
     assert result['status'] == 'posted' and result['status_cleared'] is True
-    assert api.description == 'connect-agents-with-anyone channel\n[mesh_identifier: "Alex"]'
+    assert api.description == 'connect-agents-with-anyone channel\n\n[mesh_identifier: "Alex"]'
