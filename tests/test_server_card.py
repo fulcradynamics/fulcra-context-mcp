@@ -82,11 +82,11 @@ async def test_mcp_endpoint_is_not_shadowed(http_client):
 
 async def test_server_info_matches_the_card():
     async with Client(mcp) as client:
-        info = client.initialize_result.serverInfo
+        info = client.server_info
     # FastMCP can't set a title yet, so the name is what clients display.
     assert info.name == server_info.DISPLAY_NAME == SERVER_JSON["title"]
     assert info.version == server_info.version()
-    assert info.websiteUrl == SERVER_JSON["websiteUrl"]
+    assert info.website_url == SERVER_JSON["websiteUrl"]
     assert [icon.src for icon in info.icons] == [icon["src"] for icon in SERVER_JSON["icons"]]
 
 
@@ -96,7 +96,7 @@ def test_server_info_without_server_json_falls_back(monkeypatch, tmp_path):
     server_info.server_json.cache_clear()
     try:
         assert server_info.website_url() is None
-        assert [icon.model_dump(exclude_none=True) for icon in server_info.icons()] == SERVER_JSON["icons"]
+        assert [icon.model_dump(by_alias=True, exclude_none=True) for icon in server_info.icons()] == SERVER_JSON["icons"]
         assert server_info.version()
         with pytest.raises(FileNotFoundError):
             server_info.server_card()

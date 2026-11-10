@@ -33,7 +33,7 @@ async def test_every_tool_has_title_and_hint(client):
         ann = tool.annotations
         assert ann is not None, f"{tool.name} has no annotations"
         assert ann.title, f"{tool.name} has no title"
-        assert ann.readOnlyHint is True or ann.destructiveHint is not None, (
+        assert ann.read_only_hint is True or ann.destructive_hint is not None, (
             f"{tool.name} needs readOnlyHint or destructiveHint"
         )
 
@@ -58,7 +58,7 @@ async def test_every_parameter_has_a_description(client):
     """FastMCP folds each docstring Args entry into the parameter's schema
     description; a parameter without one is undocumented to the client."""
     for tool in await client.list_tools():
-        for name, prop in tool.inputSchema.get("properties", {}).items():
+        for name, prop in tool.input_schema.get("properties", {}).items():
             assert prop.get("description", "").strip(), (
                 f"{tool.name}.{name} has no description — document it in the "
                 "docstring's Args: section"

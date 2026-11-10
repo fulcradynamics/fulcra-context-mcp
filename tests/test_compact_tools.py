@@ -57,26 +57,26 @@ def test_compact_schema(schema, expected):
 
 async def test_listed_tools_carry_no_nullable_wrappers(client):
     for tool in await client.list_tools():
-        listed = json.dumps(tool.inputSchema)
+        listed = json.dumps(tool.input_schema)
         assert '{"type": "null"}' not in listed, tool.name
         assert '"default": null' not in listed, tool.name
 
 
 async def test_only_object_results_keep_an_output_schema(client):
     tools = {t.name: t for t in await client.list_tools()}
-    assert tools["get_user_info"].outputSchema is None
-    assert tools["start_file_upload"].outputSchema is not None
+    assert tools["get_user_info"].output_schema is None
+    assert tools["start_file_upload"].output_schema is not None
     assert not [
         name
         for name, t in tools.items()
-        if t.outputSchema and t.outputSchema.get("x-fastmcp-wrap-result")
+        if t.output_schema and t.output_schema.get("x-fastmcp-wrap-result")
     ]
 
 
 async def test_text_results_are_sent_once(client, fake_fulcra):
     fake_fulcra.get_user_info.return_value = {"userid": "u1"}
     result = await client.call_tool_mcp("get_user_info", {})
-    assert result.structuredContent is None
+    assert result.structured_content is None
     assert result.content[0].text.startswith("User information: ")
 
 

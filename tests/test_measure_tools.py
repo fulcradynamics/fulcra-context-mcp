@@ -125,7 +125,7 @@ async def test_in_process_budget_and_essential_instructions():
     from fulcra_mcp.main import mcp
     async with Client(mcp) as client:
         tools = await client.list_tools()
-        instructions = client.initialize_result.instructions
+        instructions = client.instructions
     assert len(instructions.encode()) <= measure.DESCRIPTION_LIMIT
     rows = [measure.codex_spec(t.model_dump(by_alias=True, exclude_none=True), "fulcra", instructions)
             for t in tools if not measure.app_only(t) and t.name != "debug_token_info"]

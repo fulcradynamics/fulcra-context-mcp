@@ -210,11 +210,11 @@ def budget(rows, *, deferred=False):
 
 
 def tool_payload(t) -> str:
-    d = {"name": t.name, "description": t.description, "input_schema": t.inputSchema}
-    if t.outputSchema:
-        d["output_schema"] = t.outputSchema
+    d = {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+    if t.output_schema:
+        d["output_schema"] = t.output_schema
     if t.annotations:
-        d["annotations"] = t.annotations.model_dump(exclude_none=True)
+        d["annotations"] = t.annotations.model_dump(by_alias=True, exclude_none=True)
     return json.dumps(d)
 
 
@@ -258,7 +258,7 @@ async def main():
             from fulcra_mcp.tools import tools_mcp as server
         async with Client(server) as client:
             tools = await client.list_tools()
-            instructions = client.initialize_result.instructions
+            instructions = client.instructions
         snapshot = {"tools": [t.model_dump(by_alias=True, exclude_none=True) for t in tools],
                     "instructions": instructions,
                     "revision": subprocess.check_output(["git", "-C", args.checkout, "rev-parse", "HEAD"], text=True).strip(),

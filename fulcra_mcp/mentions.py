@@ -7,8 +7,8 @@ from urllib.parse import quote
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ResourceError, ToolError
-from fastmcp.resources.resource import ResourceContent, ResourceResult
-from fastmcp.tools.tool import ToolResult
+from fastmcp.resources import ResourceContent, ResourceResult
+from fastmcp.tools import ToolResult
 
 from .tools import get_data_catalog, list_shares
 from .contact_identifier import parse_contact_identifier
