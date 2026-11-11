@@ -44,9 +44,9 @@ from fastmcp.exceptions import ResourceError, ToolError
 from fastmcp.resources import ResourceContent
 from fastmcp.utilities.mime import UI_MIME_TYPE
 
-from . import tools
+from . import tools, ui_versions
 from .credentials import current_grant_id
-from .file_manager_ui import FILE_MANAGER_HTML
+from .file_manager_ui import FILE_MANAGER_BUNDLES, FILE_MANAGER_HTML, FILE_MANAGER_VERSION
 from .public_url import public_origin
 from .settings import settings
 from .tools import _file_path, _friendly_http_errors, _slim_file, tools_mcp
@@ -54,7 +54,11 @@ from .user_agent import user_agent
 
 logger = structlog.getLogger(__name__)
 
-FILE_MANAGER_URI = "ui://fulcra/file-manager/v4.html"
+def file_manager_uri(version: int) -> str:
+    return f"ui://fulcra/file-manager/v{version}.html"
+
+
+FILE_MANAGER_URI = file_manager_uri(FILE_MANAGER_VERSION)
 
 # Resumable uploads take chunks in multiples of 256 KiB, except the last.
 UPLOAD_GRANULE = 256 * 1024
@@ -349,10 +353,7 @@ def shared_file_resource(fulcra_userid: str, path: str) -> list[ResourceContent]
     return _read_file(path, fulcra_userid)
 
 
-@tools_mcp.resource(
-    FILE_MANAGER_URI,
-    name="Fulcra file manager",
-    description="The panel open_file_manager shows.",
+FILE_MANAGER_PANEL = dict(
     mime_type=UI_MIME_TYPE,
     app=AppConfig(
         prefers_border=True,
@@ -363,8 +364,29 @@ def shared_file_resource(fulcra_userid: str, path: str) -> list[ResourceContent]
         ),
     ),
 )
+
+
+@tools_mcp.resource(
+    FILE_MANAGER_URI,
+    name="Fulcra file manager",
+    description="The panel open_file_manager shows.",
+    **FILE_MANAGER_PANEL,
+)
 def file_manager_ui() -> str:
     return FILE_MANAGER_HTML
+
+
+def keep_earlier_file_managers(server=tools_mcp, bundles=FILE_MANAGER_BUNDLES) -> None:
+    """Serve earlier panels at the URIs they shipped under, with the current CSP."""
+    for version, bundle in sorted(bundles.items()):
+        if version != FILE_MANAGER_VERSION:
+            ui_versions.keep_readable(
+                server, file_manager_uri(version),
+                lambda bundle=bundle: bundle.read_text(encoding="utf-8"), **FILE_MANAGER_PANEL)
+
+
+keep_earlier_file_managers()
+tools_mcp.add_middleware(ui_versions.CurrentVersionsOnly())
 
 
 # ----------------------------------------------------------- the file manager

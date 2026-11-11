@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { BUNDLE_URL } from './ui-version.js';
 
 const root = new URL('./', import.meta.url);
 const result = await build({
@@ -14,7 +15,7 @@ const font = await readFile(new URL('assets/rubik-latin-wght-normal.woff2', root
 const icon = await readFile(new URL('../fulcra_mcp/static/icon.png', root));
 const license = await readFile(new URL('assets/OFL.txt', root), 'utf8');
 const script = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
-await writeFile(new URL('../fulcra_mcp/ui/contacts.html', root),
+await writeFile(BUNDLE_URL,
   template
     .replace('/* APP_STYLES */', () => `/* Rubik license:\n${license} */\n` + styles.replace('./assets/rubik-latin-wght-normal.woff2', `data:font/woff2;base64,${font.toString('base64')}`))
     .replace('/* BRAND_ICON */', () => `data:image/png;base64,${icon.toString('base64')}`)

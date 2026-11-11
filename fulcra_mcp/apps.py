@@ -1,12 +1,12 @@
 """Agents I Know MCP App; host navigation stays in registration metadata."""
 
-from importlib.resources import files
 from pathlib import Path
 from urllib.parse import quote
 
 from fastmcp import FastMCP
 
 from mcp.types import Icon
+from fulcra_mcp import ui_versions
 from fulcra_mcp.settings import settings
 
 app_mcp = FastMCP("Agents I Know UI")
@@ -19,10 +19,38 @@ MENU_ICONS = [
         sizes=["any"]
     )
 ]
-UI_URI = "ui://fulcra/contacts/v83.html"
-THREAD_UI_URI = "ui://fulcra/contacts/thread/v83.html"
-CONTACTS_UI_URI = THREAD_UI_URI + "?startup=resource"
+# The version tools advertise. web/ui-version.js reads this line to name the
+# bundle it builds. Every UI update should raise the version number.
+# see "UI versions" in docs/contacts-app.md.
+CONTACTS_UI_VERSION = 83
+UI_MIME_TYPE = "text/html;profile=mcp-app"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
+# Every version ever released, current included. Earlier ones stay readable for
+# hosts that stored their URIs (ui_versions.py).
+CONTACTS_BUNDLES = ui_versions.bundles("contacts")
+if CONTACTS_UI_VERSION not in CONTACTS_BUNDLES:
+    raise RuntimeError(f"fulcra_mcp/ui/contacts/v{CONTACTS_UI_VERSION}.html is missing; run `npm run build` in web/.")
+
+
+def contacts_uris(version: int) -> tuple[str, str, str]:
+    """A version's global, thread and direct-resource URIs."""
+    thread = f"ui://fulcra/contacts/thread/v{version}.html"
+    return f"ui://fulcra/contacts/v{version}.html", thread, thread + "?startup=resource"
+
+
+UI_URI, THREAD_UI_URI, CONTACTS_UI_URI = contacts_uris(CONTACTS_UI_VERSION)
+
+
+def contacts_html_for(version: int, presentation: str = "global", startup_resource: bool = False) -> str:
+    """One bundle serves all three URIs; only these meta values differ."""
+    html = CONTACTS_BUNDLES[version].read_text(encoding="utf-8")
+    html = html.replace('<meta name="connection-debug" content="false">',
+                        f'<meta name="connection-debug" content="{str(settings.fulcra_contacts_debug).lower()}">', 1)
+    html = html.replace('<meta name="connection-presentation" content="global">',
+                        f'<meta name="connection-presentation" content="{presentation}">', 1)
+    if startup_resource:
+        html = html.replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
+    return html
 
 
 @app_mcp.tool(
@@ -48,17 +76,16 @@ def open_agent_contacts(peer_fulcra_userid: str | None = None, thread_id: str | 
     return {"presentation": "thread", "peer_fulcra_userid": peer_fulcra_userid}
 
 
-@app_mcp.resource(THREAD_UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
+@app_mcp.resource(THREAD_UI_URI, mime_type=UI_MIME_TYPE, meta=FULL_PANEL)
 def thread_html() -> str:
     """Same full-panel renderer; startup waits for the optional exact target."""
-    return contacts_html_bundle().replace('<meta name="connection-presentation" content="global">',
-                               '<meta name="connection-presentation" content="thread">', 1)
+    return contacts_html_for(CONTACTS_UI_VERSION, "thread")
 
 
-@app_mcp.resource(CONTACTS_UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
+@app_mcp.resource(CONTACTS_UI_URI, mime_type=UI_MIME_TYPE, meta=FULL_PANEL)
 def contacts_html() -> str:
     """Direct-resource list: no invoking tool result is required for startup."""
-    return thread_html().replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
+    return contacts_html_for(CONTACTS_UI_VERSION, "thread", startup_resource=True)
 
 
 @app_mcp.tool(
@@ -73,9 +100,18 @@ def open_agent_contacts_home() -> dict[str, str]:
     return {"message": "Agents I Know is ready."}
 
 
-@app_mcp.resource(UI_URI, mime_type="text/html;profile=mcp-app", meta=FULL_PANEL)
+@app_mcp.resource(UI_URI, mime_type=UI_MIME_TYPE, meta=FULL_PANEL)
 def contacts_html_bundle() -> str:
     """Serve the packaged UI through MCP, not a separate HTTP endpoint."""
-    html = files("fulcra_mcp").joinpath("ui/contacts.html").read_text(encoding="utf-8")
-    return html.replace('<meta name="connection-debug" content="false">',
-                        f'<meta name="connection-debug" content="{str(settings.fulcra_contacts_debug).lower()}">', 1)
+    return contacts_html_for(CONTACTS_UI_VERSION)
+
+
+def _earlier(version: int, *variant):
+    return lambda: contacts_html_for(version, *variant)
+
+
+for _version in sorted(CONTACTS_BUNDLES.keys() - {CONTACTS_UI_VERSION}):
+    for _uri, _variant in zip(contacts_uris(_version), [(), ("thread",), ("thread", True)]):
+        ui_versions.keep_readable(app_mcp, _uri, _earlier(_version, *_variant),
+                                  mime_type=UI_MIME_TYPE, meta=FULL_PANEL)
+app_mcp.add_middleware(ui_versions.CurrentVersionsOnly())

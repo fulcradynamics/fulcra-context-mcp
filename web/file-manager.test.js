@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { FILE_MANAGER_URL } from './ui-version.js';
 
-const source = readFileSync(new URL('../fulcra_mcp/file_manager_ui.py', import.meta.url), 'utf8');
+const source = readFileSync(FILE_MANAGER_URL, 'utf8');
 const body = source.slice(source.indexOf('async function callTool('), source.indexOf('// --- browsing'));
 const parse = result => new Function('request', `${body}; return callTool('list_files', {});`)(async () => result);
 const listing = { folders: [], files: [{ name: 'report.txt', path: '/', size: 12 }] };

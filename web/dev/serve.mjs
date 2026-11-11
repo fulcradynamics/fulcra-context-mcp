@@ -7,6 +7,7 @@ import { watch } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
+import { BUNDLE_URL } from '../ui-version.js';
 
 const PORT = Number(process.env.PORT) || 5050;
 // Dev-only: render the app on the same background the real host shows behind it
@@ -14,7 +15,7 @@ const PORT = Number(process.env.PORT) || 5050;
 // matches what the app actually looks like in the host.
 const DEV_BG = '#0d0d0d';
 const webDir = fileURLToPath(new URL('../', import.meta.url));
-const appHtmlPath = fileURLToPath(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url));
+const appHtmlPath = fileURLToPath(BUNDLE_URL);
 const hostHtmlPath = fileURLToPath(new URL('./host.html', import.meta.url));
 const hostEntry = fileURLToPath(new URL('./host.js', import.meta.url));
 
