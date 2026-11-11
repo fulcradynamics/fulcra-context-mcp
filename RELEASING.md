@@ -4,6 +4,11 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.16 release notes
+
+- Keep the conversation still while typing in the message composer. Contacts UI
+  v85 removes the per-keystroke scroll adjustment; earlier UI bundles stay intact.
+
 ## 1.19.13 release notes
 
 - Fix sign-in from Claude Desktop, on every endpoint: `/callback` rejected
