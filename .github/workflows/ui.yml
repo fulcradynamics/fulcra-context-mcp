@@ -21,4 +21,17 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: git diff --exit-code -- ../fulcra_mcp/ui/
+      # The build writes only the current version's bundle.
+      - run: git add --intent-to-add ../fulcra_mcp/ui/ && git diff --exit-code -- ../fulcra_mcp/ui/
+
+      # Make sure that old UI (`vNN.html`) files don't accidentally get updated.
+      - name: Released UI versions are unchanged
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          changed=$(git diff --name-status --no-renames --diff-filter=MD FETCH_HEAD HEAD -- '../fulcra_mcp/ui/*/v*.html')
+          if [ -n "$changed" ]; then
+            echo "::error::Released UI versions were changed or removed. Raise the version so the build writes a new file, and restore these:"
+            echo "$changed"
+            exit 1
+          fi

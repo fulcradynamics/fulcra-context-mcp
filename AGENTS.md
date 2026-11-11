@@ -115,6 +115,20 @@ All time parameters must include time zones (ISO 8601 format). Always translate 
 
 Use MCP discovery for current tool schemas and descriptions. App-only helpers are not agent workflow dependencies.
 
+### Changing a panel UI (for contributors)
+
+Hosts store a panel's `ui://` URI when a connector or plugin is published, so a
+released UI version is never changed or removed; CI rejects a pull request that
+does. Don't rebuild, edit or delete an existing `fulcra_mcp/ui/*/v<N>.html`.
+
+- Contacts (any change under `web/`): raise `CONTACTS_UI_VERSION` in
+  `fulcra_mcp/apps.py`, run `npm run build` in `web/`, and commit the new
+  `fulcra_mcp/ui/contacts/v<N>.html` beside the existing ones.
+- File manager: copy `fulcra_mcp/ui/file-manager/v<N>.html` to the next number,
+  edit the copy and raise `FILE_MANAGER_VERSION` in `fulcra_mcp/file_manager_ui.py`.
+
+See "UI versions" in `docs/contacts-app.md`.
+
 ### Measuring tool context cost (for contributors)
 
 Tool definitions (descriptions + schemas) are loaded into every MCP client
