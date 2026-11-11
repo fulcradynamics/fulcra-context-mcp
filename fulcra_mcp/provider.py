@@ -21,8 +21,9 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, AnyUrl
 
+from .public_url import public_origin
 from .settings import settings
 from .user_agent import fulcra_api_kwargs
 
@@ -105,7 +106,7 @@ class FulcraOAuthProvider(OAuthProvider):
         required_scopes: list[str] | None = None,
     ):
         super().__init__(
-            base_url=settings.oidc_server_url,
+            base_url=public_origin(),
             issuer_url=issuer_url,
             service_documentation_url=service_documentation_url,
             client_registration_options=client_registration_options,
@@ -371,7 +372,10 @@ class FulcraOAuthProvider(OAuthProvider):
             requested_scopes=params.scopes,
         )
         state = params.state or secrets.token_hex(16)
+        # /callback must send Auth0 this exact URL when it exchanges the code.
+        callback_url = f"{public_origin()}/callback"
         self.state_mapping[state] = {
+            "callback_url": callback_url,
             "redirect_uri": str(params.redirect_uri),
             "code_challenge": params.code_challenge,
             "redirect_uri_provided_explicitly": str(
@@ -386,7 +390,7 @@ class FulcraOAuthProvider(OAuthProvider):
             **fulcra_api_kwargs(),
         )
         auth_url = fulcra.get_authorization_code_url(
-            redirect_uri=f"{settings.oidc_server_url}/callback",
+            redirect_uri=callback_url,
             state=state,
         )
         return auth_url
@@ -412,7 +416,7 @@ class FulcraOAuthProvider(OAuthProvider):
         try:
             fulcra.authorize_with_authorization_code(
                 code=code,
-                redirect_uri=f"{settings.oidc_server_url}/callback",
+                redirect_uri=state_data["callback_url"],
             )
             self.client_credentials[client_id] = fulcra.fulcra_credentials
             logger.info(
@@ -421,21 +425,21 @@ class FulcraOAuthProvider(OAuthProvider):
                 has_refresh_token=fulcra.fulcra_credentials.refresh_token is not None,
                 expires_at=str(fulcra.fulcra_credentials.access_token_expiration),
             )
-
-            new_code = f"mcp_{secrets.token_hex(16)}"
-            auth_code = AuthorizationCode(
-                code=new_code,
-                client_id=client_id,
-                redirect_uri=AnyHttpUrl(redirect_uri),
-                redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
-                expires_at=time.time() + 300,
-                scopes=OIDC_SCOPES,
-                code_challenge=code_challenge,
-            )
-            self.auth_codes[new_code] = auth_code
         except Exception as e:
             logger.error("oauth2 code exchange failure", exc_info=e)
             raise HTTPException(400, "failed to exchange code for token")
+
+        new_code = f"mcp_{secrets.token_hex(16)}"
+        auth_code = AuthorizationCode(
+            code=new_code,
+            client_id=client_id,
+            redirect_uri=AnyUrl(redirect_uri),
+            redirect_uri_provided_explicitly=redirect_uri_provided_explicitly,
+            expires_at=time.time() + 300,
+            scopes=OIDC_SCOPES,
+            code_challenge=code_challenge,
+        )
+        self.auth_codes[new_code] = auth_code
 
         del self.state_mapping[state]
         return construct_redirect_uri(redirect_uri, code=new_code, state=state)
@@ -697,7 +701,7 @@ class FulcraOAuthProvider(OAuthProvider):
 
 
 oauth_provider = FulcraOAuthProvider(
-    issuer_url=AnyHttpUrl(settings.oidc_server_url),
+    issuer_url=AnyHttpUrl(public_origin()),
     client_registration_options=ClientRegistrationOptions(
         enabled=True,
         valid_scopes=OIDC_SCOPES,

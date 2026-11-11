@@ -50,8 +50,18 @@ def _create_server(instructions, tool_provider) -> FastMCP:
 def create_server() -> FastMCP:
     """Build the default MCP endpoint, also used for stdio."""
     server = _create_server(INSTRUCTIONS, FastMCPProvider(tools.tools_mcp))
+    server.add_middleware(InvitationsFirst())
     server.add_middleware(ContactAppSupport())
     return server
+
+
+class InvitationsFirst(Middleware):
+    """Preserve the invitation-first discovery order of the generic endpoint."""
+    async def on_list_tools(self, context, call_next):
+        registered = await call_next(context)
+        invitations = ('create_agent_invitation', 'accept_agent_invitation', 'match_agent_invitations')
+        return sorted(registered, key=lambda tool: (
+            invitations.index(tool.name) if tool.name in invitations else len(invitations)))
 
 
 class ContactAppSupport(Middleware):
@@ -62,10 +72,6 @@ class ContactAppSupport(Middleware):
     """
     async def on_list_tools(self, context, call_next):
         registered = await call_next(context)
-        # Preserve the invitation-first discovery order of the generic endpoint.
-        invitations = ('create_agent_invitation', 'accept_agent_invitation', 'match_agent_invitations')
-        registered = sorted(registered, key=lambda tool: (
-            invitations.index(tool.name) if tool.name in invitations else len(invitations)))
         if get_context().client_supports_extension(UI_EXTENSION_ID):
             return registered
         return [tool for tool in registered if tool.name not in APP_OPENERS]

@@ -30,9 +30,9 @@ CREATE_SHARE_DESCRIPTION = (
 )
 
 
-class OpenAITools(Transform):
-    """Replace frozen tools without mutating standards or changing discovery order."""
-    names = {'create_agent_invitation', 'match_agent_invitations', 'get_data_catalog'}
+class OpenAIInvitations(Transform):
+    """Replace standard invitations without mutating them or changing discovery order."""
+    names = {'create_agent_invitation', 'match_agent_invitations'}
 
     async def list_tools(self, tools):
         overrides = {tool.name: tool for tool in await openai_tools.list_tools()}
@@ -86,45 +86,10 @@ async def match_agent_invitations() -> dict:
     return await asyncio.to_thread(match, tools.get_fulcra_object())
 
 
-@openai_tools.tool(annotations={
-    "title": "Get Data Catalog", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
-@tools._friendly_http_errors
-async def get_data_catalog(
-    data_type: str | None = None,
-    category: str | None = None,
-    name: str | None = None,
-    fulcra_userid: str | None = None,
-) -> str:
-    """Get all data types available for this user, grouped by relevant MCP tool.
-    Includes location, events, user-defined types and annotations, and
-    measurements from connected devices.
-
-    Call this before requesting time-series data or raw records, and only use a
-    data type with the tools named in its group. A type shared by another user
-    carries that user's fulcra_userid; pass it to read their data.
-
-    Args:
-        data_type: Optional. Return only the data type with this exact ID.
-            For a user-defined type, this also lists its fields (what
-            record_data takes in `fields`): a type name, or the field's JSON
-            Schema if it has nested fields or rules; plus required_fields.
-            For an annotation, it adds the annotation's own settings: scale and
-            value labels (value_map), kind, unit, defaults, tags and display.
-        category: Optional. Filter by category.
-            E.g. "healthkit", "annotations", "sleep", "mindfulness",
-            "user_defined", "base_type".
-        name: Optional. Filter results by partial, case-insensitive name match.
-        fulcra_userid: Optional. Only the types this Fulcra user shares with
-            you (your own ID: only your own types).
-    """
-    return await tools._get_data_catalog(data_type, category, name, fulcra_userid,
-                                         entry_formatter=tools._slim_entry)
-
-
 def create_openai_server():
     """Compose shared tools with frozen OpenAI invitations and sharing wording."""
     provider = FastMCPProvider(tools.tools_mcp)
-    provider.add_transform(OpenAITools())
+    provider.add_transform(OpenAIInvitations())
     provider.add_transform(ToolTransform({
         'create_share': ToolTransformConfig(description=CREATE_SHARE_DESCRIPTION),
     }))

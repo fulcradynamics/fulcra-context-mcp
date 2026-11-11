@@ -12,14 +12,6 @@ name: Deploy
 #                          <environment>'s runtime config. For example,
 #                          `/preview prod` runs the PR against the prod API.
 #
-# Each environment is a GitHub environment. Deploy targets provide
-# GCP_PROJECT_ID, GCP_REGION and CLOUD_RUN_SERVICE (and optionally
-# OIDC_SERVER_URL for /deploy). Runtime config sources provide
-# FULCRA_ENVIRONMENT, FULCRA_OIDC_DOMAIN, FULCRA_API and OIDC_CLIENT_ID, and
-# optionally OPENAI_APPS_CHALLENGE. Every deploy sets all of these plus
-# OIDC_SERVER_URL explicitly (removing an unset challenge): Cloud Run builds
-# each revision from the service's last config, so a preview's overrides would
-# otherwise carry over into the next /deploy.
 on:
   issue_comment:
     types: [created]
@@ -292,11 +284,6 @@ jobs:
           FULCRA_API: ${{ needs.config.outputs.fulcra_api }}
           OIDC_CLIENT_ID: ${{ needs.config.outputs.oidc_client_id }}
           OPENAI_APPS_CHALLENGE: ${{ needs.config.outputs.openai_apps_challenge }}
-          # The target's public URL for /deploy; defaults to the service URL.
-          DEPLOY_OIDC_SERVER_URL: ${{ vars.OIDC_SERVER_URL }}
-          # Host suffix of the preview service's revision tag URLs
-          # (https://<tag>---<suffix>). Keep in sync with PREVIEW_TARGET.
-          PREVIEW_URL_SUFFIX: dev-mcp-vht7o43xrq-uw.a.run.app
         run: |
           for v in PROJECT REGION SERVICE; do
             if [ -z "${!v}" ]; then
@@ -305,18 +292,8 @@ jobs:
             fi
           done
 
-          # No trailing slash: the app appends paths such as "/callback".
-          if [ -n "$REVISION_TAG" ]; then
-            OIDC_SERVER_URL="https://${REVISION_TAG}---${PREVIEW_URL_SUFFIX}"
-          elif [ -n "$DEPLOY_OIDC_SERVER_URL" ]; then
-            OIDC_SERVER_URL="${DEPLOY_OIDC_SERVER_URL%/}"
-          else
-            OIDC_SERVER_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.url)')"
-          fi
-          echo "OIDC_SERVER_URL=$OIDC_SERVER_URL"
-
           # "^|^" switches gcloud's list delimiter from "," to "|".
-          env_vars="^|^FULCRA_ENVIRONMENT=$FULCRA_ENVIRONMENT|FULCRA_OIDC_DOMAIN=$FULCRA_OIDC_DOMAIN|FULCRA_API=$FULCRA_API|OIDC_CLIENT_ID=$OIDC_CLIENT_ID|OIDC_SERVER_URL=$OIDC_SERVER_URL"
+          env_vars="^|^FULCRA_ENVIRONMENT=$FULCRA_ENVIRONMENT|FULCRA_OIDC_DOMAIN=$FULCRA_OIDC_DOMAIN|FULCRA_API=$FULCRA_API|OIDC_CLIENT_ID=$OIDC_CLIENT_ID"
           args=(--image "$IMAGE" --region "$REGION" --project "$PROJECT" --quiet)
           if [ -n "$OPENAI_APPS_CHALLENGE" ]; then
             env_vars+="|OPENAI_APPS_CHALLENGE=$OPENAI_APPS_CHALLENGE"

@@ -4,6 +4,37 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.15 release notes
+
+- Catalog results include `created_at` from the data type's metadata when available,
+  for owned and shared types on standard, OpenAI and Claude endpoints. Other
+  metadata remains private; tool schemas, descriptions and annotations are unchanged.
+
+## 1.19.13 release notes
+
+- Fix sign-in from Claude Desktop, on every endpoint: `/callback` rejected
+  app-scheme redirect URIs (`claude://claude.ai/mcp-auth-callback/sdk`) and
+  answered `failed to exchange code for token` after the Auth0 exchange had
+  succeeded. That error now covers only the Auth0 exchange.
+
+## 1.19.12 release notes
+
+- Serve `/claude/mcp` for Claude's connector and plugin (`claude_endpoint.py`): the
+  standard tools and instructions plus Claude guidance, contact panel entrypoints
+  always listed (Claude hosts render them; stateless HTTP loses the advertised
+  capability), and no `get_location`, `get_sleep`, `get_workouts` or
+  `get_time_series`. The invitation-first tool order moves out of the panel gate
+  so both endpoints use it.
+- Contacts UI v83: hosts that show the panel inline with fullscreen available
+  (Claude) get an Expand button, so the panel can return to fullscreen after the
+  user leaves it. ChatGPT is fullscreen only and never shows it. The panel still
+  requests fullscreen once on open. Every endpoint's UI URIs change to v83.
+- `/claude/mcp` directory readiness: the contact panel, mention search and
+  settings tools get annotation titles and parameter descriptions there only
+  (`DirectoryMetadata`), and its 401 points at its own path-form metadata, whose
+  resource is `/claude/mcp`. `/mcp` and `/openai/mcp` are unchanged.
+  `test_directory_readiness.py` also checks `/claude/mcp`, app-only tools included.
+
 ## 1.19.10 release notes
 
 - `/mcp` supports tool-only invitations without installed skills: ready-to-share

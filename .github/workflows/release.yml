@@ -38,7 +38,7 @@ jobs:
   test:
     needs: plan
     if: needs.plan.outputs.publish_pypi == 'true'
-    uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/tests.yml
 
   pypi:
     needs: [plan, test]

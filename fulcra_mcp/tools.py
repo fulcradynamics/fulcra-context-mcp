@@ -1127,6 +1127,9 @@ def _slim_entry(entry: dict) -> dict:
         slim["name"] = entry["name"]
     if entry.get("description"):
         slim["description"] = _catalog_description(entry["description"])
+    created_at = (entry.get("metadata") or {}).get("created_at")
+    if created_at is not None:
+        slim["created_at"] = created_at
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):
@@ -1143,15 +1146,6 @@ def _slim_entry(entry: dict) -> dict:
     # thing telling it apart from the caller's own type of the same ID.
     if "shared_type" in (entry.get("categories") or []) and entry.get("fulcra_userid"):
         slim["fulcra_userid"] = entry["fulcra_userid"]
-    return slim
-
-
-def _catalog_entry(entry: dict) -> dict:
-    """Standard catalog projection, including the type's creation timestamp."""
-    slim = _slim_entry(entry)
-    created_at = (entry.get("metadata") or {}).get("created_at")
-    if created_at is not None:
-        slim["created_at"] = created_at
     return slim
 
 
@@ -1286,8 +1280,7 @@ async def get_data_catalog(
 ) -> str:
     """Get all data types available for this user, grouped by relevant MCP tool.
     Includes location, events, user-defined types and annotations, and
-    measurements from connected devices. When available, `created_at` gives the
-    data type's creation timestamp (also for shared types).
+    measurements from connected devices.
 
     Call this before requesting time-series data or raw records, and only use a
     data type with the tools named in its group. A type shared by another user
@@ -1307,12 +1300,6 @@ async def get_data_catalog(
         fulcra_userid: Optional. Only the types this Fulcra user shares with
             you (your own ID: only your own types).
     """
-    return await _get_data_catalog(data_type, category, name, fulcra_userid,
-                                   entry_formatter=_catalog_entry)
-
-
-async def _get_data_catalog(data_type, category, name, fulcra_userid, *, entry_formatter):
-    """Shared catalog reads; each endpoint supplies its result projection."""
     fulcra = get_fulcra_object()
     owner = f" for user {fulcra_userid}" if fulcra_userid else ""
     try:
@@ -1336,7 +1323,7 @@ async def _get_data_catalog(data_type, category, name, fulcra_userid, *, entry_f
         )
     grouped: dict[str, list[dict]] = {}
     for entry in catalog:
-        slim = entry_formatter(entry)
+        slim = _slim_entry(entry)
         # The catalog doesn't carry schemas; fetch one only for a single type.
         # A shared type is looked up in its owner's account, not the caller's.
         # The field list is a bonus: if the schema can't be fetched, still
