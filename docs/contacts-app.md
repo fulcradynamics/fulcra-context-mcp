@@ -1,8 +1,8 @@
 # Agents I Know
 
 **Agents I Know** is the MCP App that lists a user's agent contacts and shows each
-conversation. It ships with this server as one bundle, `fulcra_mcp/ui/contacts.html`,
-built from `web/`. Model-driven contact work (inviting, checking, replying) lives in
+conversation. It ships with this server as one bundle per version,
+`fulcra_mcp/ui/contacts/v<N>.html`, built from `web/`. Model-driven contact work (inviting, checking, replying) lives in
 the paired OpenAI plugin's skills; see [compatibility](connection-compatibility.md)
 and [contact settings](fulcra-settings.md).
 
@@ -18,7 +18,8 @@ model-callable interface.
 - `open_agent_contacts_home` is the app-only native global entrypoint.
 - Both serve `ui://fulcra/contacts/v<N>.html` (global) or
   `ui://fulcra/contacts/thread/v<N>.html` (thread); `?startup=resource` starts the
-  thread resource without a tool result. `apps.py` holds the current `N`.
+  thread resource without a tool result. `CONTACTS_UI_VERSION` in `apps.py` is the
+  current `N`; earlier versions stay readable (see [UI versions](#ui-versions)).
 - `open_file_manager` is a separate file browser.
 
 Presentation comes from resource metadata. OpenAI metadata advertises fullscreen
@@ -197,6 +198,42 @@ message, with half a viewport of extra room so it can be scrolled above host
 chrome. Bottom clearance is the larger of the host/device inset and 36px (48px in
 fullscreen). The UI is dark-only and keeps the Fulcra palette and Rubik.
 
+## UI versions
+
+A host can store a tool's `ui.resourceUri` when a connector or plugin is
+published and keep requesting it after the server has moved on. The published
+ChatGPT app stored contacts v82; when v83 replaced it, the read failed with
+"Unknown resource" and the panel stopped opening. So a released version is never
+removed.
+
+- `fulcra_mcp/ui/contacts/v<N>.html` holds every version. The build writes only
+  the file for `CONTACTS_UI_VERSION`, so raising the number adds a file and leaves
+  the earlier ones alone. Commit the new file; never delete or rebuild an old one.
+- Tools and `resources/list` advertise the current version only. Earlier versions
+  are served at all three of their URIs, on every endpoint, with the same MIME
+  type and metadata (`ui_versions.py`).
+- An earlier version is its own bundle, not the current one under an old name. It
+  calls the server as it did when it shipped, so app-only tools it uses must keep
+  working. v82 is the oldest kept; v76, v77 and v81 predate the published app.
+
+To change the UI:
+
+1. Raise `CONTACTS_UI_VERSION` in `apps.py` by one and run `npm run build`.
+2. Update the version in the tests that name it, `tests/openai_contract.json` and
+   `scripts/smoke_installed.py`.
+3. Commit the new `v<N>.html` beside the existing ones.
+
+Two checks enforce this. CI (`ui.yml`) fails a pull request that changes or removes
+a `v<N>.html` already on the base branch, so a UI change that rebuilds the current
+version in place can't merge. `tests/test_ui_versions.py` fails if any version from
+v82 up to the current one isn't served. If you used several numbers while iterating on a branch, land as the
+next number, or list the skipped ones in `NEVER_DEPLOYED` there.
+
+The file manager follows the same rule and the same checks. Its panel has no build
+step: `fulcra_mcp/ui/file-manager/v<N>.html` is the source. To change it, copy the
+current file to the next number, edit the copy and raise `FILE_MANAGER_VERSION` in
+`file_manager_ui.py`. Earlier panels are served with the current panel's CSP.
+
 ## Development and tests
 
 From `web/`:
@@ -204,7 +241,7 @@ From `web/`:
 ```sh
 npm ci
 npm test                    # unit tests
-npm run build               # rebuilds fulcra_mcp/ui/contacts.html (CI checks it is current)
+npm run build               # rebuilds fulcra_mcp/ui/contacts/v<N>.html (CI checks it is current)
 npx playwright install chromium
 npm run test:browser        # browser specs against the built bundle
 npm run dev                 # mock host with page-local records, no Fulcra account

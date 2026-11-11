@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-const bundle = await readFile(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url), 'utf8');
+import { BUNDLE_URL } from '../ui-version.js';
+const bundle = await readFile(BUNDLE_URL, 'utf8');
 const schema = JSON.parse(await readFile(new URL('../../tests/fixtures/connection-schema.json', import.meta.url), 'utf8'));
 export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';

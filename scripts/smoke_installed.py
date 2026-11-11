@@ -128,10 +128,17 @@ async def main():
                 direct = (await client.read_resource('ui://fulcra/contacts/thread/v83.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
+                # Earlier versions ship in the wheel and stay readable, unlisted, for
+                # hosts that stored their URIs (fulcra_mcp/ui_versions.py).
+                earlier = (await client.read_resource('ui://fulcra/contacts/thread/v82.html')).contents[0]
+                assert earlier.mimeType == 'text/html;profile=mcp-app'
+                assert 'name="connection-presentation" content="thread"' in earlier.text
+                assert earlier.text != resource.text
                 listed_uris = {str(r.uri) for r in (await client.list_resources()).resources}
+                assert not any('v82' in uri for uri in listed_uris)
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema and both v83 entrypoints verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema, both v83 entrypoints and the kept v82 verified.')
 
 
 if __name__ == '__main__':

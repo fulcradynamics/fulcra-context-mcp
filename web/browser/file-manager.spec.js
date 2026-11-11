@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { peer } from './harness.js';
-const source = await readFile(new URL('../../fulcra_mcp/file_manager_ui.py', import.meta.url), 'utf8');
-const html = source.split('FILE_MANAGER_HTML = r"""')[1].split('"""')[0];
+import { FILE_MANAGER_URL } from '../ui-version.js';
+const html = await readFile(FILE_MANAGER_URL, 'utf8');
 
 test('owned file manager uploads and refreshes a multi-content listing', async ({ page }) => {
   await page.setContent('<iframe sandbox="allow-scripts"></iframe>');

@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
+import { BUNDLE_URL } from '../ui-version.js';
 
-const app = await readFile(new URL('../../fulcra_mcp/ui/contacts.html', import.meta.url), 'utf8');
+const app = await readFile(BUNDLE_URL, 'utf8');
 const host = (await build({ entryPoints: [new URL('../dev/host.js', import.meta.url).pathname],
   bundle: true, write: false, format: 'esm' })).outputFiles[0].text;
 
