@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 import fulcra_mcp
+from fulcra_mcp import server_info
 from fastmcp import Client
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -39,10 +40,10 @@ async def main():
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as client:
                 initialized = await client.initialize()
-                assert initialized.serverInfo.version == '1.19.16'
-                icons = initialized.serverInfo.icons
+                assert initialized.server_info.version == server_info.version()
+                icons = initialized.server_info.icons
                 assert icons and icons[0].src == 'https://mcp.fulcradynamics.com/icon.png'
-                assert icons[0].mimeType == 'image/png' and icons[0].sizes == ['256x256']
+                assert icons[0].mime_type == 'image/png' and icons[0].sizes == ['256x256']
                 tools = {t.name:t for t in (await client.list_tools()).tools}
                 assert 'agent_contacts_open' not in tools
                 for name in ('send_agent_contact_message', 'set_contact_identifier', 'set_contact_status',
@@ -52,56 +53,56 @@ async def main():
                     assert tools[name].meta['ui']['visibility'] == ['app']
                 assert 'model' in (tools['send_agent_message'].meta or {}).get('ui', {}).get('visibility', ['model'])
                 metadata = tools['update_data_type']
-                assert metadata.inputSchema['required'] == ['data_type']
-                assert set(metadata.inputSchema['properties']) == {
+                assert metadata.input_schema['required'] == ['data_type']
+                assert set(metadata.input_schema['properties']) == {
                     'data_type', 'name', 'description', 'expected_description'}
                 rejected_metadata = await client.call_tool('update_data_type', {'data_type': 'Event'})
-                assert rejected_metadata.structuredContent['status'] == 'rejected'
+                assert rejected_metadata.structured_content['status'] == 'rejected'
                 assert {'get_contact_preferences', 'set_contact_preferences'} <= tools.keys()
                 for name in ('prepare_agent_invitation',):
                     assert tools[name].meta['ui']['visibility'] == ['app']
-                    assert tools[name].annotations.readOnlyHint is False
-                assert tools['prepare_agent_invitation'].inputSchema['required'] == ['data_type']
-                assert tools['prepare_agent_invitation'].inputSchema['properties']['open_invitation']['default'] is False
+                    assert tools[name].annotations.read_only_hint is False
+                assert tools['prepare_agent_invitation'].input_schema['required'] == ['data_type']
+                assert tools['prepare_agent_invitation'].input_schema['properties']['open_invitation']['default'] is False
                 for name in ('accept_agent_invitation', 'match_agent_invitations', 'create_agent_invitation'):
                     assert tools[name].meta['ui']['visibility'] == ['model', 'app']
                 assert 'set-up-agent-contacts' not in initialized.instructions
-                assert tools['match_agent_invitations'].inputSchema['properties'] == {}
-                assert tools['update_fulcra_settings'].annotations.readOnlyHint is False
+                assert tools['match_agent_invitations'].input_schema['properties'] == {}
+                assert tools['update_fulcra_settings'].annotations.read_only_hint is False
                 assert tools['get_fulcra_settings'].meta['ui']['visibility'] == ['app']
                 rejected = await client.call_tool('update_fulcra_settings', {'set': {'interval': 30}})
-                assert rejected.isError
-                schema = tools['send_agent_contact_message'].inputSchema
+                assert rejected.is_error
+                schema = tools['send_agent_contact_message'].input_schema
                 assert {'sender','body','mid','outbox','peer_userid'} <= set(schema['required'])
                 assert 'peer_agent' not in schema['properties']
                 assert 'expected_peer_userids' in schema['properties']
-                assert 'target_peer_userid' in tools['send_agent_message'].inputSchema['properties']
-                assert 'expected_peer_userids' in tools['get_contact_preferences'].inputSchema['properties']
+                assert 'target_peer_userid' in tools['send_agent_message'].input_schema['properties']
+                assert 'expected_peer_userids' in tools['get_contact_preferences'].input_schema['properties']
                 assert 'send_agent_message' in tools
                 end_contact = tools['end_agent_contact']
                 assert end_contact.meta['ui']['visibility'] == ['app']
-                assert end_contact.annotations.readOnlyHint is False
-                assert end_contact.annotations.destructiveHint is True
-                assert end_contact.inputSchema['properties']['archive']['default'] is False
-                assert 'fulcra_userid' in tools['open_file_manager'].inputSchema['properties']
+                assert end_contact.annotations.read_only_hint is False
+                assert end_contact.annotations.destructive_hint is True
+                assert end_contact.input_schema['properties']['archive']['default'] is False
+                assert 'fulcra_userid' in tools['open_file_manager'].input_schema['properties']
                 files_uri = tools['open_file_manager'].meta['ui']['resourceUri']
                 assert files_uri == 'ui://fulcra/file-manager/v4.html'
                 files_html = (await client.read_resource(files_uri)).contents[0].text
                 assert 'currentOwner' in files_html and 'Shared files — read-only' in files_html
                 status = tools['set_contact_status']
-                assert set(status.inputSchema['required']) == {'data_type', 'peer_userid', 'attention', 'reason'}
-                assert 'assessed_at' not in status.inputSchema['properties']
-                assert status.annotations.readOnlyHint is False
+                assert set(status.input_schema['required']) == {'data_type', 'peer_userid', 'attention', 'reason'}
+                assert 'assessed_at' not in status.input_schema['properties']
+                assert status.annotations.read_only_hint is False
                 assert status.meta['ui']['visibility'] == ['app']
-                assert 'start_time' not in tools['get_records'].inputSchema['required']
+                assert 'start_time' not in tools['get_records'].input_schema['required']
                 for name, uri, marker in (
                     ('open_agent_contacts_home', 'ui://fulcra/contacts/v84.html', 'global'),
                     ('open_agent_contacts', 'ui://fulcra/contacts/thread/v84.html', 'thread'),
                 ):
                     assert name not in tools
                     opened = await client.call_tool(name, {})
-                    assert not opened.isError
-                    assert opened.structuredContent['status'] == 'unsupported_host'
+                    assert not opened.is_error
+                    assert opened.structured_content['status'] == 'unsupported_host'
                     resource = (await client.read_resource(uri)).contents[0]
                     assert resource.meta['openai/ui'] == {
                         'preferredDisplayMode': 'fullscreen', 'availableDisplayModes': ['fullscreen']}

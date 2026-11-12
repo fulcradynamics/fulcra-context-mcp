@@ -33,13 +33,13 @@ def state(fake, last_checked=None, **changes):
 async def test_native_settings_read_contract(fake_fulcra):
     state(fake_fulcra)
     async with Client(mcp) as client:
-        capabilities = client.initialize_result.capabilities.experimental
+        capabilities = client.server_capabilities.experimental
         assert capabilities["openai/settings"] == {
             "readTool": "get_fulcra_settings", "updateTool": "update_fulcra_settings"}
         tools = {t.name: t for t in await client.list_tools()}
         tool = tools["get_fulcra_settings"]
-        assert tool.inputSchema.get("properties", {}) == {}
-        assert set(tool.outputSchema["required"]) >= {"schema", "values"}
+        assert tool.input_schema.get("properties", {}) == {}
+        assert set(tool.output_schema["required"]) >= {"schema", "values"}
         result = (await client.call_tool(tool.name, {})).structured_content
         from fulcra_mcp.contact_preferences import DEFAULTS, SCHEMA, NOTIFICATION_LABELS, native_values
         assert result["schema"] == {"type": "object", "properties": {

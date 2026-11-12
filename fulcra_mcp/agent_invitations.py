@@ -8,7 +8,7 @@ import logging
 import re
 import secrets
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 from urllib.error import HTTPError
 
@@ -55,14 +55,17 @@ def _checking(stage):
         raise _EvidenceUnavailable(_diagnostic(exc, stage)) from None
 
 
-def _history(api, owner, channel):
-    # The SDK's get_records encodes the whole range as seconds. The backend
-    # PromQL parser rejects a seconds component larger than uint32. Use days
-    # plus seconds, retaining the SAME year-1 lower bound, never a lookback.
-    end = datetime.now(timezone.utc).replace(microsecond=0)
-    duration = end - datetime(1, 1, 1, tzinfo=timezone.utc)
+def _history(api, owner, channel, start=None, end=None):
+    # Acceptance's empty-channel check needs complete history; matching always
+    # supplies an explicit creation-time/fallback window.
+    end = end or datetime.now(timezone.utc).replace(microsecond=0)
+    padding = timedelta(seconds=1) if start is not None else timedelta(0)
+    start = start or datetime(1, 1, 1, tzinfo=timezone.utc)
+    # Include the lower boundary of PromQL's left-open matching range; filter
+    # exact timestamps below. Days avoid the backend's uint32 seconds limit.
+    duration = end - start + padding
     span = f'{duration.days}d' + (f'{duration.seconds}s' if duration.seconds else '')
-    query = f'{{__name__="{channel}"}}[{span}] @ {int(end.timestamp())}'
+    query = f'{{__name__="{channel}"}}[{span}] @ {end.timestamp()}'
     response = api.fulcra_v1_records(query, fulcra_userid=owner)
     # Consume every JSONL line; a partial/malformed response must fail closed.
     return [json.loads(line) for line in response.splitlines() if line.strip()]
@@ -192,6 +195,23 @@ def prepare(api, data_type, open_invitation=False):
 
 
 def _evidence(api, own, prefix='handshake'):
+    end = datetime.now(timezone.utc)
+    with _checking('invitation_window'):
+        current_own, entries, document = _state(api)
+        if current_own != own:
+            raise ValueError('Account changed.')
+        windows = {}
+        for entry in entries:
+            invite = document['invitations'].get(entry['id'])
+            if not invite or invite['state'] == 'completed' or invite.get('prefix', 'handshake') != prefix:
+                continue
+            created = (entry.get('metadata') or {}).get('created_at')
+            start = datetime.fromisoformat(created.replace('Z', '+00:00')) if created else end - timedelta(days=365)
+            if start.tzinfo is None or start > end:
+                raise ValueError('Invalid invitation creation timestamp.')
+            windows[invite['code']] = start
+    if not windows:
+        return {}
     with _checking('incoming_grants'):
         grants = api.get_shared_datasets()
     channels = set()
@@ -214,7 +234,7 @@ def _evidence(api, own, prefix='handshake'):
             if is_template(entry.get('description')) or entry.get('name') == STANDING_NAME:
                 continue
         with _checking('handshake_history'):
-            rows = _history(api, owner, channel)
+            rows = _history(api, owner, channel, min(windows.values()), end)
             if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows):
                 raise ValueError('Incomplete handshake history.')
         with _checking('handshake_timestamps'):
@@ -224,16 +244,16 @@ def _evidence(api, own, prefix='handshake'):
                 if stamp.tzinfo is None:
                     raise ValueError('Invalid handshake timestamp.')
                 timed.append((stamp, row))
-        if not timed:
-            continue
-        first_time = min(t for t, _ in timed)
-        first = [r for t, r in timed if t == first_time]
-        if len(first) != 1 or first[0].get('kind') != 'message':
-            continue
-        topic = first[0].get('topic', '')
-        marker = prefix + ' '
-        if isinstance(topic, str) and topic.startswith(marker) and CODE.fullmatch(topic[len(marker):]):
-            evidence.setdefault(topic[len(marker):], []).append((owner, channel, first[0].get('sender')))
+        matched = set()
+        for stamp, row in sorted(timed, key=lambda item: item[0]):
+            topic = row.get('topic', '')
+            marker = prefix + ' '
+            if row.get('kind') != 'message' or not isinstance(topic, str) or not topic.startswith(marker):
+                continue
+            code = topic[len(marker):]
+            if code in windows and code not in matched and windows[code] <= stamp <= end:
+                evidence.setdefault(code, []).append((owner, channel, row.get('sender')))
+                matched.add(code)
     if prefix == 'open_invitation':
         return evidence
     return {code: peers[0][:2] for code, peers in evidence.items() if len(peers) == 1}
@@ -351,7 +371,7 @@ def match(api):
                 results.append(result)
                 pair = evidence.get(invite['code'])
                 if not pair:
-                    result['reason'] = 'No unique first-message handshake.'
+                    result['reason'] = 'No unique handshake in the invitation window.'
                     continue
                 peer, incoming = pair
                 if invite['state'] == 'consumed' and pair != (invite['peer_userid'], invite['incoming_data_type']):

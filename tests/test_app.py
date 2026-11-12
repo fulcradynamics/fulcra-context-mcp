@@ -32,7 +32,7 @@ async def test_app_tools_advertise_navigation_icons():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         for name in ("open_agent_contacts_home", "open_agent_contacts"):
-            [icon] = [icon.model_dump(exclude_none=True) for icon in tools[name].icons]
+            [icon] = [icon.model_dump(by_alias=True, exclude_none=True) for icon in tools[name].icons]
             assert unquote(icon.pop("src").removeprefix("data:image/svg+xml,")) == menu_icon
             assert icon == {"mimeType": "image/svg+xml", "sizes": ["any"]}
             assert tools[name].icons != server_info.icons()
@@ -42,7 +42,7 @@ async def test_direct_contacts_resource_contract():
     async with Client(mcp) as client:
         direct = (await client.read_resource("ui://fulcra/contacts/thread/v84.html?startup=resource"))[0]
         normal = (await client.read_resource("ui://fulcra/contacts/thread/v84.html"))[0]
-        assert direct.mimeType == "text/html;profile=mcp-app"
+        assert direct.mime_type == "text/html;profile=mcp-app"
         assert direct.meta["openai/ui"] == {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}
         assert direct.text == normal.text.replace('</head>', '<meta name="connection-startup" content="resource"></head>', 1)
         assert '<meta name="connection-startup"' not in normal.text
@@ -72,9 +72,9 @@ async def test_thread_entrypoint():
         assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/thread/v84.html"
         assert tool.meta["ui"]["visibility"] == ["model", "app"]
         assert tool.meta["openai/ui"]["entrypoints"] == [{"type": "thread"}]
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert not tool.inputSchema.get("required")
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert not tool.input_schema.get("required")
         for args in [{}, {"peer_fulcra_userid": "exact-peer"}, {"peer_fulcra_userid": " unknown "}]:
             result = await client.call_tool("open_agent_contacts", args)
             assert result.data == {"presentation": "thread", "peer_fulcra_userid": args.get("peer_fulcra_userid")}
@@ -95,14 +95,14 @@ async def test_contacts_app():
         assert tool.title == "Agents I Know"
         assert tool.meta["ui"]["resourceUri"] == "ui://fulcra/contacts/v84.html"
         assert tool.meta["ui"]["visibility"] == ["app"]
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.annotations.openWorldHint is False
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.annotations.open_world_hint is False
         result = await client.call_tool("open_agent_contacts_home", {})
         assert not result.is_error
         assert result.data == {"message": "Agents I Know is ready."}
         resources = await client.read_resource("ui://fulcra/contacts/v84.html")
-        assert resources[0].mimeType == "text/html;profile=mcp-app"
+        assert resources[0].mime_type == "text/html;profile=mcp-app"
         assert "<h1>Agents I Know</h1>" in resources[0].text
         assert "data:font/woff2;base64," in resources[0].text
         assert "SIL OPEN FONT LICENSE" in resources[0].text

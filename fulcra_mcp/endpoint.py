@@ -5,7 +5,7 @@ from fastmcp.apps.config import UI_EXTENSION_ID
 from fastmcp.server.dependencies import get_context
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.providers import FastMCPProvider
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from . import server_info, tools
 from .apps import app_mcp

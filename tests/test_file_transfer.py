@@ -53,7 +53,7 @@ async def test_a_file_is_served_as_a_blob_resource(client, fake_fulcra):
         "/reports/q3 final.xlsx", fulcra_userid=None
     )
     assert base64.b64decode(content.blob) == b"\x00\x01\xff\xfe"
-    assert content.mimeType == (
+    assert content.mime_type == (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
@@ -94,7 +94,7 @@ async def test_a_file_too_large_for_one_message_points_to_a_link(client, fake_fu
 async def test_the_panel_is_an_mcp_app_resource(client, fake_fulcra):
     [content] = await client.read_resource(ft.FILE_MANAGER_URI)
 
-    assert content.mimeType == "text/html;profile=mcp-app"
+    assert content.mime_type == "text/html;profile=mcp-app"
     # Rubik from Google Fonts, allowed by the panel's CSP
     [resource] = [r for r in await client.list_resources() if str(r.uri) == ft.FILE_MANAGER_URI]
     assert resource.meta["ui"]["csp"]["resourceDomains"] == [

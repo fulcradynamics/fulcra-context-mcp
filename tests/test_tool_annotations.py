@@ -47,7 +47,7 @@ async def test_composed_hosted_annotations_over_json_transport():
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.list_tools()
-    assert result.nextCursor is None
+    assert result.next_cursor is None
     tools = {tool.name: tool for tool in result.tools}
     assert len(tools) == len(result.tools)
     assert set(tools) == READS | ADDITIVE | DESTRUCTIVE
@@ -55,7 +55,7 @@ async def test_composed_hosted_annotations_over_json_transport():
     for name, tool in tools.items():
         # exclude_unset checks fields decoded from JSON, not Pydantic defaults.
         assert tool.annotations is not None, name
-        annotations = tool.annotations.model_dump(exclude_unset=True)
+        annotations = tool.annotations.model_dump(by_alias=True, exclude_unset=True)
         expected = {"readOnlyHint": name in READS,
                     "destructiveHint": name in DESTRUCTIVE,
                     "openWorldHint": name in OPEN_WORLD}
