@@ -10,9 +10,9 @@ from fulcra_mcp.main import mcp, openai_mcp
 async def contract(server):
     async with Client(server) as client:
         return {
-            'instructions': client.initialize_result.instructions,
-            'tools': [t.model_dump(mode='json', exclude_none=True) for t in await client.list_tools()],
-            'resources': [r.model_dump(mode='json', exclude_none=True) for r in await client.list_resources()],
+            'instructions': client.instructions,
+            'tools': [t.model_dump(mode='json', by_alias=True, exclude_none=True) for t in await client.list_tools()],
+            'resources': [r.model_dump(mode='json', by_alias=True, exclude_none=True) for r in await client.list_resources()],
         }
 
 
@@ -55,7 +55,7 @@ async def test_share_description_is_endpoint_local(servers, monkeypatch):
     for server in (*servers, *servers, tools.tools_mcp):
         async with Client(server) as client:
             share = next(t for t in await client.list_tools() if t.name == 'create_share')
-            actual = share.model_dump(mode='json', exclude_none=True)
+            actual = share.model_dump(mode='json', by_alias=True, exclude_none=True)
             assert actual.pop('description') == (
                 baseline['description'] if server is openai_mcp else generic_description)
             assert actual == {k: v for k, v in baseline.items() if k != 'description'}
@@ -79,7 +79,7 @@ async def test_standard_provider_invitation_contract():
 
     names = {'create_agent_invitation', 'accept_agent_invitation', 'match_agent_invitations'}
     async with Client(tools_mcp) as client:
-        standard = [t.model_dump(mode='json', exclude_none=True)
+        standard = [t.model_dump(mode='json', by_alias=True, exclude_none=True)
                     for t in await client.list_tools() if t.name in names]
     expected = [t for t in (await contract(mcp))['tools'] if t['name'] in names]
     assert {t['name'] for t in standard} == names
@@ -125,7 +125,7 @@ async def test_default_endpoint_discovery():
         assert 'accept_agent_invitation' in names
         match = next(t for t in tools if t.name == 'match_agent_invitations')
         assert 'model' in match.meta['ui']['visibility']
-        assert 'set-up-agent-contacts' not in client.initialize_result.instructions
+        assert 'set-up-agent-contacts' not in client.instructions
         assert 'open_agent_contacts' not in names
         result = await client.call_tool('open_agent_contacts', {})
         assert result.data['status'] == 'unsupported_host'
@@ -143,14 +143,18 @@ async def test_capable_host_retains_resources_and_openai_is_isolated(app_capabil
         assert 'open_agent_contacts' in names
         result = await client.call_tool('open_agent_contacts', {})
         assert result.data['presentation'] == 'thread'
-        assert 'text/html;profile=mcp-app' == (await client.read_resource(THREAD_UI_URI))[0].mimeType
+        assert 'text/html;profile=mcp-app' == (await client.read_resource(THREAD_UI_URI))[0].mime_type
     assert 'Duplicate list_tools' not in caplog.text
     await test_openai_contract_unchanged()
 
 
+# Handshake-era hosts declare MCP Apps support only at `initialize`, which stateless
+# HTTP can't see on later calls, so /mcp gates the panel. Sessionless-era clients
+# declare capabilities on every request, so the gate sees them and opens it.
+@pytest.mark.parametrize('mode', ['legacy', 'auto'])
 @pytest.mark.parametrize('path', ['/mcp', '/openai/mcp'])
-async def test_real_fastmcp_http_endpoint_discovery_and_call(tmp_path, path, monkeypatch, app_capabilities):
-    import httpx
+async def test_real_fastmcp_http_endpoint_discovery_and_call(tmp_path, path, mode, monkeypatch, app_capabilities):
+    import httpx2
     from fastmcp.client.transports import StreamableHttpTransport
     from fulcra_mcp.main import app
     from fulcra_mcp import tools
@@ -159,11 +163,11 @@ async def test_real_fastmcp_http_endpoint_discovery_and_call(tmp_path, path, mon
     api = Account(OWN, {})
     monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
     def factory(**kwargs):
-        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), **kwargs)
+        return httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), **kwargs)
     async with mcp_client(tmp_path):
         transport = StreamableHttpTransport('http://testserver' + path,
             headers={'Authorization': 'Bearer mcp_test'}, httpx_client_factory=factory)
-        async with Client(transport) as client:
+        async with Client(transport, mode=mode) as client:
             names = [tool.name for tool in await client.list_tools()]
             assert ('accept_agent_invitation' in names) == (path == '/mcp')
             assert len(names) == len(set(names))
@@ -173,7 +177,7 @@ async def test_real_fastmcp_http_endpoint_discovery_and_call(tmp_path, path, mon
             assert ('invitation_text' in result.data) == (path == '/mcp')
             assert not api.rows
             opened = await client.call_tool('open_agent_contacts', {})
-            if path == '/mcp':
+            if path == '/mcp' and mode == 'legacy':
                 assert opened.data['status'] == 'unsupported_host'
             else:
                 assert opened.data['presentation'] == 'thread'

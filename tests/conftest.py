@@ -33,18 +33,16 @@ def fake_fulcra(monkeypatch):
 
 @pytest.fixture
 def app_capabilities(monkeypatch):
-    """Advertise MCP Apps on the actual initialize request (not a server mock)."""
-    from mcp import ClientSession
-    from mcp.types import InitializeRequest
-    original = ClientSession.send_request
+    """Advertise MCP Apps from every Client in the test (not a server mock)."""
+    from fastmcp.apps.config import UI_EXTENSION_ID
+    from mcp.client import advertise
+    original = Client.__init__
 
-    async def send_request(self, request, *args, **kwargs):
-        if isinstance(request.root, InitializeRequest):
-            request.root.params.capabilities.__pydantic_extra__['extensions'] = {
-                'io.modelcontextprotocol/ui': {'mimeTypes': ['text/html;profile=mcp-app']}}
-        return await original(self, request, *args, **kwargs)
+    def __init__(self, *args, extensions=None, **kwargs):
+        ui = advertise(UI_EXTENSION_ID, {'mimeTypes': ['text/html;profile=mcp-app']})
+        original(self, *args, extensions=[*(extensions or ()), ui], **kwargs)
 
-    monkeypatch.setattr(ClientSession, 'send_request', send_request)
+    monkeypatch.setattr(Client, '__init__', __init__)
 
 
 @pytest.fixture

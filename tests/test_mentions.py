@@ -8,10 +8,11 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 from mcp.types import ResourceLink
-from mcp.shared.exceptions import McpError
+from fastmcp.exceptions import McpError
 from fulcra_mcp.main import mcp
 from fulcra_mcp import mentions
 from fulcra_api.connections import CHANNEL_FIELDS
+from conftest import FAKE_USER_ID
 
 LIST_ITEM = {"type": "resource_link", "uri": "contacts://threads",
              "name": "Agents I Know", "title": "Agents I Know", "mimeType": "application/json",
@@ -80,7 +81,7 @@ async def test_search_includes_list_and_exact_peer_actions(query, expected, fake
             assert item["name"] == item["title"] == f"Open Agent Contact: Alex ({peer})"
             assert "open_agent_contacts" in item["description"]
         for item in items:
-            assert ResourceLink.model_validate(item).mimeType == "application/json"
+            assert ResourceLink.model_validate(item).mime_type == "application/json"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
 
@@ -129,7 +130,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra, app_cap
     from fulcra_mcp.main import openai_mcp as mcp
     backend(fake_fulcra, [entry("a", "peer")])
     async with Client(mcp) as client:
-        instructions = client.initialize_result.instructions
+        instructions = client.instructions
         assert "Agents I Know" in instructions and "Open Agent Contact:" in instructions
         assert "Bare @Fulcra: use set-up-agent-contacts for onboarding." in instructions
         assert "Agents I Know: open_agent_contacts({})." in instructions
@@ -149,7 +150,7 @@ async def test_mention_actions_resolve_to_existing_ui_tools(fake_fulcra, app_cap
             assert result.structured_content["presentation"] in ["threads", "thread"]
             tool = next(t for t in await client.list_tools() if t.name == name)
             assert "model" in tool.meta["ui"]["visibility"]
-            assert (await client.read_resource(tool.meta["ui"]["resourceUri"]))[0].mimeType == "text/html;profile=mcp-app"
+            assert (await client.read_resource(tool.meta["ui"]["resourceUri"]))[0].mime_type == "text/html;profile=mcp-app"
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
 
@@ -199,8 +200,12 @@ async def test_discovery_parity(case, fake_fulcra):
     assert list(await mentions._discover_threads()) == case["expected"]
 
 
-@pytest.mark.parametrize("peer", ["peer", "a/b ?#%雪", "%2F", "..", "a@b:c", " spaced "])
-async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_fulcra):
+DIRECT_PEER = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+GROUP_PEERS = ["2b1a4f0e-8c3d-4e5f-9a6b-7c8d9e0f1a2b", "f47ac10b-58cc-4372-a567-0e02b2c3d479"]
+
+
+async def test_resource_resolution_preserves_exact_peer_identity(fake_fulcra):
+    peer = DIRECT_PEER
     backend(fake_fulcra, [entry("a", peer) | {"description": '[mesh_identifier: "Alex"]'}], incoming=[
         {"sharing_fulcra_userid": peer, "sharing_fulcra_user_name": "Alex"}])
     uri = "contacts://threads/id-" + quote(peer, safe="")
@@ -208,7 +213,7 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
         assert (await search(client, peer))[1]["uri"] == uri
         for _ in range(2):
             resource = (await client.read_resource(uri))[0]
-            assert resource.mimeType == "application/json"
+            assert resource.mime_type == "application/json"
             assert json.loads(resource.text) == {
                 "peer_fulcra_userid": peer, "title": f"Alex ({peer})",
                 "open_tool": {"name": "open_agent_contacts", "arguments": {"peer_fulcra_userid": peer}}}
@@ -216,6 +221,35 @@ async def test_resource_resolution_preserves_encoded_exact_identity(peer, fake_f
     assert {c[0] for c in fake_fulcra.mock_calls} == {
         "v1_catalog", "v1_catalog_schema", "get_fulcra_userid", "get_datashares", "get_shared_datasets"}
     assert fake_fulcra.v1_catalog.call_count == 6  # Each discovery: broad listing plus one exact channel lookup.
+
+
+async def test_resource_resolution_round_trips_encoded_multiparty_thread(fake_fulcra):
+    # The connection:[...] form is the only peer that needs percent-encoding in the URI.
+    backend(fake_fulcra, [entry("a")], outgoing=[{
+        "share_all_data": False, "fulcra_data_types": ["Event/a"],
+        "permissions": [{"allowed_fulcra_userid": p} for p in GROUP_PEERS]}])
+    thread_id = "connection:" + json.dumps(sorted([FAKE_USER_ID, *GROUP_PEERS]), separators=(",", ":"))
+    uri = "contacts://threads/id-" + quote(thread_id, safe="")
+    async with Client(mcp) as client:
+        [_, item] = await search(client)
+        assert item["uri"] == uri
+        for _ in range(2):
+            resource = (await client.read_resource(uri))[0]
+            descriptor = json.loads(resource.text)
+            assert descriptor["thread_id"] == thread_id
+            assert descriptor["open_tool"]["arguments"] == {"thread_id": thread_id}
+            assert item["title"] == "Open Agent Contact: " + descriptor["title"]
+            assert str(resource.uri) == uri
+
+
+@pytest.mark.parametrize("peer", ["..", "/etc/passwd", "C:\\Windows", "a\x00b"])
+async def test_path_shaped_peer_is_not_found(peer, fake_fulcra):
+    # Real peers are UUIDs or connection:[UUIDs]; FastMCP rejects path-shaped values before lookup.
+    backend(fake_fulcra, [entry("a", DIRECT_PEER)])
+    async with Client(mcp) as client:
+        with pytest.raises(McpError, match="Resource not found"):
+            await client.read_resource("contacts://threads/id-" + quote(peer, safe=""))
+    fake_fulcra.v1_catalog.assert_not_called()
 
 
 @pytest.mark.parametrize("failure", ["missing-own", "numeric-own", "catalog-owner", "catalog-offline", "shares-offline", "incoming-offline"])
@@ -308,11 +342,11 @@ async def test_native_picker_metadata(fake_fulcra):
     async with Client(mcp) as client:
         tool = next(t for t in await client.list_tools() if t.name == "search_agent_contacts")
         assert tool.meta["ui"] == {"visibility": ["app"]}
-        capabilities = client.initialize_result.capabilities.model_dump(by_alias=True)
+        capabilities = client.server_capabilities.model_dump(by_alias=True)
         assert capabilities["experimental"]["openai/mentions"] == {"searchTool": "search_agent_contacts"}
         assert "openai/extensions" not in tool.meta
-        assert tool.annotations.readOnlyHint is True
-        assert tool.annotations.destructiveHint is False
-        assert tool.inputSchema["required"] == ["query"]
-        assert tool.inputSchema["properties"]["query"]["type"] == "string"
+        assert tool.annotations.read_only_hint is True
+        assert tool.annotations.destructive_hint is False
+        assert tool.input_schema["required"] == ["query"]
+        assert tool.input_schema["properties"]["query"]["type"] == "string"
         assert await search(client) == [LIST_ITEM]

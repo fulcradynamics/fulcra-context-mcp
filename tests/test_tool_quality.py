@@ -1334,7 +1334,7 @@ async def test_catalog_lists_no_required_fields_when_there_are_none(call, fake_f
 
 async def test_sleep_lists_only_the_common_options(client):
     [tool] = [t for t in await client.list_tools() if t.name == "get_sleep"]
-    assert set(tool.inputSchema["properties"]) == {
+    assert set(tool.input_schema["properties"]) == {
         "start_time",
         "end_time",
         "level",
