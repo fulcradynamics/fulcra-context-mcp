@@ -1127,6 +1127,9 @@ def _slim_entry(entry: dict) -> dict:
         slim["name"] = entry["name"]
     if entry.get("description"):
         slim["description"] = _catalog_description(entry["description"])
+    created_at = (entry.get("metadata") or {}).get("created_at")
+    if created_at is not None:
+        slim["created_at"] = created_at
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):
