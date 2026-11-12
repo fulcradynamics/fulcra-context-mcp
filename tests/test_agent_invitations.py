@@ -255,7 +255,7 @@ async def test_public_tools_have_same_auth_and_narrow_results(api, monkeypatch):
         listed = {t.name: t for t in await client.list_tools()}
         for name in ('prepare_agent_invitation', 'match_agent_invitations'):
             assert listed[name].meta['ui']['visibility'] == ['app']
-            assert listed[name].annotations.readOnlyHint is False
+            assert listed[name].annotations.read_only_hint is False
         prepared = (await client.call_tool('prepare_agent_invitation', {'data_type': OUT})).structured_content
         handshake(api, prepared['code'])
         matched = (await client.call_tool('match_agent_invitations', {})).structured_content

@@ -10,7 +10,6 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from mcp.server.auth.routes import create_protected_resource_routes
-from mcp.server.session import ServerSession
 from pydantic import AnyHttpUrl
 from starlette.datastructures import MutableHeaders
 from starlette.middleware import Middleware
@@ -479,20 +478,6 @@ app.mount(CLAUDE_MCP_PATH, claude_asgi_app)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)
-
-
-old__received_request = ServerSession._received_request
-
-
-async def _received_request(self, *args, **kwargs):
-    try:
-        return await old__received_request(self, *args, **kwargs)
-    except RuntimeError:
-        logger.debug("Ignoring RuntimeError in _received_request", exc_info=True)
-
-
-# pylint: disable-next=protected-access
-ServerSession._received_request = _received_request
 
 
 def main():
