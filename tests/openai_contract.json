@@ -682,7 +682,7 @@
     {
       "name": "match_agent_invitations",
       "title": "Match Agent Invitations",
-      "description": "Match unambiguous FIRST-message codes for user-prepared invitations using\nauthenticated incoming-share owners, not sender claims. Verify the return grant\nfor that outbox only; open invitations get individual copies, never template grants.\nLabels (<sender> via <open invitation identifier>) are display-only. Unmatched\ncontacts require consent; pending is not fallback-share permission. No sends or\npreference changes.",
+      "description": "Match unambiguous handshake codes within the outbox creation-time window (one-year fallback) for user-prepared invitations using\nauthenticated incoming-share owners, not sender claims. Verify the return grant\nfor that outbox only; open invitations get individual copies, never template grants.\nLabels (<sender> via <open invitation identifier>) are display-only. Unmatched\ncontacts require consent; pending is not fallback-share permission. No sends or\npreference changes.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,

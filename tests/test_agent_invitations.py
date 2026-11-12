@@ -1,6 +1,8 @@
 """Invitation codes are narrow prior consent, never peer-supplied authority."""
 import copy
 import json
+import re
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -80,6 +82,92 @@ def test_match_shares_only_prepared_outbox_then_reads_back_and_is_idempotent(api
     assert 'body' not in json.dumps(result)
 
 
+@pytest.mark.parametrize('created,expected', [('2026-09-01T00:00:00Z', 'matched'),
+                                             ('2026-10-02T00:00:00Z', 'pending')])
+def test_match_uses_own_outbox_creation_not_incoming_creation(api, created, expected):
+    api.catalog[0]['metadata'] = {'created_at': created}
+    api.catalog[1]['metadata'] = {'created_at': '2026-11-01T00:00:00Z'}
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    assert invitations.match(api)['results'][0]['status'] == expected
+    for call in api.fulcra_v1_records.call_args_list:
+        days, seconds, end = re.search(r'\[(\d+)d(?:(\d+)s)?\] @ ([\d.]+)', call.args[0]).groups()
+        start = datetime.fromtimestamp(float(end), timezone.utc) - timedelta(days=int(days), seconds=int(seconds or 0))
+        assert timedelta(0) < datetime.fromisoformat(created) - start <= timedelta(seconds=1)
+
+
+@pytest.mark.parametrize('mode', ['second', 'duplicate', 'tie'])
+def test_any_handshake_in_window_matches_once(api, mode):
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    rows = api.rows[(PEER, IN)]
+    if mode == 'second':
+        rows.insert(0, dict(rows[0], start_time='2026-09-01T00:00:00Z', topic='hello'))
+    elif mode == 'duplicate':
+        rows.append(dict(rows[0]))
+    else:
+        rows.append(dict(rows[0], id=OWN, topic='another topic'))
+    assert invitations.match(api)['results'][0]['status'] == 'matched'
+    api.create_datashare.assert_called_once()
+
+
+def test_old_handshake_without_creation_timestamp_does_not_match(api):
+    code = invitations.prepare(api, OUT)['code']
+    handshake(api, code)
+    api.rows[(PEER, IN)][0]['start_time'] = '2020-01-01T00:00:00Z'
+    assert invitations.match(api)['results'][0]['status'] == 'pending'
+    api.create_datashare.assert_not_called()
+
+
+@pytest.mark.parametrize('open_invitation', [False, True])
+@pytest.mark.parametrize('created', [None, '2026-09-30T00:00:00.123456Z'])
+def test_creation_window_on_openai_matcher(api, monkeypatch, open_invitation, created):
+    import asyncio
+    from fulcra_mcp import openai_endpoint, tools
+    if open_invitation:
+        from test_open_invitations import clone_api
+        clone_api(api)
+    if created:
+        api.catalog[0]['metadata'] = {'created_at': created}
+    prepared = invitations.prepare(api, OUT, open_invitation=open_invitation)
+    handshake(api, prepared['code'])
+    api.rows[(PEER, IN)][0]['topic'] = prepared['topic']
+    monkeypatch.setattr(tools, 'get_fulcra_object', lambda: api)
+    result = asyncio.run(openai_endpoint.match_agent_invitations())
+    assert result['results'][0]['status'] == 'matched'
+    for call in api.fulcra_v1_records.call_args_list:
+        days, seconds, end = re.search(r'\[(\d+)d(?:(\d+)s)?\] @ ([\d.]+)', call.args[0]).groups()
+        duration = timedelta(days=int(days), seconds=int(seconds or 0))
+        if created:
+            start = datetime.fromtimestamp(float(end), timezone.utc) - duration
+            assert timedelta(0) < datetime.fromisoformat(created) - start <= timedelta(seconds=1)
+        else:
+            assert duration == timedelta(days=365, seconds=1)
+
+
+@pytest.mark.parametrize('created', ['invalid', '2026-01-01T00:00:00', '2099-01-01T00:00:00Z'])
+def test_invalid_creation_timestamp_does_not_expand_history(api, created):
+    api.catalog[0]['metadata'] = {'created_at': created}
+    invitations.prepare(api, OUT)
+    result = invitations.match(api)
+    assert result['diagnostic']['stage'] == 'invitation_window'
+    api.fulcra_v1_records.assert_not_called()
+    api.create_datashare.assert_not_called()
+
+
+def test_each_invitation_filters_its_own_window(api):
+    second = OUT[:-1] + '1'
+    api.catalog[0]['metadata'] = {'created_at': '2026-09-01T00:00:00Z'}
+    api.catalog.append(dict(channel(second, OWN), metadata={'created_at': '2026-11-01T00:00:00Z'}))
+    first_code = invitations.prepare(api, OUT)['code']
+    second_code = invitations.prepare(api, second)['code']
+    handshake(api, first_code)
+    api.rows[(PEER, IN)].append(dict(api.rows[(PEER, IN)][0], topic='handshake ' + second_code))
+    results = {row['data_type']: row['status'] for row in invitations.match(api)['results']}
+    assert results == {OUT: 'matched', second: 'pending'}
+    api.create_datashare.assert_called_once()
+
+
 def test_unrelated_unnamed_direct_grant_does_not_block_matching(api):
     code = invitations.prepare(api, OUT)['code']
     handshake(api, code)
@@ -113,16 +201,14 @@ def test_failure_diagnostics_do_not_expose_exception_data(api, caplog, failure, 
     api.create_datashare.assert_not_called()
 
 
-@pytest.mark.parametrize('mode', ['missing', 'unknown', 'second', 'duplicate', 'tie', 'channel', 'owner', 'schema', 'read_failure', 'targeted'])
+@pytest.mark.parametrize('mode', ['missing', 'unknown', 'channel', 'owner', 'schema', 'read_failure', 'targeted'])
 def test_unsafe_evidence_never_shares(api, mode):
     code = invitations.prepare(api, OUT)['code']
     handshake(api, code)
     rows = api.rows[(PEER, IN)]
     if mode == 'missing': rows[0].pop('topic')
     if mode == 'unknown': rows[0]['topic'] += 'x'
-    if mode == 'second': rows.insert(0, dict(rows[0], start_time='2020-01-01T00:00:00Z', topic='hello'))
-    if mode == 'duplicate': rows.append(dict(rows[0]))
-    if mode == 'tie': rows.append(dict(rows[0], id=OWN, topic='another topic'))
+
     if mode == 'channel':
         second = IN[:-1] + '1'
         api.catalog.append(channel(second, PEER))

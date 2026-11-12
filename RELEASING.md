@@ -6,6 +6,11 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 
 ## 1.19.15 release notes
 
+- Automatic invitation matching uses each invitation outbox's creation timestamp,
+  or a 365-day fallback when absent, and accepts any exact handshake in that window.
+  Individual and open invitations use the same rule on OpenAI and standard endpoints.
+  Ambiguous peers and uncertain writes remain blocked. No UI bundle changes.
+
 - Catalog results include `created_at` from the data type's metadata when available,
   for owned and shared types on standard, OpenAI and Claude endpoints. Other
   metadata remains private; tool schemas, descriptions and annotations are unchanged.
