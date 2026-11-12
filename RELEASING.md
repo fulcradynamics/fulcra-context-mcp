@@ -7,7 +7,14 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 ## 1.19.16 release notes
 
 - Keep the conversation still while typing in the message composer. Contacts UI
-  v85 removes the per-keystroke scroll adjustment; earlier UI bundles stay intact.
+  v84 removes the per-keystroke scroll adjustment and mentions the Fulcra plugin
+  in invitation text. Earlier released UI bundles stay intact.
+
+## 1.19.15 release notes
+
+- Catalog results include `created_at` from the data type's metadata when available,
+  for owned and shared types on standard, OpenAI and Claude endpoints. Other
+  metadata remains private; tool schemas, descriptions and annotations are unchanged.
 
 ## 1.19.13 release notes
 
