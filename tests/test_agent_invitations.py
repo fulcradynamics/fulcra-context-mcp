@@ -145,6 +145,18 @@ def test_creation_window_on_openai_matcher(api, monkeypatch, open_invitation, cr
             assert duration == timedelta(days=365, seconds=1)
 
 
+@pytest.mark.parametrize('created', [None, '2026-09-01T00:00:00Z'])
+def test_history_default_uses_channel_creation_or_one_year(api, created):
+    api.catalog[0]['metadata'] = {'created_at': created}
+    end = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    invitations._history(api, OWN, OUT, end=end)
+    query = api.fulcra_v1_records.call_args.args[0]
+    days, seconds, stamp = re.search(r'\[(\d+)d(?:(\d+)s)?\] @ ([\d.]+)', query).groups()
+    start = datetime.fromtimestamp(float(stamp), timezone.utc) - timedelta(days=int(days), seconds=int(seconds or 0))
+    expected = datetime.fromisoformat(created) if created else end - timedelta(days=365)
+    assert start == expected - timedelta(seconds=1)
+
+
 @pytest.mark.parametrize('created', ['invalid', '2026-01-01T00:00:00', '2099-01-01T00:00:00Z'])
 def test_invalid_creation_timestamp_does_not_expand_history(api, created):
     api.catalog[0]['metadata'] = {'created_at': created}

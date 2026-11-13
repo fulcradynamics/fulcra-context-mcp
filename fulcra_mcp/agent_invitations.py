@@ -55,15 +55,21 @@ def _checking(stage):
         raise _EvidenceUnavailable(_diagnostic(exc, stage)) from None
 
 
+def _history_start(entry, end):
+    created = (entry.get('metadata') or {}).get('created_at')
+    start = datetime.fromisoformat(created.replace('Z', '+00:00')) if created is not None else end - timedelta(days=365)
+    if start.tzinfo is None or start > end:
+        raise ValueError('Invalid channel creation timestamp.')
+    return start
+
+
 def _history(api, owner, channel, start=None, end=None):
-    # Acceptance's empty-channel check needs complete history; matching always
-    # supplies an explicit creation-time/fallback window.
-    end = end or datetime.now(timezone.utc).replace(microsecond=0)
-    padding = timedelta(seconds=1) if start is not None else timedelta(0)
-    start = start or datetime(1, 1, 1, tzinfo=timezone.utc)
+    end = end or datetime.now(timezone.utc)
+    if start is None:
+        start = _history_start(channel_entry(api, owner, channel), end)
     # Include the lower boundary of PromQL's left-open matching range; filter
     # exact timestamps below. Days avoid the backend's uint32 seconds limit.
-    duration = end - start + padding
+    duration = end - start + timedelta(seconds=1)
     span = f'{duration.days}d' + (f'{duration.seconds}s' if duration.seconds else '')
     query = f'{{__name__="{channel}"}}[{span}] @ {end.timestamp()}'
     response = api.fulcra_v1_records(query, fulcra_userid=owner)
@@ -205,11 +211,7 @@ def _evidence(api, own, prefix='handshake'):
             invite = document['invitations'].get(entry['id'])
             if not invite or invite['state'] == 'completed' or invite.get('prefix', 'handshake') != prefix:
                 continue
-            created = (entry.get('metadata') or {}).get('created_at')
-            start = datetime.fromisoformat(created.replace('Z', '+00:00')) if created else end - timedelta(days=365)
-            if start.tzinfo is None or start > end:
-                raise ValueError('Invalid invitation creation timestamp.')
-            windows[invite['code']] = start
+            windows[invite['code']] = _history_start(entry, end)
     if not windows:
         return {}
     with _checking('incoming_grants'):
