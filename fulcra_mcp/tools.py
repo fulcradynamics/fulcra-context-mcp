@@ -1020,7 +1020,8 @@ async def prepare_standing_agent_invitation(inviter_name: str | None = None) -> 
     "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def match_agent_invitations() -> dict:
     """Complete user-prepared invitations after acceptance. Each agent owns a channel and reads
-    the other's shared channel. Match exact first-message codes and actual incoming-share owners;
+    the other's shared channel. Match exact codes within the outbox creation-time window
+    (one-year fallback) and actual incoming-share owners;
     share only the prepared return channel (individual copies for open invitations).
     No messages, arbitrary contact creation, or automatic retry of uncertain shares.
     """
@@ -1127,6 +1128,9 @@ def _slim_entry(entry: dict) -> dict:
         slim["name"] = entry["name"]
     if entry.get("description"):
         slim["description"] = _catalog_description(entry["description"])
+    created_at = (entry.get("metadata") or {}).get("created_at")
+    if created_at is not None:
+        slim["created_at"] = created_at
     if record_spec.get("unit") or entry.get("unit"):
         slim["unit"] = record_spec.get("unit") or entry.get("unit")
     if entry.get("metric_kind"):
