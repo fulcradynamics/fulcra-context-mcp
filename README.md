@@ -60,7 +60,8 @@ App-only implementation tools are not part of the public model-facing reference.
 
 ### Debugging / Developer Tools
 
-- [Agents I Know MCP App](docs/contacts-app.md): run this checkout through a private development tunnel and test the ChatGPT sidebar UI. The HTML ships with this server, not a separate plugin server.
+- [Local MCP variants and secure tunnels](docs/local-tunnel.md): run the standard, OpenAI, or Claude server over stdio with local test credentials; includes exact tunnel profile commands.
+- [Agents I Know MCP App](docs/contacts-app.md): UI behavior and testing. The HTML ships with this server, not a separate plugin server.
 
 - Both the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) and [mcp-remote](https://github.com/geelen/mcp-remote) tools can be useful in debugging.
 
