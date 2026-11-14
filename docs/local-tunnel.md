@@ -16,12 +16,19 @@ tunnel users act as this local account; there is no per-ChatGPT-user Fulcra logi
 Never use shared workspace credentials or expose local credentials through an
 unauthenticated public HTTP wrapper.
 
+Create a local env file outside Git, for example
+`/absolute/path/to/fulcra-openai.env`:
+
+```dotenv
+FULCRA_ENVIRONMENT=stdio
+FULCRA_MCP_VARIANT=openai
+```
+
 From the checkout:
 
 ```sh
 uv sync --locked
-FULCRA_ENVIRONMENT=stdio FULCRA_MCP_VARIANT=openai \
-  uv run --locked fulcra-context-mcp
+uv run --locked --env-file /absolute/path/to/fulcra-openai.env fulcra-context-mcp
 ```
 
 That command speaks MCP over stdio; normally a client launches it. Stop it before
@@ -42,17 +49,20 @@ tunnel-client init \
   --sample sample_mcp_stdio_local \
   --profile fulcra-openai \
   --tunnel-id "$TUNNEL_ID" \
-  --mcp-command "env FULCRA_ENVIRONMENT=stdio FULCRA_MCP_VARIANT=openai uv --directory /absolute/path/to/fulcra-context-mcp run --locked fulcra-context-mcp"
+  --mcp-command "uv --directory /absolute/path/to/fulcra-context-mcp run --locked --env-file /absolute/path/to/fulcra-openai.env fulcra-context-mcp"
 
 tunnel-client doctor --profile fulcra-openai --explain
 tunnel-client run --profile fulcra-openai
 ```
 
-Replace the checkout path; quote it inside the command string if it contains
-spaces. The `env` assignments are saved in the launch command so restarting the
-profile does not depend on exported variant settings. Keep the tunnel running
-for discovery and calls. Use a separate profile name and `FULCRA_MCP_VARIANT=claude`
-for Claude. Do not run competing profiles against the same tunnel at once.
+Replace both absolute paths; quote each inside the command string if it contains
+spaces. `uv` loads the server settings from the env file; existing environment
+variables take precedence, so remove conflicting exports before starting the
+tunnel. `--locked` refuses to run if the lockfile needs updating. The server's
+env file does not configure the tunnel process's `CONTROL_PLANE_API_KEY`.
+Keep the tunnel running for discovery and calls. Use a separate profile and env
+file with `FULCRA_MCP_VARIANT=claude` for Claude. Do not run competing profiles
+against the same tunnel at once.
 
 To locate an existing profile:
 
