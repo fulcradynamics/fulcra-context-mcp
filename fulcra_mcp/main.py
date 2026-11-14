@@ -482,7 +482,8 @@ app.mount("/", mcp_asgi_app)
 
 def main():
     if settings.fulcra_environment == "stdio":
-        mcp.run()
+        servers = {"standard": mcp, "openai": openai_mcp, "claude": claude_mcp}
+        servers[settings.fulcra_mcp_variant].run()
     else:
         settings.state_path.mkdir(parents=True, exist_ok=True)
 

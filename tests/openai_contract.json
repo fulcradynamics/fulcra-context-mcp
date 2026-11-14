@@ -1694,7 +1694,7 @@
           ]
         },
         "ui": {
-          "resourceUri": "ui://fulcra/contacts/thread/v83.html",
+          "resourceUri": "ui://fulcra/contacts/thread/v84.html",
           "visibility": [
             "model",
             "app"
@@ -1743,7 +1743,7 @@
           ]
         },
         "ui": {
-          "resourceUri": "ui://fulcra/contacts/v83.html",
+          "resourceUri": "ui://fulcra/contacts/v84.html",
           "visibility": [
             "app"
           ]
@@ -2050,7 +2050,7 @@
     },
     {
       "name": "thread_html",
-      "uri": "ui://fulcra/contacts/thread/v83.html",
+      "uri": "ui://fulcra/contacts/thread/v84.html",
       "description": "Same full-panel renderer; startup waits for the optional exact target.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {
@@ -2067,7 +2067,7 @@
     },
     {
       "name": "contacts_html",
-      "uri": "ui://fulcra/contacts/thread/v83.html?startup=resource",
+      "uri": "ui://fulcra/contacts/thread/v84.html?startup=resource",
       "description": "Direct-resource list: no invoking tool result is required for startup.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {
@@ -2084,7 +2084,7 @@
     },
     {
       "name": "contacts_html_bundle",
-      "uri": "ui://fulcra/contacts/v83.html",
+      "uri": "ui://fulcra/contacts/v84.html",
       "description": "Serve the packaged UI through MCP, not a separate HTTP endpoint.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {

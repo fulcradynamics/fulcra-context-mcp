@@ -96,8 +96,8 @@ async def main():
                 assert status.meta['ui']['visibility'] == ['app']
                 assert 'start_time' not in tools['get_records'].input_schema['required']
                 for name, uri, marker in (
-                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v83.html', 'global'),
-                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v83.html', 'thread'),
+                    ('open_agent_contacts_home', 'ui://fulcra/contacts/v84.html', 'global'),
+                    ('open_agent_contacts', 'ui://fulcra/contacts/thread/v84.html', 'thread'),
                 ):
                     assert name not in tools
                     opened = await client.call_tool(name, {})
@@ -126,7 +126,7 @@ async def main():
                                   'association unverified', 'viewing-agent', 'expected_peer_userids',
                                   'Open file in ', 'Referenced version (unverified)'):
                         assert value in text, value
-                direct = (await client.read_resource('ui://fulcra/contacts/thread/v83.html?startup=resource')).contents[0]
+                direct = (await client.read_resource('ui://fulcra/contacts/thread/v84.html?startup=resource')).contents[0]
                 assert '<meta name="connection-startup" content="resource">' in direct.text
                 assert direct.meta['openai/ui']['availableDisplayModes'] == ['fullscreen']
                 # Earlier versions ship in the wheel and stay readable, unlisted, for
@@ -139,7 +139,7 @@ async def main():
                 assert not any('v82' in uri for uri in listed_uris)
                 assert not any('/threads/' in uri for uri in listed_uris)
                 assert not any('mesh' in name or 'aicq' in name for name in tools)
-                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema, both v83 entrypoints and the kept v82 verified.')
+                print(f'Installed wheel stdio smoke passed: {installed}; {len(tools)} tools; Event schema, both v84 entrypoints and the kept v82 verified.')
 
 
 if __name__ == '__main__':
