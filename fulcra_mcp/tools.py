@@ -46,6 +46,14 @@ def _require_time_zone(dt: datetime) -> datetime:
 AwareDatetime = Annotated[datetime, AfterValidator(_require_time_zone)]
 
 
+def _in_worker_thread(func):
+    """Run a blocking SDK operation with the caller's request context."""
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await asyncio.to_thread(func, *args, **kwargs)
+    return wrapper
+
+
 def _friendly_http_errors(func):
     """Convert raw Fulcra API HTTP errors into actionable tool responses;
     an unhandled HTTPError would otherwise surface as an opaque tool failure
@@ -1273,7 +1281,8 @@ def _user_defined_fields(schema: dict) -> tuple[dict[str, str | dict], list[str]
 
 @tools_mcp.tool(annotations={"title": "Get Data Catalog", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
-async def get_data_catalog(
+@_in_worker_thread
+def get_data_catalog(
     data_type: str | None = None,
     category: str | None = None,
     name: str | None = None,
@@ -1441,7 +1450,8 @@ async def get_time_series(
 
 @tools_mcp.tool(annotations={"title": "Get Records", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
-async def get_records(
+@_in_worker_thread
+def get_records(
     data_type: str,
     start_time: AwareDatetime | None = None,
     end_time: AwareDatetime | None = None,
@@ -2464,7 +2474,8 @@ async def create_share(
 
 @tools_mcp.tool(annotations={"title": "List Shares", "readOnlyHint": True, "destructiveHint": False, "openWorldHint": False})
 @_friendly_http_errors
-async def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both") -> str:
+@_in_worker_thread
+def list_shares(direction: Literal["outgoing", "incoming", "both"] = "both") -> str:
     """List what this user shares with others and what others share with them.
 
     Incoming entries show what another user shares (read it by passing their
