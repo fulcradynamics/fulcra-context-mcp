@@ -10,7 +10,7 @@ export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/0
 // untargeted global launch on the instructional view instead of opening the top contact.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
 export async function open(page, width=900, { listOnly = false, waitForContacts = true, holdReads = false, acceptAck = false, ownRecords = [], channelRecords = null, failHistory = false, chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined } = {}) {
- await page.setViewportSize({width,height:1100});
+ await page.setViewportSize({width,height:process.env.PW_VIDEO ? 700 : 1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
