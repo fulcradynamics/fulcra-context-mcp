@@ -68,10 +68,10 @@ function directRecipients(share) {
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_data_catalog', {}).then(parseConnections),
+    call('get_agent_contact_catalog', {}).then(parseConnections),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
-  if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
+  if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (contact catalog/list_shares or missing own user ID). No cached channels were read.');
   const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
   const threads = new Map();
@@ -92,9 +92,7 @@ export async function discoverThreads(app) {
       ...(identifier ? { identifier } : {}) };
     const connection = isConnection(entry);
     if (connection) {
-      const exact = entry.fields ? [entry] : parseConnections(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
-      const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
-      if (!schema || !compatibleSchema(schema)) continue;
+      if (!compatibleSchema(entry)) continue;
       const pairs = owner === own && channelMetadata(entry.description).peers;
       if (pairs?.length) source.matchedPeers = pairs;
     }
@@ -147,6 +145,8 @@ export async function discoverThreads(app) {
     }
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
+  const schemaErrors = catalog.filter(e => e.schema_error).length;
+  if (schemaErrors) warnings.push(`Partial discovery — ${schemaErrors} channel schema unavailable; some contacts may be missing.`);
   // Own audience bounds discovery. Incoming grants prove readable owner/type,
   // not association or remote audiences; never follow their outgoing audiences.
   for (const thread of threads.values()) {

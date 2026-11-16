@@ -1,24 +1,26 @@
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { BUNDLE_URL } from '../ui-version.js';
-const bundle = await readFile(BUNDLE_URL, 'utf8');
+import { sourceBundle } from './source-bundle.js';
+const bundle = process.env.CONTACTS_SOURCE ? await sourceBundle() : await readFile(BUNDLE_URL, 'utf8');
 const schema = JSON.parse(await readFile(new URL('../../tests/fixtures/connection-schema.json', import.meta.url), 'utf8'));
 export const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
 export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/00000000-0000-4000-8000-000000000005';
 // Explicit read-only opener for layout tests. `autoSelect: false` keeps an
 // untargeted global launch on the instructional view instead of opening the top contact.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
-export async function open(page, width=900, { listOnly = false, holdReads = false, acceptAck = false, ownRecords = [], chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined } = {}) {
+export async function open(page, width=900, { listOnly = false, waitForContacts = true, holdReads = false, acceptAck = false, ownRecords = [], channelRecords = null, failHistory = false, chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined } = {}) {
  await page.setViewportSize({width,height:1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes})=>{
   window.direct = direct;
   window.contactStatus = status;
   window.second = second;
   window.holdReads = holdReads; window.checkStatus = checkStatus;
   window.ownRecords = ownRecords;
+  window.channelRecords = channelRecords; window.failHistory = failHistory;
   const frame=document.querySelector('iframe');
   window.calls=[]; window.contexts=[]; window.hostMessages=[]; window.sizes=[]; window.displayRequests=[]; window.audience=[peer,other];
   window.heldDiscovery=[]; window.heldReads=[];
@@ -53,7 +55,7 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     if(window.holdMatches)window.releaseMatch=respond;else respond();
     return;
    }
-   const discovery=['get_data_catalog','list_shares'].includes(name);
+   const discovery=['get_agent_contact_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
    if(name==='send_agent_contact_message'){
     if(window.sendResult) { window.sendResult(r, reply); return; }
@@ -64,14 +66,14 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     return;
    }
    let text;
-   if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
+   if(name==='get_agent_contact_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
     ...(window.navigationContact ? [
-     {id:'Event/navigation-out',name:'Quiet contact',description:'connect-agents-with-anyone channel',...schema},
-     {id:'Event/navigation-in',name:'Quiet contact',fulcra_userid:'navigation-peer',description:'connect-agents-with-anyone channel',...schema},
+     {id:'Event/navigation-out',name:'Quiet contact',description:'connect-agents-with-anyone channel'},
+     {id:'Event/navigation-in',name:'Quiet contact',fulcra_userid:'navigation-peer',description:'connect-agents-with-anyone channel'},
     ] : []),
-    ...(window.direct ? [{id:out.slice(0,-1)+'9',name:'Direct',description:'connect-agents-with-anyone channel',...schema}] : []),
-    ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(window.contactStatus?'[contact_status: '+JSON.stringify(window.contactStatus)+']\n':'')+'[mesh_identifier: "'+(window.unnamed ? peer : 'Weekend')+'"]',...schema})),
-    ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel',...schema}))]});
+    ...(window.direct ? [{id:out.slice(0,-1)+'9',name:'Direct',description:'connect-agents-with-anyone channel'}] : []),
+    ...[...(window.excludeOwn ? [] : [out]),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({id,name:'Planning',description:'connect-agents-with-anyone channel\n'+(window.contactStatus?'[contact_status: '+JSON.stringify(window.contactStatus)+']\n':'')+'[mesh_identifier: "'+(window.unnamed ? peer : 'Weekend')+'"]'})),
+    ...[peer,other].map(fulcra_userid=>({id:incoming,name:'<img src=x onerror=alert(1)>',fulcra_userid,description:'connect-agents-with-anyone channel'}))]});
    if(name==='list_shares')text='Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:[
     ...(window.extraOutgoing ?? []),
     ...(window.navigationContact ? [{share_all_data:false,file_paths:[],file_history_paths:[],data_types:['Event/navigation-out'],with_user_ids:['navigation-peer'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []),
@@ -79,27 +81,36 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({created_at: id === out ? '2026-10-10T12:00:00Z' : '2026-10-12T12:00:00Z',share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',file_paths:[],file_history_paths:[],data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',file_paths:[],file_history_paths:[],data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
    if (window.pairedChannels && discovery) {
     const secondOut = out.slice(0,-1)+'8', secondIn = incoming.slice(0,-1)+'9';
-    if (name === 'get_data_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
-     [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]].map(([id, owner, match]) => ({id, name: id, fulcra_userid: owner, ...schema,
-      description: match ? (window.namedFields ? 'Connection details: ' : '[agent_connection: ')+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+(window.namedFields ? '' : ']') : ''}))});
+    if (name === 'get_agent_contact_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
+     [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]].map(([id, owner, match]) => ({id, name: id, fulcra_userid: owner,
+      description: 'Agent contact channel ' + (match ? (window.namedFields ? 'Connection details: ' : '[agent_connection: ')+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+(window.namedFields ? '' : ']') : '')}))});
     else text = 'Shares: ' + JSON.stringify({own_fulcra_userid:own,
      outgoing:[out,secondOut].map(id=>({share_all_data:false,data_types:[id],with_user_ids:[peer]})),
      incoming:[incoming,secondIn].map(id=>({sharing_fulcra_userid:peer,grant_type:'user',data_types:[id]}))});
    }
    if(name==='get_records') {
-    if(window.failReads) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
+    if(window.failReads || (window.failHistory && !a.latest)) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
     const records = window.emptyRecords || a.data_type.startsWith('Event/navigation-') ? [] : a.fulcra_userid?[
     {id:a.fulcra_userid+'-1',start_time:'2026-10-13T11:00:00Z',sender:'SharedName',kind:'message',body:'Addressed message',recipients:['chatgpt']},
     {id:a.fulcra_userid+'-2',start_time:'2026-10-13T11:01:00Z',sender:'SharedName',kind:'message',body:'Other agent message',recipients:['ChatGPT','<script>bad</script>']},
     {id:a.fulcra_userid+'-3',start_time:'2026-10-13T11:02:00Z',sender:'SharedName',kind:'message',body:'Broadcast message',recipients:['all']}
     ]:window.ownRecords;
     const selectedRecords = window.pairedChannels ? (a.fulcra_userid ? [{id:a.data_type+'-message', start_time:a.data_type === incoming ? '2026-10-13T11:00:00Z' : '2026-10-13T11:59:00Z', sender:'Peer',kind:'message',body:a.data_type === incoming ? 'First paired message' : 'Second paired message'}] : []) : records;
-    text=`Records for ${a.data_type} from start to end: `+JSON.stringify(a.latest ? selectedRecords.slice(-1) : selectedRecords);
+    const channelRecords = window.channelRecords?.[JSON.stringify([a.fulcra_userid ?? own, a.data_type])] ?? selectedRecords;
+    text=`Records for ${a.data_type} from start to end: `+JSON.stringify(a.latest ? channelRecords.slice(-1) : channelRecords);
+   }
+   // Only the app-only catalog projects schemas into bulk entries.
+   if (name === 'get_agent_contact_catalog') {
+    const prefix = 'Available data types, grouped by compatible tool: ';
+    const catalog = JSON.parse(text.slice(prefix.length));
+    catalog['data types usable with: get_records'] = catalog['data types usable with: get_records'].map(e => ({ ...e, ...schema }));
+    text = prefix + JSON.stringify(catalog);
    }
    if (discovery && window.unmarkedChannels) text = text.replaceAll('connect-agents-with-anyone', 'Project');
    const respond=()=>reply(r.id,{content:[{type:'text',text}]});
    if(discovery && window.holdDiscovery)window.heldDiscovery.push(respond);
    else if(name==='get_records' && (window.holdReads === true
+     || window.holdReads === a.fulcra_userid
      || window.holdReads === (a.fulcra_userid ? 'incoming' : 'outgoing')
      || (window.holdReads === 'history' && !a.latest))) window.heldReads.push(respond);
    else respond();
@@ -108,9 +119,9 @@ export async function open(page, width=900, { listOnly = false, holdReads = fals
     .replace('</head>', autoSelect ? '</head>' : '<script>window.__fulcraDevNoAutoSelect=true;</script></head>')
     .replace(/<meta name="connection-debug"[^>]*>/, debug === null ? '$&' : '')
     .replace('</head>', debug === null || debug === 'missing' ? '</head>' : `<meta name="connection-debug" content="${debug}"></head>`);
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes});
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes});
  const ui=page.frameLocator('iframe');
- if (listOnly) { await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
+ if (listOnly) { if (waitForContacts) await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();
  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
  return ui;

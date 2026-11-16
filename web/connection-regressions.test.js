@@ -16,7 +16,7 @@ test('catalog omitted names do not break connection discovery', async()=>{
 const incoming=(owner,type)=>({sharing_fulcra_userid:owner,grant_type:'user',datashare_name:'connect-agents-with-anyone: test',file_paths:[],file_history_paths:[],data_types:[type]});
 const outgoing=(selector,p=peer)=>({share_all_data:false,file_paths:[],file_history_paths:[],data_types:[selector],with_user_ids:[p],datashare_name:'connect-agents-with-anyone: test'});
 function discover(entries, out=[], inc=[]) {
-  return discoverThreads({callServerTool:async({name})=>({content:[{type:'text',text:name==='get_data_catalog'
+  return discoverThreads({callServerTool:async({name})=>({content:[{type:'text',text:name==='get_agent_contact_catalog'
     ?'Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':entries})
     :'Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing:out,incoming:inc})}]})});
 }

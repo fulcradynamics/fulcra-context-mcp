@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { open, peer } from './harness.js';
 
 test('initial selection waits for previews and chooses attention over discovery order', async ({page}) => {
-  const ui = await open(page, 900, {listOnly:true, direct:true, holdReads:true,
+  const ui = await open(page, 900, {listOnly:true, waitForContacts:false, direct:true, holdReads:true,
     status:{attention:true,reason:'Decision needed',assessed_at:'2026-10-13T12:00:00Z'}});
   await expect(ui.locator('#connection-detail')).toBeHidden();
   await page.clock.runFor(11000);

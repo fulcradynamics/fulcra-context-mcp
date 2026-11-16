@@ -34,7 +34,7 @@ import { discoverThreads } from './web/connections-discovery.js';
 let input = ''; for await (const chunk of process.stdin) input += chunk;
 const {catalog, shares} = JSON.parse(input);
 const result = await discoverThreads({callServerTool: async ({name}) => ({
-  content: [{type: 'text', text: name === 'get_data_catalog'
+  content: [{type: 'text', text: name === 'get_agent_contact_catalog'
     ? 'Available data types, grouped by compatible tool: ' + JSON.stringify(catalog)
     : 'Shares: ' + JSON.stringify(shares)}]})});
 console.log(JSON.stringify(result));

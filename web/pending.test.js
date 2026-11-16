@@ -9,11 +9,11 @@ async function discover(catalog, outgoing = [], incoming = []) {
   const calls = [];
   const result = await discoverThreads({ async callServerTool(call) {
     calls.push(call.name);
-    return { structuredContent: { result: call.name === 'get_data_catalog'
+    return { structuredContent: { result: call.name === 'get_agent_contact_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing:outgoing.map(shareFixture), incoming:[...incoming, ...incomingFixtures(catalog)] }) } };
   } });
-  assert.deepEqual(calls, ['get_data_catalog', 'list_shares']);
+  assert.deepEqual(calls, ['get_agent_contact_catalog', 'list_shares']);
   return result;
 }
 

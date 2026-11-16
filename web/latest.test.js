@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readLatest } from './conversation.js';
+import { readLatest, createLatestReader } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 
 const now = Date.parse('2026-10-13T13:00:00Z');
@@ -41,9 +41,15 @@ for (const [name, incoming, outgoing, expected, acknowledged] of [
   assert.ok(h.calls.length <= 4);
 });
 
-for (const fault of ['truncated', 'error']) test(`incomplete preview is explicit on ${fault}`, async () => {
-  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], fault);
+test('failed ACK history read rejects the preview', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], 'error');
   await assert.rejects(readLatest(h.app, sources, now));
+});
+
+test('bounded ACK lookup does not require completeness proof', async () => {
+  const h = harness([], [record('receipt', '12', 'ack')], 'truncated');
+  assert.deepEqual(contactPreview(await readLatest(h.app, sources, now)), { noContentWithin30Days: true });
+  assert.equal(h.calls.filter(c => !c.latest).length, 1);
 });
 
 test('detail anchoring can read old latest records without resolving a preview', async () => {
@@ -54,8 +60,32 @@ test('detail anchoring can read old latest records without resolving a preview',
   assert.equal(h.calls.length, 2);
 });
 
-test('bounded history does not misrepresent older content as absent', async () => {
+test('ack with no content in bounded history is a neutral preview', async () => {
   const old = { ...record('old', '10'), start_time: '2026-01-01T00:00:00Z' };
   const h = harness([old, record('receipt', '12', 'ack')], []);
-  await assert.rejects(readLatest(h.app, sources, now), /30.day|incomplete/i);
+  const latest = await readLatest(h.app, sources, now);
+  assert.deepEqual(contactPreview(latest), { noContentWithin30Days: true });
+  assert.equal(h.calls.filter(c => !c.latest).length, 1);
+});
+
+test('roster batch shares raw latest promises without waiting for preview history', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')]);
+  let finish;
+  const app = { callServerTool(call) {
+    if (!call.arguments.latest) return new Promise(resolve => { finish = () => resolve(h.app.callServerTool(call)); });
+    return h.app.callServerTool(call);
+  } };
+  const latest = createLatestReader(app, now);
+  const preview = latest(sources);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  const anchor = await latest(sources, { resolveContent: false });
+  assert.equal(anchor[0].record.id, 'receipt');
+  assert.equal(h.calls.length, 2);
+  assert.equal((await latest([sources[0]]))[0].record.id, 'incoming');
+  finish();
+  await preview;
+  await latest(sources);
+  assert.equal(h.calls.length, 3);
+  await createLatestReader(h.app, now)(sources, { resolveContent: false });
+  assert.equal(h.calls.length, 5);
 });

@@ -11,7 +11,7 @@ const old = 'MomentAnnotation/00000000-0000-4000-8000-000000000004';
 const entry = { id, name:'Agent connection', description:'connect-agents-with-anyone channel', ...schema };
 const share = { datashare_name:'connect-agents-with-anyone: synthetic', share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id], with_user_ids:[peer] };
 function app(catalog, outgoing=[share], incoming=[]) {
-  return { callServerTool: async ({name, arguments: args}) => ({content:[{type:'text',text:name === 'get_data_catalog'
+  return { callServerTool: async ({name, arguments: args}) => ({content:[{type:'text',text:name === 'get_agent_contact_catalog'
     ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':catalog.filter(e => !args.data_type || e.id === args.data_type)})
     : 'Shares: ' + JSON.stringify({own_fulcra_userid:own,outgoing,incoming})}]}) };
 }

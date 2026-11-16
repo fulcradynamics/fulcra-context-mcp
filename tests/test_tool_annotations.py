@@ -9,7 +9,7 @@ from mcp.client.stdio import stdio_client
 
 # Bounded private reads are closed-world even when the account is hosted.
 READS = set("""
-get_workouts get_data_catalog get_time_series get_records get_data_updates
+get_workouts get_data_catalog get_agent_contact_catalog get_time_series get_records get_data_updates
 get_sleep get_location get_calendar_events list_files list_shares get_user_info
 open_file_manager search_agent_contacts
 get_fulcra_settings get_contact_preferences get_message_check_status get_groups read_file

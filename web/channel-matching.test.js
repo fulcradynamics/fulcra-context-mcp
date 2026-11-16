@@ -16,7 +16,7 @@ async function discover(description, incomingDescription = '') {
     {...channelFixture({id: incoming, name: 'Return', fulcra_userid: peer}), description: incomingDescription},
   ];
   return discoverThreads({async callServerTool({name}) {
-    return {content: [{type: 'text', text: name === 'get_data_catalog'
+    return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': entries})
       : 'Shares: ' + JSON.stringify({own_fulcra_userid: own,
         outgoing: [{data_types: [out], with_user_ids: [peer], share_all_data: false}],
@@ -42,7 +42,7 @@ test('saved pairs default to newest outbox and allow explicit incoming overrides
     .map(([id, owner, match]) => ({...channelFixture({id, fulcra_userid: owner}),
       description: match ? metadata({peers: [{fulcra_userid: peer, data_type: match}]}) : ''}));
   const {threads: [thread]} = await discoverThreads({async callServerTool({name}) {
-    return {content: [{type: 'text', text: name === 'get_data_catalog'
+    return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': entries})
       : 'Shares: ' + JSON.stringify({own_fulcra_userid: own,
         outgoing: [out, secondOut].map(id => ({data_types: [id], with_user_ids: [peer], share_all_data: false})),
@@ -76,7 +76,7 @@ for (const broad of [{share_all_data: true}, {data_types: ['Event/*']}, {data_ty
   test('broad-only access leaves invitation pending ' + JSON.stringify(broad), async () => {
     const entry = {...channelFixture({id: out, fulcra_userid: own}), description: metadata({invitation: {prefix: 'handshake', state: 'prepared', code: 'a'.repeat(32)}})};
     const result = await discoverThreads({async callServerTool({name}) {
-      return {content: [{type: 'text', text: name === 'get_data_catalog'
+      return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
         ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': [entry]})
         : 'Shares: ' + JSON.stringify({own_fulcra_userid: own, incoming: [], outgoing: [{share_all_data: false, with_user_ids: [peer], ...broad}]})}]};
     }});

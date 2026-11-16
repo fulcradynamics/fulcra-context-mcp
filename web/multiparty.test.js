@@ -8,7 +8,7 @@ const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-
 const id='Event/00000000-0000-4000-8000-000000000004';
 const entry={id,name:'Shared label',description:'connect-agents-with-anyone channel',...schema};
 const share={share_all_data:false,datashare_name:'connect-agents-with-anyone: test',file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:[peer]};
-function app(outgoing) { return {callServerTool:async ({name})=>({content:[{type:'text',text: name==='get_data_catalog'
+function app(outgoing) { return {callServerTool:async ({name})=>({content:[{type:'text',text: name==='get_agent_contact_catalog'
   ? 'Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[entry,{...entry,fulcra_userid:peer}]})
   : 'Shares: '+JSON.stringify({own_fulcra_userid:own,outgoing,incoming:[{grant_type:'user',sharing_fulcra_userid:peer,datashare_name:share.datashare_name,file_paths:[],file_history_paths:[],data_types:[id]}]})}]})}; }
 test('exact owned roster is separate from unpaired incoming and changes identity on revocation',async()=>{
@@ -35,7 +35,7 @@ test('overlapping outgoing audiences do not merge by transitivity',async()=>{
  const base=app([{...share,with_user_ids:[peer,other]},{...share,data_types:[second],with_user_ids:[other,extra]}]);
  const wrapped={callServerTool:async call=>{
   const result=await base.callServerTool(call);
-  if(call.name==='get_data_catalog'){
+  if(call.name==='get_agent_contact_catalog'){
    const prefix='Available data types, grouped by compatible tool: ';
    const catalog=JSON.parse(result.content[0].text.slice(prefix.length));
    catalog['data types usable with: get_records'].push({...entry,id:second});

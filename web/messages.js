@@ -3,7 +3,7 @@ import { contactName, readable, contactIdentity } from './contact-identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources, availableSources, sourceKey } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
-import { readConversation, readLatest } from './conversation.js';
+import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { renderArtifacts } from './artifacts.js';
 import { getContextLifecycle } from './native-context.js';
@@ -130,7 +130,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     () => ({peer_fulcra_userid:selected?.peer, legacy_sources:selected?.convertedFrom ?? []}),
     {lifecycle:contextLifecycle, isCurrent:()=>!!selected?.convertedFrom?.length && !unavailable});
 
-  let generation = 0, sourceGeneration = 0;
+  let generation = 0, sourceGeneration = 0, readGeneration = 0;
   let returnFocus;
   let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer;
   let refreshState = { running: false, paused: false, nextAt: null };
@@ -337,7 +337,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!selected) return true;
     renderStatus();
     const requestGeneration = generation, requestSourceGeneration = sourceGeneration;
-    const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
+    const requestReadGeneration = ++readGeneration;
+    const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration
+      && readGeneration === requestReadGeneration;
     try {
       const available = discovery.threads.find(t => t.peer === selected.peer);
       if (available) incoming.update(available, drafts.get(selected.peer)?.excludedSources, drafts.get(selected.peer)?.outbox);
@@ -362,7 +364,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (!start && !requestedStart && thread) {
         let latest;
         // Anchoring history must remain available even when a preview cannot be resolved.
-        try { latest = await readLatest(app, thread.sources, Date.now(), { resolveContent: false }); } catch { throw new Error('Could not find the latest messages.'); }
+        try {
+          latest = await discovery.readLatest(thread.sources, { resolveContent: false });
+        } catch { throw new Error('Could not find the latest messages.'); }
         if (!current()) return true;
         const edges = ['Incoming', 'Outgoing'].map(d => latest.find(m => m.direction === d)).filter(Boolean)
           .map(m => Date.parse(m.record.recorded_at ?? m.record.start_time));
@@ -476,9 +480,10 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
     renderDisplay();
-    requestRefresh();
+    requestRefresh('selection');
   }
-  return { select, back: onBack, refresh: read, failed, contextLifecycle,
+  return { select, back: onBack, refresh: read, contextLifecycle,
+    failed(error) { readGeneration++; failed(error); },
     refreshState(state) { refreshState = state; renderStatus(); },
     dispose() {
     generation++; selected = undefined;

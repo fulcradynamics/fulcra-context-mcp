@@ -34,7 +34,7 @@ function harness({ catalog = [own, peer], shares = { own_fulcra_userid: 'me', ou
   const app = { async callServerTool(call) {
     calls.push(call);
     if (fail.includes(call.name)) throw new Error('offline');
-    if (call.name === 'get_data_catalog') return text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) }));
+    if (call.name === 'get_agent_contact_catalog') return text('Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) }));
     if (call.name === 'list_shares') return text('Shares: ' + JSON.stringify({...shares, outgoing:shares.outgoing.map(shareFixture), incoming:[...shares.incoming, ...incomingFixtures(catalog)]}));
     assert.equal(call.name, 'get_records', 'no writes, sends or acknowledgement tools');
     const key = `${call.arguments.fulcra_userid ?? 'me'}:${call.arguments.data_type}`;
@@ -105,7 +105,7 @@ test('per-source failure and truncation retain other results and provenance in w
   assert.equal(failed.warnings.filter(w => w.startsWith('Could not load messages')).length, 2);
 });
 
-for (const tool of ['get_data_catalog', 'list_shares']) test(`${tool} failure never reads cached channels`, async () => {
+for (const tool of ['get_agent_contact_catalog', 'list_shares']) test(`${tool} failure never reads cached channels`, async () => {
   const h = harness({ fail: [tool] });
   await assert.rejects(readConversation(h.app, { peer: 'peer' }, range), /discovery/i);
   assert.equal(h.calls.filter(c => c.name === 'get_records').length, 0);
