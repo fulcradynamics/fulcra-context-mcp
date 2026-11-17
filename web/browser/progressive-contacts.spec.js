@@ -87,7 +87,8 @@ test('external discovery failure fences a selected read already using the cached
   // Released history must not restore fresh context or acknowledge the contact.
   await expect.poll(() => page.evaluate(() => window.contexts.at(-1)?.content?.[0]?.text ?? '')).toContain('Stale');
   await expect(ui.locator('#message-status')).toContainText('Could not load messages');
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  // The list preview remains as stale evidence, not a completed history read.
+  await expect(ui.locator('#messages .message-row')).toHaveCount(1);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
 });
 

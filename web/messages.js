@@ -160,7 +160,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (overrides.messages === 'empty') text = 'No messages in this history window. (Debug preview)';
       if (overrides.messages === 'error') text = 'Could not load messages. (Debug preview; live retries unchanged)';
     }
-    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt || !!displayed;
+    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt;
     messages.hidden = overrides.messages === 'loading';
     ackPreview.hidden = !overrides.ack;
     ackPreview.textContent = overrides.ack ? `Debug preview: ${acknowledgementPreview[overrides.ack]}` : '';
@@ -382,6 +382,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       // A failed wider read keeps the applied window; the next refresh retries it.
       if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; }
       loadFailed = !success; unavailable = false;
+      firstAttempt = false;
       loading.hidden = true;
       displayed = result;
       render(result);
@@ -439,7 +440,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
 
-  function select(thread, button, { acknowledge = false } = {}) {
+  function select(thread, button, { acknowledge = false, preview } = {}) {
     acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
     generation++;
@@ -479,7 +480,10 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     panel.hidden = false; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
-    renderDisplay();
+    if (preview && selected.sources.some(s => sourceKey(s) === sourceKey(preview.source))) {
+      displayed = { messages: [preview], warnings: [...selected.warnings, 'Messages loading; displayed history is incomplete.'] };
+      render(displayed, false);
+    } else renderDisplay();
     requestRefresh('selection');
   }
   return { select, back: onBack, refresh: read, contextLifecycle,

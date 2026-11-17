@@ -64,7 +64,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   function choose(entry) {
     if (disposed || rows.get(entry.thread.peer) !== entry) return;
     userSelected = true; launchPending = false; launchStatus.textContent = '';
-    detail.select(entry.thread, entry.button, { acknowledge: true });
+    detail.select(entry.thread, entry.button, { acknowledge: true, preview: roster && entry.summary?.message });
   }
   let requestedPeer, launchPending = false, userSelected = false, autoSelected = false;
   let launchResolved = entrypoint.presentation === 'global' || entrypoint.directResource;
@@ -74,7 +74,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     const thread = roster.threads.find(t => t.peer === requestedPeer);
     if (thread) {
       launchStatus.textContent = '';
-      detail.select(thread, rows.get(requestedPeer)?.button);
+      const entry = rows.get(requestedPeer);
+      detail.select(thread, entry?.button, { preview: entry?.summary?.message });
     } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
   }
   // Open the highest-sorted conversation once after initial previews load,
@@ -87,7 +88,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
     if (!entry) return;
     autoSelected = true;
-    detail.select(entry.thread, entry.button);
+    detail.select(entry.thread, entry.button, { preview: entry.summary?.message });
   }
 
   const launchStatus = doc.createElement('p');

@@ -132,7 +132,7 @@ test('initial source removal stays filtered when temporary ownership ends before
   const initial = await page.evaluate(() => window.contexts.find(c => c.content.length)?.content[0].text);
   expect(initial).toContain(out);
   expect(initial).toContain(remaining);
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  await expect(ui.locator('#messages .message-row')).toHaveCount(1);
 
   await ui.locator('#onboarding-thread').getByRole('button', { name: 'Set up automatic checking' }).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
@@ -142,16 +142,22 @@ test('initial source removal stays filtered when temporary ownership ends before
   const restored = JSON.parse((await latest(page)).split('\n').slice(1).join('\n'));
   expect(restored.selected_sources.some(s => s.id === out)).toBe(false);
   expect(restored.selected_sources.some(s => s.id === remaining && s.fulcra_userid === own)).toBe(true);
-  expect(restored.messages).toEqual([]);
+  expect(restored.messages).toHaveLength(1);
+  expect(restored.messages[0].record.body).toBe('Broadcast message');
+  expect(restored.selected_sources).toContainEqual(expect.objectContaining({
+    id: restored.messages[0].source.id, fulcra_userid: restored.messages[0].source.fulcra_userid,
+  }));
   expect(await latest(page)).not.toContain(out);
   expect(await latest(page)).toContain(remaining);
   expect(beforeHandoff).toContain('Messages loading');
   expect(beforeHandoff).not.toContain(out);
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  await expect(ui.locator('#messages .message-row')).toHaveCount(1);
   expect(await page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
 
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
+  await expect(ui.locator('#message-loading')).toBeHidden();
   await expect.poll(() => latest(page)).toContain('Broadcast message');
+  await expect.poll(() => latest(page)).toContain(remaining);
   expect(await latest(page)).not.toContain(out);
   expect(await latest(page)).toContain(remaining);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
@@ -173,8 +179,12 @@ test('reopening applies saved source exclusions without waiting for discovery', 
   await expect.poll(() => latest(page)).not.toContain(peer + '-1');
   await ui.locator('.thread-button').filter({ hasText: 'Quiet contact' }).click();
   await expect.poll(() => latest(page)).toContain('navigation-peer');
-  await page.evaluate(() => { window.holdDiscovery = true; });
+  await page.evaluate(() => { window.holdDiscovery = true; window.holdReads = 'history'; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  await expect.poll(() => latest(page)).toContain('Messages loading');
+  expect(await latest(page)).not.toContain(peer + '-3');
+  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   const snapshot = JSON.parse((await latest(page)).split('\n').slice(1).join('\n'));
   expect(snapshot.selected_sources.some(s => s.fulcra_userid === peer)).toBe(false);

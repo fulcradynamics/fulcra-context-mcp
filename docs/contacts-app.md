@@ -94,7 +94,10 @@ Messages use the SDK `CHANNEL_FIELDS` schema (`id`, `sender`, `kind`, `body`, pl
 optional `recipients`, `topic`, `priority`, `in_reply_to`, `artifacts`). Bodies
 render literally.
 
-Opening a contact reuses the roster and its latest-read results. History starts
+Opening a contact immediately shows its existing list-preview message, if that
+source is still selected, while the normal history read runs. The preview is
+incomplete context, not a completed read or an acknowledgement; returned history
+replaces it. Opening reuses the roster and its latest-read results. History starts
 one week before the earlier of the latest incoming and outgoing records;
 **Load more history** adds two weeks.
 Switching contacts reads only the selected thread, without another catalog,
