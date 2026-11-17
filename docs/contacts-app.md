@@ -97,7 +97,12 @@ render literally.
 Opening a contact immediately shows its existing list-preview message, if that
 source is still selected, while the normal history read runs. The preview is
 incomplete context, not a completed read or an acknowledgement; returned history
-replaces it. Opening reuses the roster and its latest-read results. History starts
+replaces it. Returning to a previously opened thread immediately restores its
+loaded messages and history window, including **Load more history** expansions,
+then refreshes that same window. This cache lasts only for the open app; cached
+records are marked stale until refreshed, and excluded or revoked sources stay
+filtered. Each fresh history result replaces the cached view, including an empty
+result. Opening reuses the roster and its latest-read results. History starts
 one week before the earlier of the latest incoming and outgoing records;
 **Load more history** adds two weeks.
 Switching contacts reads only the selected thread, without another catalog,

@@ -424,7 +424,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     contextLifecycle.invalidate();
     if (displayed) render(displayed, ready);
   };
+  function rememberHistory() {
+    if (selected && displayed) drafts.get(selected.peer).history = { messages: displayed.messages, start, requestedStart, lastSuccess };
+  }
   const onBack = () => {
+    rememberHistory();
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
@@ -441,6 +445,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   viewer.addEventListener('input', onViewer);
 
   function select(thread, button, { acknowledge = false, preview } = {}) {
+    rememberHistory();
     acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
     generation++;
@@ -480,7 +485,18 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     panel.hidden = false; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
-    if (preview && selected.sources.some(s => sourceKey(s) === sourceKey(preview.source))) {
+    const cached = drafts.get(thread.peer).history;
+    if (cached) {
+      ({ start, requestedStart, lastSuccess } = cached);
+      attemptedStart = requestedStart ?? start;
+      more.disabled = Boolean(requestedStart);
+      displayed = {
+        messages: cached.messages.filter(m => selected.sources.some(s => sourceKey(s) === sourceKey(m.source)))
+          .map(m => ({ ...m, stale: true })),
+        warnings: [...selected.warnings, 'Messages loading; cached history is not yet refreshed.'],
+      };
+      render(displayed, false);
+    } else if (preview && selected.sources.some(s => sourceKey(s) === sourceKey(preview.source))) {
       displayed = { messages: [preview], warnings: [...selected.warnings, 'Messages loading; displayed history is incomplete.'] };
       render(displayed, false);
     } else renderDisplay();
