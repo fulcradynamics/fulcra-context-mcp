@@ -49,7 +49,7 @@ export async function readConversation(app, selected, range, isCurrent = () => t
     discovery = supplied ?? await discoverThreads(app);
   } catch {
     if (!isCurrent()) return;
-    throw new Error('Thread discovery failed (contact catalog/list_shares or missing own user ID). No cached channels were read.');
+    throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
   }
   if (!isCurrent()) return;
   const thread = discovery.threads.find(t => t.peer === selected.peer);

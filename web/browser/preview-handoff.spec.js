@@ -4,7 +4,7 @@ import { open, peer, other, incoming } from './harness.js';
 const weekend = ui => ui.locator('#connections .thread-button').filter({ hasText: 'Weekend' });
 const requestCounts = () => ({
   latest: window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length,
-  catalog: window.calls.filter(c => c.name === 'get_agent_contact_catalog').length,
+  catalog: window.calls.filter(c => c.name === 'get_data_catalog').length,
   shares: window.calls.filter(c => c.name === 'list_shares').length,
 });
 

@@ -11,7 +11,7 @@ const old = 'MomentAnnotation/00000000-0000-4000-8000-000000000004';
 const entry = { id, name:'Agent connection', description:'connect-agents-with-anyone channel', ...schema };
 const share = { datashare_name:'connect-agents-with-anyone: synthetic', share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id], with_user_ids:[peer] };
 function app(catalog, outgoing=[share], incoming=[]) {
-  return { callServerTool: async ({name, arguments: args}) => ({content:[{type:'text',text:name === 'get_agent_contact_catalog'
+  return { callServerTool: async ({name, arguments: args}) => ({content:[{type:'text',text:name === 'get_data_catalog'
     ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':catalog.filter(e => !args.data_type || e.id === args.data_type)})
     : 'Shares: ' + JSON.stringify({own_fulcra_userid:own,outgoing,incoming})}]}) };
 }
@@ -28,7 +28,7 @@ for (const prefix of ['connect-agents-with-anyone', 'connect-our-agents']) {
     assert.equal((await discoverThreads(app([{ ...channel, fulcra_userid: peer }], [], [incoming]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [{ ...share, datashare_name: `${prefix}: test` }]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 1);
-    assert.equal((await discoverThreads(app([{ ...channel, fields: {} }]))).threads.length, 0);
+    assert.equal((await discoverThreads(app([{ ...channel, name: 'Notes', description: 'Notes' }]))).threads.length, 0);
   });
 }
 test('same-peer broad overlap retains both directions without changing the audience', async () => {
@@ -67,9 +67,8 @@ test('broad access policy neither establishes nor expands a contact', async () =
   assert.deepEqual(result.threads[0].expectedPeerUserids, ['another-peer', peer].sort());
 });
 
-test('all covering grants and channel schema are checked', async () => {
+test('all covering grants are checked', async () => {
   assert.equal((await discoverThreads(app([entry],[share,{share_all_data:true}]))).threads.length,1);
-  assert.equal((await discoverThreads(app([{...entry,fields:{}}]))).threads.length,0);
 });
 test('legacy group-only entries are excluded and owned provenance suppresses repeat conversion', async () => {
   const legacy={id:old,name:'Mesh Outbox old',fulcra_userid:peer};

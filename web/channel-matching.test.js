@@ -16,7 +16,7 @@ async function discover(description, incomingDescription = '') {
     {...channelFixture({id: incoming, name: 'Return', fulcra_userid: peer}), description: incomingDescription},
   ];
   return discoverThreads({async callServerTool({name}) {
-    return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
+    return {content: [{type: 'text', text: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': entries})
       : 'Shares: ' + JSON.stringify({own_fulcra_userid: own,
         outgoing: [{data_types: [out], with_user_ids: [peer], share_all_data: false}],
@@ -24,8 +24,9 @@ async function discover(description, incomingDescription = '') {
   }});
 }
 
-test('unmarked usable channels remain discoverable', async () => {
-  const result = await discover('Project notes');
+test('unmarked channels need a connection hint or a saved match', async () => {
+  assert.equal((await discover('Project notes')).threads.length, 0);
+  const result = await discover('Agent contact channel', 'Agent contact channel');
   assert.equal(result.threads.length, 1);
   assert.equal(result.threads[0].sources.length, 2);
   assert.equal(selectedSources(result.threads[0]).sources.length, 2);
@@ -42,7 +43,7 @@ test('saved pairs default to newest outbox and allow explicit incoming overrides
     .map(([id, owner, match]) => ({...channelFixture({id, fulcra_userid: owner}),
       description: match ? metadata({peers: [{fulcra_userid: peer, data_type: match}]}) : ''}));
   const {threads: [thread]} = await discoverThreads({async callServerTool({name}) {
-    return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
+    return {content: [{type: 'text', text: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': entries})
       : 'Shares: ' + JSON.stringify({own_fulcra_userid: own,
         outgoing: [out, secondOut].map(id => ({data_types: [id], with_user_ids: [peer], share_all_data: false})),
@@ -64,8 +65,8 @@ test('missing saved match falls back to readable incoming channels', async () =>
   assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, unrelated.id]);
 });
 
-test('unmarked incoming channels remain readable until explicitly excluded', async () => {
-  const {threads: [thread]} = await discover('Project');
+test('unmatched incoming channels remain readable until explicitly excluded', async () => {
+  const {threads: [thread]} = await discover('Agent contact channel', 'Agent contact channel');
   const unrelated = {...thread.sources.find(s => s.direction === 'Incoming'), id: incoming.slice(0, -1)+'1'};
   thread.sources.push(unrelated);
   assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, incoming, unrelated.id]);
@@ -76,7 +77,7 @@ for (const broad of [{share_all_data: true}, {data_types: ['Event/*']}, {data_ty
   test('broad-only access leaves invitation pending ' + JSON.stringify(broad), async () => {
     const entry = {...channelFixture({id: out, fulcra_userid: own}), description: metadata({invitation: {prefix: 'handshake', state: 'prepared', code: 'a'.repeat(32)}})};
     const result = await discoverThreads({async callServerTool({name}) {
-      return {content: [{type: 'text', text: name === 'get_agent_contact_catalog'
+      return {content: [{type: 'text', text: name === 'get_data_catalog'
         ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records': [entry]})
         : 'Shares: ' + JSON.stringify({own_fulcra_userid: own, incoming: [], outgoing: [{share_all_data: false, with_user_ids: [peer], ...broad}]})}]};
     }});

@@ -30,7 +30,7 @@ function toolResult(name, args = {}) {
       topic: 'open_invitation ' + 'f'.repeat(32), inviter_name: standingName } };
   }
   if (name === 'get_message_check_status') return { structuredContent: checkStatus };
-  if (name === 'get_agent_contact_catalog') {
+  if (name === 'get_data_catalog') {
     let catalog = scenario.catalog;
     if (args.data_type) catalog = catalog.filter(e => e.id === args.data_type && (e.fulcra_userid || own) === (args.fulcra_userid || own));
     return text(CATALOG_PREFIX + JSON.stringify({ 'data types usable with: get_records': catalog }));
@@ -79,7 +79,7 @@ addEventListener('message', ({ data: r, source }) => {
     const result = toolResult(name, args);
     // Slow the whole-account discovery calls so the loading spinner is visible on
     // initial load and when "Refresh contacts" is clicked; keep reads snappy.
-    const slow = name === 'list_shares' || name === 'get_agent_contact_catalog';
+    const slow = name === 'list_shares' || (name === 'get_data_catalog' && !args.data_type);
     if (slow) setTimeout(() => reply(r.id, result), 2000);
     else reply(r.id, result);
   } else if (r.method === 'ui/request-display-mode') {

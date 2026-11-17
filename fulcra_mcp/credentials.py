@@ -63,7 +63,6 @@ class SynchronizedFulcraAPI(FulcraAPI):
 logger = structlog.getLogger(__name__)
 
 stdio_fulcra: FulcraAPI | None = None
-_stdio_client_lock = threading.Lock()
 
 NOT_CONNECTED = (
     "This session is not connected to a Fulcra account. Reconnect the Fulcra "
@@ -194,29 +193,28 @@ def get_fulcra_object() -> FulcraAPI:
     global stdio_fulcra
 
     if settings.fulcra_environment == "stdio":
-        with _stdio_client_lock:
-            if stdio_fulcra is not None:
-                return stdio_fulcra
+        if stdio_fulcra is not None:
+            return stdio_fulcra
 
-            creds = _load_stdio_credentials()
-            if creds is not None:
+        creds = _load_stdio_credentials()
+        if creds is not None:
 
-                def on_refresh(new_creds: FulcraCredentials):
-                    creds.access_token = new_creds.access_token
-                    creds.access_token_expiration = new_creds.access_token_expiration
-                    if new_creds.refresh_token:
-                        creds.refresh_token = new_creds.refresh_token
-                    _save_stdio_credentials(creds)
-                    logger.info("stdio_credentials_refreshed")
+            def on_refresh(new_creds: FulcraCredentials):
+                creds.access_token = new_creds.access_token
+                creds.access_token_expiration = new_creds.access_token_expiration
+                if new_creds.refresh_token:
+                    creds.refresh_token = new_creds.refresh_token
+                _save_stdio_credentials(creds)
+                logger.info("stdio_credentials_refreshed")
 
-                stdio_fulcra = SynchronizedFulcraAPI(
-                    credentials=creds,
-                    refresh_callback=on_refresh,
-                    **fulcra_api_kwargs(),
-                )
-                return stdio_fulcra
+            stdio_fulcra = SynchronizedFulcraAPI(
+                credentials=creds,
+                refresh_callback=on_refresh,
+                **fulcra_api_kwargs(),
+            )
+            return stdio_fulcra
 
-            return _stdio_login_pending()
+        return _stdio_login_pending()
 
     mcp_access_token = get_access_token()
     if not mcp_access_token:

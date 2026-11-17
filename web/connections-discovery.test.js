@@ -13,7 +13,7 @@ for (const named of [false, true]) test(`identifier is display only, outgoing pr
     assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer', 'unknown']);
     assert.equal(result.selections[1].sources.length, 3);
     assert.equal(result.selections[1].sources.find(s => s.id === 'Event/a').name, 'Mesh Outbox same name');
-    assert.deepEqual(result.calls.map(c => c.name), ['get_agent_contact_catalog', 'list_shares']);
+    assert.deepEqual(result.calls.map(c => c.name), ['get_data_catalog', 'list_shares']);
   }
   catalog[1].description = '[mesh_identifier: "Renamed"]';
   const renamed = await load(catalog, [grant('z'), grant('a')]);
@@ -27,7 +27,7 @@ test('failed discovery drains both requests before releasing the scheduler', asy
   let finish, settled = false;
   const pending = discoverThreads({ callServerTool({ name }, options) {
     assert.equal(options.timeout, 30000);
-    return name === 'get_agent_contact_catalog' ? Promise.reject(new Error('offline'))
+    return name === 'get_data_catalog' ? Promise.reject(new Error('offline'))
       : new Promise(resolve => { finish = resolve; });
   } }).catch(() => { settled = true; });
   for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -38,7 +38,7 @@ test('failed discovery drains both requests before releasing the scheduler', asy
 
 test('sharing account names are labeled without inventing agent names or grouping by name', async () => {
   const result = await discoverThreads({ async callServerTool({ name }) {
-    return text(name === 'get_agent_contact_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')].map(channelFixture) })
+    return text(name === 'get_data_catalog' ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': [entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')].map(channelFixture) })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [], incoming: [
         ...incomingFixtures([entry('a', 'peer'), entry('b', 'other'), entry('c', 'unknown')]),
         { sharing_fulcra_userid: 'peer', sharing_fulcra_user_name: 'Alex' },
@@ -49,49 +49,53 @@ test('sharing account names are labeled without inventing agent names or groupin
 });
 
 const entry = (id, owner) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
-test('bulk schemas discover channels without exact catalogs and exclude unrelated Events', async () => {
-  const catalog = [
-    channelFixture({ ...entry('own'), description: 'Agent contact channel' }),
-    channelFixture({ ...entry('incoming', 'peer'), description: 'connect-our-agents channel' }),
-    { ...entry('notes', 'other'), description: 'Personal notes' },
-  ];
+const discover = async (catalog, shares) => {
   const calls = [];
   const result = await discoverThreads({ async callServerTool(call) {
     calls.push(call);
-    return text(call.name === 'get_agent_contact_catalog'
+    return text(call.name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [grant('own')],
-        incoming: incomingFixtures(catalog).map(({ datashare_name, ...s }) => s) }));
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', incoming: [], ...shares }));
   } });
-  assert.deepEqual(calls.map(c => c.name), ['get_agent_contact_catalog', 'list_shares']);
-  assert.deepEqual(result.threads.map(t => t.peer), ['peer']);
-  assert.equal(result.threads[0].sources.length, 2);
-});
-test('failed schema candidates warn while healthy unmarked contacts remain available', async () => {
-  const catalog = [channelFixture(entry('healthy')), { ...entry('failed'), schema_error: true }, entry('missing')];
-  const result = await discoverThreads({ async callServerTool({ name }) {
-    return text(name === 'get_agent_contact_catalog'
-      ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: catalog.map(e => grant(e.id.slice(6))), incoming: [] }));
-  } });
-  assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/healthy']]);
-  assert.match(result.warnings.join(' '), /Partial discovery.*1 channel schema unavailable/);
-  assert.ok(result.threads[0].warnings.includes(result.warnings[0]));
+  return { calls, result };
+};
+
+test('one catalog and one shares call discover contacts without per-type lookups', async () => {
+  const catalog = [{ ...entry('own'), description: 'Agent contact channel' },
+    { ...entry('incoming', 'peer'), description: 'connect-our-agents channel' }];
+  const { calls, result } = await discover(catalog, { outgoing: [grant('own')],
+    incoming: incomingFixtures(catalog).map(({ datashare_name, ...s }) => s) });
+  assert.deepEqual(calls, [{ name: 'get_data_catalog', arguments: {} }, { name: 'list_shares', arguments: { direction: 'both' } }]);
+  assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/own', 'Event/incoming']]);
 });
 
-test('app catalog schemas recognize unmarked channels without per-type catalogs', async () => {
-  const calls = [];
-  const catalog = [{ ...channelFixture(entry('plain')), description: 'Project notes' }, entry('unrelated', 'other')];
-  const result = await discoverThreads({ async callServerTool(call) {
-    calls.push(call);
-    if (call.name === 'get_data_catalog') throw new Error('Panel must use its bulk schema catalog');
-    return text(call.name === 'get_agent_contact_catalog'
-      ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog })
-      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', outgoing: [grant('plain')], incoming: [] }));
-  } });
-  assert.deepEqual(calls.map(c => c.name), ['get_agent_contact_catalog', 'list_shares']);
-  assert.deepEqual(result.threads.map(t => t.peer), ['peer']);
+test('narrowly shared Events need a connection-like name or description', async () => {
+  const catalog = [
+    { ...entry('notes'), name: 'Workout notes', description: 'Personal notes' },
+    { ...entry('prefixed'), name: 'connect-our-agents: me with Alex', description: 'Notes' },
+    { ...entry('described'), name: 'Plain', description: 'Agent contact channel: messages sent to Alex.' },
+    { ...entry('labelled'), name: 'Plain', description: 'Contact label: "Alex"' },
+    { ...entry('legacy'), name: 'Plain', description: '[mesh_identifier: "Alex"]' },
+  ];
+  const { result } = await discover(catalog, { outgoing: catalog.map(e => grant(e.id.slice(6))) });
+  assert.deepEqual(result.threads[0].sources.map(s => s.id).sort(),
+    ['Event/described', 'Event/labelled', 'Event/legacy', 'Event/prefixed']);
+  assert.deepEqual(result.pending, []);
 });
+
+for (const named of [false, true]) test(`an own channel's saved match identifies an unmarked incoming channel; named=${named}`, async () => {
+  const match = JSON.stringify({ version: 1, peers: [{ fulcra_userid: '00000000-0000-4000-8000-000000000002', data_type: 'Event/00000000-0000-4000-8000-00000000000a' }] });
+  const peer = '00000000-0000-4000-8000-000000000002';
+  const catalog = [
+    { ...entry('own'), description: named ? `Connection details: ${match}` : `[agent_connection: ${match}]` },
+    { id: 'Event/00000000-0000-4000-8000-00000000000a', name: 'Their stuff', description: 'Anything', fulcra_userid: peer },
+    { id: 'Event/00000000-0000-4000-8000-00000000000b', name: 'Other stuff', description: 'Anything', fulcra_userid: peer },
+  ];
+  const { result } = await discover(catalog, { outgoing: [{ ...grant('own'), with_user_ids: [peer] }],
+    incoming: catalog.slice(1).map(e => ({ sharing_fulcra_userid: peer, grant_type: 'user', data_types: [e.id] })) });
+  assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/own', 'Event/00000000-0000-4000-8000-00000000000a']]);
+});
+
 for (const named of [false, true]) test(`setup links belong only to eligible own outgoing channels; named=${named}`, async () => {
   const url = 'codex://threads/00000000-0000-0000-0000-000000000001';
   const linked = (id, owner) => ({ ...entry(id, owner), description: named ? `Setup conversation: "${url}"` : `[connection_setup_session: "${url}"]` });
@@ -129,7 +133,7 @@ async function load(catalog, outgoing = [], own = 'me') {
   const calls = [];
   const result = await discoverThreads({ async callServerTool(call) {
     calls.push(call);
-    return text(call.name === 'get_agent_contact_catalog'
+    return text(call.name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog.map(channelFixture) })
       : 'Shares: ' + JSON.stringify({ own_fulcra_userid: own, outgoing:outgoing.map(shareFixture), incoming: incomingFixtures(catalog, own) }));
   } });
@@ -141,7 +145,7 @@ test('one exact peer row deduplicates both sides and multiple narrow channels; n
   assert.equal(result.selections.length, 2);
   assert.deepEqual(result.selections.map(t => t.peer), ['other', 'peer']);
   assert.equal(result.selections[1].sources.length, 3);
-  assert.deepEqual(result.calls.map(c => c.name), ['get_agent_contact_catalog', 'list_shares']);
+  assert.deepEqual(result.calls.map(c => c.name), ['get_data_catalog', 'list_shares']);
 });
 
 test('only catalog groups compatible with get_records are readable', () => {

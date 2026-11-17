@@ -844,7 +844,7 @@
     {
       "name": "get_records",
       "title": "Get Records",
-      "description": "Retrieve raw records in a range, or the latest v1 record without dates.\n\nSet latest=true and omit both dates for a single latest v1 record.\n\nWorks with every type listed by `get_data_catalog`, including user-defined\nones (\"<BaseType>/<uuid>\" IDs); the correct API endpoint is chosen\nautomatically. Records that cover a time range are included when any part\nof it intersects the requested window. Results are raw samples \u2014 they may\ncome from multiple sources and can overlap; for calculated per-interval\nvalues of numeric data types, prefer `get_time_series`. Result\ntimestamps include time zones; translate them to the user's local time\nzone when known.",
+      "description": "Retrieve raw records in a range, or the latest v1 record without dates.\n\nSet latest=true and omit both dates for a single latest v1 record.\n\nWorks with every type listed by `get_data_catalog`, including user-defined\nones (\"<BaseType>/<uuid>\" IDs); the correct API endpoint is chosen\nautomatically. Records that cover a time range are included when any part\nof it intersects the requested window. Results are raw samples — they may\ncome from multiple sources and can overlap; for calculated per-interval\nvalues of numeric data types, prefer `get_time_series`. Result\ntimestamps include time zones; translate them to the user's local time\nzone when known.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -892,7 +892,7 @@
     {
       "name": "get_data_updates",
       "title": "Get Data Updates",
-      "description": "Summarize the data that arrived in the user's account during a period of time.\n\nThe time range filters on when records were processed/synced into Fulcra,\nNOT on the records' own timestamps \u2014 e.g. last night's sleep records\ntypically arrive this morning. Use this to find out what new data exists\nsince a previous check, then query the changed types with the appropriate\ntools.",
+      "description": "Summarize the data that arrived in the user's account during a period of time.\n\nThe time range filters on when records were processed/synced into Fulcra,\nNOT on the records' own timestamps — e.g. last night's sleep records\ntypically arrive this morning. Use this to find out what new data exists\nsince a previous check, then query the changed types with the appropriate\ntools.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1694,7 +1694,7 @@
           ]
         },
         "ui": {
-          "resourceUri": "ui://fulcra/contacts/thread/v87.html",
+          "resourceUri": "ui://fulcra/contacts/thread/v85.html",
           "visibility": [
             "model",
             "app"
@@ -1743,45 +1743,7 @@
           ]
         },
         "ui": {
-          "resourceUri": "ui://fulcra/contacts/v87.html",
-          "visibility": [
-            "app"
-          ]
-        },
-        "fastmcp": {
-          "tags": []
-        }
-      }
-    },
-    {
-      "name": "get_agent_contact_catalog",
-      "title": "Get Agent Contact Catalog",
-      "description": "List contact-channel candidates with their schemas for the contacts panel.",
-      "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {}
-      },
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "type": "object",
-        "x-fastmcp-wrap-result": true
-      },
-      "annotations": {
-        "title": "Get Agent Contact Catalog",
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "openWorldHint": false
-      },
-      "_meta": {
-        "ui": {
+          "resourceUri": "ui://fulcra/contacts/v85.html",
           "visibility": [
             "app"
           ]
@@ -2088,7 +2050,7 @@
     },
     {
       "name": "thread_html",
-      "uri": "ui://fulcra/contacts/thread/v87.html",
+      "uri": "ui://fulcra/contacts/thread/v85.html",
       "description": "Same full-panel renderer; startup waits for the optional exact target.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {
@@ -2105,7 +2067,7 @@
     },
     {
       "name": "contacts_html",
-      "uri": "ui://fulcra/contacts/thread/v87.html?startup=resource",
+      "uri": "ui://fulcra/contacts/thread/v85.html?startup=resource",
       "description": "Direct-resource list: no invoking tool result is required for startup.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {
@@ -2122,7 +2084,7 @@
     },
     {
       "name": "contacts_html_bundle",
-      "uri": "ui://fulcra/contacts/v87.html",
+      "uri": "ui://fulcra/contacts/v85.html",
       "description": "Serve the packaged UI through MCP, not a separate HTTP endpoint.",
       "mimeType": "text/html;profile=mcp-app",
       "_meta": {

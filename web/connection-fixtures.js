@@ -1,6 +1,5 @@
 import schema from '../tests/fixtures/connection-schema.json' with { type: 'json' };
 
-// App-only bulk catalog includes schemas; the public catalog does not.
 // Synthetic Event fixtures for presentation tests; authorization tests supply
 // their own explicit catalog and grants (connections.test.js).
 export function channelFixture(entry) {

@@ -47,12 +47,13 @@ not an authorization boundary.
 
 ## Discovery
 
-Contacts are schema-compatible Event channels shared with exact, narrow direct
-grants. Prefixes (`connect-our-agents` or `connect-agents-with-anyone`) are
-discovery hints, not requirements. The panel fetches the app-only
-`get_agent_contact_catalog` and `list_shares` once per roster refresh. The catalog
-tool reads one catalog snapshot and fetches Event schemas concurrently; the
-model-visible `get_data_catalog` contract is unchanged.
+Contacts are Event channels shared with exact, narrow direct grants whose name or
+description looks like a connection: a `connect-our-agents` or
+`connect-agents-with-anyone` prefix, `Agent contact channel`, a Contact label or
+Connection details. An incoming channel named in an own channel's Connection
+details is a contact channel whatever it is called. The panel calls
+`get_data_catalog` and `list_shares` once per roster refresh, with no per-type
+lookups; the server still checks the channel schema before any send.
 [Channel metadata](channel-metadata.md) retains resolved pairs without making
 metadata a prerequisite:
 

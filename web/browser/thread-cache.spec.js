@@ -21,7 +21,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   const before = await page.evaluate(() => ({
     latest: window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length,
     writes: window.calls.filter(c => c.name === 'send_agent_contact_message').length,
-    catalog: window.calls.filter(c => c.name === 'get_agent_contact_catalog').length,
+    catalog: window.calls.filter(c => c.name === 'get_data_catalog').length,
     shares: window.calls.filter(c => c.name === 'list_shares').length,
   }));
   await page.evaluate(() => { window.holdReads = 'history'; window.calls = window.calls.filter(c => c.name !== 'get_records' || c.arguments.latest); });
@@ -33,7 +33,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   expect(reads.every(c => c.arguments.start_time === expanded)).toBe(true);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length)).toBe(before.latest);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message').length)).toBe(before.writes);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_agent_contact_catalog').length)).toBe(before.catalog);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(before.catalog);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'list_shares').length)).toBe(before.shares);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(ui.locator('#message-loading')).toBeHidden();

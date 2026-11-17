@@ -19,7 +19,7 @@ test('opening a completed contact does not wait for unrelated previews or redisc
   const ui = await open(page, 900, { listOnly: true, waitForContacts: false, holdReads: other, direct: true });
   await expect(alex(ui)).toBeVisible();
   const counts = () => page.evaluate(() => ({
-    catalog: window.calls.filter(c => c.name === 'get_agent_contact_catalog').length,
+    catalog: window.calls.filter(c => c.name === 'get_data_catalog').length,
     shares: window.calls.filter(c => c.name === 'list_shares').length,
     latest: window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length,
   }));
@@ -128,7 +128,7 @@ test('late explicit target reuses the initial roster while unrelated previews ar
   await page.evaluate(() => window.releaseLaunch());
   await expect(ui.locator('#message-title')).toHaveText('Alex');
   await expect(ui.locator('#messages .message-row')).toHaveCount(3);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_agent_contact_catalog').length)).toBe(1);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(1);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'list_shares').length)).toBe(1);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length)).toBe(4);
 });

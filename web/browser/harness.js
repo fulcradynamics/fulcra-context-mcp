@@ -55,7 +55,7 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
     if(window.holdMatches)window.releaseMatch=respond;else respond();
     return;
    }
-   const discovery=['get_agent_contact_catalog','list_shares'].includes(name);
+   const discovery=['get_data_catalog','list_shares'].includes(name);
    if(discovery && window.failDiscovery){reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic discovery failure'}]});return;}
    if(name==='send_agent_contact_message'){
     if(window.sendResult) { window.sendResult(r, reply); return; }
@@ -66,7 +66,7 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
     return;
    }
    let text;
-   if(name==='get_agent_contact_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
+   if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
     ...(window.navigationContact ? [
      {id:'Event/navigation-out',name:'Quiet contact',description:'connect-agents-with-anyone channel'},
      {id:'Event/navigation-in',name:'Quiet contact',fulcra_userid:'navigation-peer',description:'connect-agents-with-anyone channel'},
@@ -81,9 +81,9 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
     ...[...(!window.excludeOut ? [out] : []),...(window.second ? [out.slice(0,-1)+'8'] : [])].map(id=>({created_at: id === out ? '2026-10-10T12:00:00Z' : '2026-10-12T12:00:00Z',share_all_data:false,file_paths:[],file_history_paths:[],data_types:[id],with_user_ids:window.audience,datashare_name:'connect-agents-with-anyone: synthetic'}))],incoming:[...(window.navigationContact ? [{sharing_fulcra_userid:'navigation-peer',sharing_fulcra_user_name:'Quiet contact',grant_type:'user',file_paths:[],file_history_paths:[],data_types:['Event/navigation-in'],datashare_name:'connect-agents-with-anyone: synthetic'}] : []), ...(window.excludeIncoming ? [] : [peer,other]).map((id,i)=>({sharing_fulcra_userid:id,sharing_fulcra_user_name:i?'Chris':'Alex',grant_type:'user',file_paths:[],file_history_paths:[],data_types:[incoming],datashare_name:'connect-agents-with-anyone: synthetic'}))]});
    if (window.pairedChannels && discovery) {
     const secondOut = out.slice(0,-1)+'8', secondIn = incoming.slice(0,-1)+'9';
-    if (name === 'get_agent_contact_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
+    if (name === 'get_data_catalog') text = 'Available data types, grouped by compatible tool: ' + JSON.stringify({'data types usable with: get_records':
      [[out, own, incoming], [secondOut, own, secondIn], [incoming, peer], [secondIn, peer]].map(([id, owner, match]) => ({id, name: id, fulcra_userid: owner,
-      description: 'Agent contact channel ' + (match ? (window.namedFields ? 'Connection details: ' : '[agent_connection: ')+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+(window.namedFields ? '' : ']') : '')}))});
+      description: match ? (window.namedFields ? 'Connection details: ' : '[agent_connection: ')+JSON.stringify({version:1,peers:[{fulcra_userid:peer,data_type:match}]})+(window.namedFields ? '' : ']') : ''}))});
     else text = 'Shares: ' + JSON.stringify({own_fulcra_userid:own,
      outgoing:[out,secondOut].map(id=>({share_all_data:false,data_types:[id],with_user_ids:[peer]})),
      incoming:[incoming,secondIn].map(id=>({sharing_fulcra_userid:peer,grant_type:'user',data_types:[id]}))});
@@ -98,13 +98,6 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
     const selectedRecords = window.pairedChannels ? (a.fulcra_userid ? [{id:a.data_type+'-message', start_time:a.data_type === incoming ? '2026-10-13T11:00:00Z' : '2026-10-13T11:59:00Z', sender:'Peer',kind:'message',body:a.data_type === incoming ? 'First paired message' : 'Second paired message'}] : []) : records;
     const channelRecords = window.channelRecords?.[JSON.stringify([a.fulcra_userid ?? own, a.data_type])] ?? selectedRecords;
     text=`Records for ${a.data_type} from start to end: `+JSON.stringify(a.latest ? channelRecords.slice(-1) : channelRecords);
-   }
-   // Only the app-only catalog projects schemas into bulk entries.
-   if (name === 'get_agent_contact_catalog') {
-    const prefix = 'Available data types, grouped by compatible tool: ';
-    const catalog = JSON.parse(text.slice(prefix.length));
-    catalog['data types usable with: get_records'] = catalog['data types usable with: get_records'].map(e => ({ ...e, ...schema }));
-    text = prefix + JSON.stringify(catalog);
    }
    if (discovery && window.unmarkedChannels) text = text.replaceAll('connect-agents-with-anyone', 'Project');
    const respond=()=>reply(r.id,{content:[{type:'text',text}]});

@@ -9,7 +9,6 @@ from fastmcp.tools import ToolResult
 
 from . import server_info, tools
 from .apps import app_mcp
-from .contact_catalog import catalog_mcp
 from .fulcra_settings import settings_mcp
 from .mentions import mentions_mcp
 from .provider import oauth_provider
@@ -43,7 +42,6 @@ def _create_server(instructions, tool_provider) -> FastMCP:
     )
     server.add_provider(tool_provider)
     server.mount(app_mcp)
-    server.mount(catalog_mcp)
     server.mount(mentions_mcp)
     server.mount(settings_mcp)
     return server

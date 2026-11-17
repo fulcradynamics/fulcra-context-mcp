@@ -1,8 +1,7 @@
 import { parseContactIdentifier, threadIdentifier } from './contact-identifier.js';
-import { LEGACY_OUTBOX_PATTERN } from './connection-compatibility.js';
+import { CONNECTION_PREFIXES, LEGACY_OUTBOX_PATTERN } from './connection-compatibility.js';
 import { fieldSpan } from './description-fields.js';
 import { channelMetadata, isInvitationTemplate } from './channel-metadata.js';
-import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
 
@@ -30,6 +29,10 @@ export function parseConnections(result) {
 
 export const isConnection = e => e.id.startsWith('Event/');
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
+// Names and descriptions are hints alongside the narrow grants checked below.
+const HINTS = [...CONNECTION_PREFIXES, 'Agent contact channel'];
+const looksLikeConnection = e => [e.name, e.description].some(t => HINTS.some(h => t?.includes(h)))
+  || parseContactIdentifier(e.description) !== undefined || channelMetadata(e.description).version === 1;
 
 const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
@@ -68,12 +71,16 @@ function directRecipients(share) {
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_agent_contact_catalog', {}).then(parseConnections),
+    call('get_data_catalog', {}).then(parseConnections),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
-  if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (contact catalog/list_shares or missing own user ID). No cached channels were read.');
+  if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
   const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
+  // A channel an own outbox has matched is a contact channel whatever it is called.
+  const matched = new Set(catalog.filter(e => (e.fulcra_userid || own) === own)
+    .flatMap(e => channelMetadata(e.description).peers ?? [])
+    .map(p => JSON.stringify([p.fulcra_userid, p.data_type])));
   const threads = new Map();
   const legacy = new Map();
   const pending = [];
@@ -92,7 +99,7 @@ export async function discoverThreads(app) {
       ...(identifier ? { identifier } : {}) };
     const connection = isConnection(entry);
     if (connection) {
-      if (!compatibleSchema(entry)) continue;
+      if (!looksLikeConnection(entry) && !matched.has(key)) continue;
       const pairs = owner === own && channelMetadata(entry.description).peers;
       if (pairs?.length) source.matchedPeers = pairs;
     }
@@ -145,8 +152,6 @@ export async function discoverThreads(app) {
     }
   }
   const warnings = omitted ? [`Discovery warning — ${omitted} own outboxes omitted: no unambiguous narrow direct peer (or self-only).`] : [];
-  const schemaErrors = catalog.filter(e => e.schema_error).length;
-  if (schemaErrors) warnings.push(`Partial discovery — ${schemaErrors} channel schema unavailable; some contacts may be missing.`);
   // Own audience bounds discovery. Incoming grants prove readable owner/type,
   // not association or remote audiences; never follow their outgoing audiences.
   for (const thread of threads.values()) {

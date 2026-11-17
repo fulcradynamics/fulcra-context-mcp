@@ -183,22 +183,21 @@ class FulcraOAuthProvider(OAuthProvider):
     def _load_grant(self, grant_id: str) -> FulcraCredentials | None:
         """Return the single credentials object for ``grant_id``, reading it from
         disk on first use."""
-        with self.grant_lock(grant_id):
-            creds = self.grant_credentials.get(grant_id)
-            if creds is not None:
-                return creds
-            path = self._grant_path(grant_id)
-            if path is None:
-                return None
-            try:
-                creds = FulcraCredentials.from_json(path.read_text())
-            except FileNotFoundError:
-                return None
-            except Exception as exc:
-                logger.error("failed to load grant", grant_id=grant_id, exc_info=exc)
-                return None
-            self.grant_credentials[grant_id] = creds
+        creds = self.grant_credentials.get(grant_id)
+        if creds is not None:
             return creds
+        path = self._grant_path(grant_id)
+        if path is None:
+            return None
+        try:
+            creds = FulcraCredentials.from_json(path.read_text())
+        except FileNotFoundError:
+            return None
+        except Exception as exc:
+            logger.error("failed to load grant", grant_id=grant_id, exc_info=exc)
+            return None
+        self.grant_credentials[grant_id] = creds
+        return creds
 
     def _new_grant(self, creds: FulcraCredentials) -> str:
         grant_id = secrets.token_hex(16)

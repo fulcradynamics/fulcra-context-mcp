@@ -13,7 +13,7 @@ for (const fixture of cases) test(`mention discovery parity: ${fixture.name}`, a
   const catalog = fixture.catalog ?? [{id:'Event/a', name:'Connection'}];
   const { threads } = await discoverThreads({ async callServerTool({ name }) {
     calls.push(name);
-    return { structuredContent: { result: name === 'get_agent_contact_catalog'
+    return { structuredContent: { result: name === 'get_data_catalog'
       ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({
         [fixture.group ?? 'data types usable with: get_records']: catalog.map(channelFixture),
       })
@@ -21,5 +21,5 @@ for (const fixture of cases) test(`mention discovery parity: ${fixture.name}`, a
     } };
   } });
   assert.deepEqual(threads.map(t => t.peer), fixture.expected);
-  assert.deepEqual(calls, ['get_agent_contact_catalog', 'list_shares']);
+  assert.deepEqual(calls, ['get_data_catalog', 'list_shares']);
 });

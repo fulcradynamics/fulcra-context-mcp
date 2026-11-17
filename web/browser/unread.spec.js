@@ -41,7 +41,7 @@ test('scheduled discovery waits for the current preview batch to settle', async 
   const ui = await open(page, 900, { listOnly: true, waitForContacts: false, holdReads: true, presentation: 'thread' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.clock.runFor(11000);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_agent_contact_catalog').length)).toBe(1);
+  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(1);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(ui.locator('.thread-row').filter({ hasText: 'Weekend' }).locator('.thread-preview')).toContainText('Broadcast message');
 });
