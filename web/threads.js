@@ -226,13 +226,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         if (doc.visibilityState !== 'visible') return true;
         loadingEl.hidden = !firstLoad;
         list.hidden = rows.size === 0; empty.hidden = true;
-        const previews = refreshPreviews(discovery).then(() => {
+        // Previews never hold up the open conversation's next refresh.
+        void refreshPreviews(discovery).then(() => {
           if (disposed) return;
           firstLoad = false; loadingEl.hidden = true; empty.hidden = rows.size > 0;
           sortRows(); maybeAutoSelect();
         });
-        const [success] = await Promise.all([detailRead, previews]);
-        return success;
+        return await detailRead;
       } catch (error) {
         if (disposed) return false;
         roster = undefined;

@@ -37,15 +37,6 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
   expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
 });
 
-test('scheduled discovery waits for the current preview batch to settle', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, waitForContacts: false, holdReads: true, presentation: 'thread' });
-  await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
-  await page.clock.runFor(11000);
-  expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(1);
-  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('.thread-row').filter({ hasText: 'Weekend' }).locator('.thread-preview')).toContainText('Broadcast message');
-});
-
 test('background previews keep previously visible contacts available', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true, autoSelect: false });
   await page.evaluate(() => { window.holdReads = true; });

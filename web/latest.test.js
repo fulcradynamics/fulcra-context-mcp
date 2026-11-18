@@ -46,10 +46,29 @@ test('failed ACK history read rejects the preview', async () => {
   await assert.rejects(readLatest(h.app, sources, now));
 });
 
-test('bounded ACK lookup does not require completeness proof', async () => {
-  const h = harness([], [record('receipt', '12', 'ack')], 'truncated');
+test('truncated ACK history rejects the preview', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], 'truncated');
+  await assert.rejects(readLatest(h.app, sources, now), /incomplete/i);
+});
+
+test('content older than the ACK history window is not presented as latest', async () => {
+  const day = d => new Date(now - d * 86400000).toISOString();
+  const h = harness([{ ...record('theirs', '10'), start_time: day(45) }, { ...record('receipt', '12', 'ack'), start_time: day(1) }],
+    [{ ...record('mine', '10'), start_time: day(60) }]);
   assert.deepEqual(contactPreview(await readLatest(h.app, sources, now)), { noContentWithin30Days: true });
-  assert.equal(h.calls.filter(c => !c.latest).length, 1);
+});
+
+test('a failed read is retried rather than reused', async () => {
+  let fail = true, calls = 0;
+  const reader = createLatestReader({ async callServerTool({ arguments: args }) {
+    calls++;
+    if (fail) throw new Error('offline');
+    return { structuredContent: { result: `Records for ${args.data_type} from start to end: ${JSON.stringify([record(args.data_type, '10')])}` } };
+  } }, now);
+  await assert.rejects(reader(sources));
+  fail = false;
+  assert.equal((await reader(sources, { resolveContent: false })).length, 2);
+  assert.equal(calls, 4);
 });
 
 test('detail anchoring can read old latest records without resolving a preview', async () => {

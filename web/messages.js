@@ -111,6 +111,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
+  // A list preview stands in for history but never enables sending.
+  let provisional = false;
   const syncDebug = setupDebugControls(doc, debug, () => selected?.peer);
   const ackPreview = doc.createElement('p'); ackPreview.id = 'debug-ack-status'; ackPreview.className = 'meta'; ackPreview.hidden = true;
   status.after(ackPreview);
@@ -305,7 +307,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       setTitle(selected);
       renderStatus();
       placeMore();
-      updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
+      updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || (!provisional && result.messages.length)));
     });
   }
 
@@ -322,7 +324,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     acknowledgeOnOpen = false;
     firstAttempt = false; loading.hidden = true;
     loadFailed = true; unavailable = revoked || unavailable;
-    const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
+    const canSend = !unavailable && Boolean(lastSuccess || (!provisional && displayed?.messages.length));
     const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Retrying automatically.`;
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
     if (unavailable) {
@@ -380,12 +382,12 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (!current()) return true;
       const success = !result.warnings.some(w => w.startsWith('Could not load messages'));
       // A failed wider read keeps the applied window; the next refresh retries it.
-      if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; }
+      if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; provisional = false; }
       loadFailed = !success; unavailable = false;
       firstAttempt = false;
       loading.hidden = true;
       displayed = result;
-      render(result);
+      render(result, !provisional);
       // Consume the explicit opening gesture once, never on later polling.
       if (acknowledgeOnOpen) {
         acknowledgeOnOpen = false;
@@ -450,7 +452,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
-    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false;
+    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false; provisional = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
     clearTimeout(statusTimer); loading.hidden = false;
     returnFocus?.removeAttribute('aria-current');
@@ -498,6 +500,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       render(displayed, false);
     } else if (preview && selected.sources.some(s => sourceKey(s) === sourceKey(preview.source))) {
       displayed = { messages: [preview], warnings: [...selected.warnings, 'Messages loading; displayed history is incomplete.'] };
+      provisional = true;
       render(displayed, false);
     } else renderDisplay();
     requestRefresh('selection');

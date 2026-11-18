@@ -64,7 +64,40 @@ test('failed history retains the preview as stale without acknowledging', async 
   await expect(ui.locator('#message-status')).toContainText('Could not load messages');
   await expect(ui.locator('#messages .message-row')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.contexts.at(-1)?.content?.[0]?.text ?? '')).toContain('Stale');
+  await ui.locator('.composer-input').fill('Reply');
+  await expect(ui.locator('.send-to-peer')).toBeDisabled();
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
+});
+
+test('a failed roster refresh does not let the provisional preview enable sending', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false });
+  await expect(ui.locator('#connections-loading')).toBeHidden();
+  await page.evaluate(() => { window.holdReads = 'history'; });
+  await weekend(ui).click();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(1);
+  await ui.locator('.composer-input').fill('Reply');
+  const failures = () => page.evaluate(() => window.calls.filter(c => c.name === 'list_shares').length);
+  const before = await failures();
+  await page.evaluate(() => { window.failDiscovery = true; });
+  await page.clock.runFor(11000);
+  await expect.poll(failures).toBeGreaterThan(before);
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages');
+  await expect(ui.locator('.send-to-peer')).toBeDisabled();
+});
+
+test('a slow contact preview does not hold up polling of the open conversation', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false, direct: true });
+  await expect(ui.locator('#connections-loading')).toBeHidden();
+  // Weekend's preview reads hang; Alex's own history keeps refreshing.
+  await ui.locator('#connections .thread-button').filter({ hasText: 'Alex' }).filter({ hasNotText: 'Weekend' }).click();
+  await expect(ui.locator('#message-loading')).toBeHidden();
+  await page.evaluate(o => { window.holdReads = o; }, other);
+  const reads = () => page.evaluate(p => window.calls.filter(c => c.name === 'get_records' && !c.arguments.latest && c.arguments.fulcra_userid === p).length, peer);
+  for (let i = 0; i < 2; i++) {
+    const before = await reads();
+    await page.clock.runFor(11000);
+    await expect.poll(reads).toBeGreaterThan(before);
+  }
 });
 
 test('fresh history replaces rather than duplicates the provisional message', async ({ page }) => {
