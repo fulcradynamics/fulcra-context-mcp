@@ -110,3 +110,17 @@ test('fresh history replaces rather than duplicates the provisional message', as
   await expect(ui.locator('#messages .message-row')).toHaveCount(0);
   await expect(ui.locator('#message-status')).toContainText('No messages');
 });
+
+test('returning to a contact whose history never loaded does not enable sending from its preview', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false, direct: true });
+  await expect(ui.locator('#connections-loading')).toBeHidden();
+  await page.evaluate(() => { window.holdReads = 'history'; });
+  await weekend(ui).click();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(1);
+  await ui.locator('#connections .thread-button').filter({ hasText: 'Alex' }).filter({ hasNotText: 'Weekend' }).click();
+  await page.evaluate(() => { window.failHistory = true; window.holdReads = false; window.releaseReads(); });
+  await weekend(ui).click();
+  await expect(ui.locator('#message-status')).toContainText('Could not load messages');
+  await ui.locator('.composer-input').fill('Reply');
+  await expect(ui.locator('.send-to-peer')).toBeDisabled();
+});

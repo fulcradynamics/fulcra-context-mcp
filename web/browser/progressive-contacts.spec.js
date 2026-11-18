@@ -132,3 +132,10 @@ test('late explicit target reuses the initial roster while unrelated previews ar
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'list_shares').length)).toBe(1);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length)).toBe(4);
 });
+
+test('a late exact target missing from the loaded roster is found by a fresh discovery', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, presentation: 'thread', holdLaunch: true, launchPeer: 'navigation-peer' });
+  await expect(ui.locator('#connections-loading')).toBeHidden();
+  await page.evaluate(() => { window.navigationContact = true; window.releaseLaunch(); });
+  await expect(ui.locator('#message-title')).toHaveText('Quiet contact');
+});

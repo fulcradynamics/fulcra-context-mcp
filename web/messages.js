@@ -427,7 +427,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (displayed) render(displayed, ready);
   };
   function rememberHistory() {
-    if (selected && displayed) drafts.get(selected.peer).history = { messages: displayed.messages, start, requestedStart, lastSuccess };
+    // Only history that loaded is cached; a lone list preview is not history.
+    if (selected && displayed && lastSuccess) drafts.get(selected.peer).history = { messages: displayed.messages, start, requestedStart, lastSuccess };
   }
   const onBack = () => {
     rememberHistory();

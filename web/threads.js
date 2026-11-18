@@ -415,8 +415,10 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
 
         launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : '';
       }
-      // Startup already requested discovery; late targets reuse that roster.
-      resolveLaunch();
+      // Startup already requested discovery; a late target reuses that roster
+      // when it has the contact, and otherwise gets one fresh discovery.
+      if (launchPending && roster && !roster.threads.some(t => t.peer === requestedPeer)) scheduler.request();
+      else resolveLaunch();
       sortRows(); maybeAutoSelect();
     });
   } else scheduler.request();
