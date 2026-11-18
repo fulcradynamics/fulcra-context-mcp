@@ -459,9 +459,12 @@ details[open] > summary { color: var(--violet); }
 #message-more { background: transparent; color: var(--teal); font-size: 12px; font-weight: 400; min-height: 0; padding: 1px 8px; }
 #message-more:hover:not(:disabled) { background: transparent; color: var(--teal-soft); }
 @keyframes refresh-spin { to { transform: rotate(360deg); } }
-/* Prominent initial-load state: a large centered spinner with a label. */
-#message-loading, #connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
-#message-loading .refresh-spinner, #connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
+/* An empty "Showing messages through" line keeps its height while a thread opens. */
+#message-through:empty { display: block; }
+#message-through:empty::before { content: '\00a0'; }
+/* Prominent initial contacts load: a large centered spinner with a label. */
+#connections-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 64px 0; font-size: 15px; color: var(--muted); }
+#connections-loading .refresh-spinner { width: 40px; height: 40px; --spinner-thickness: 3px; }
 /* Loading label as a dark chip, matching the section-header badges. */
 .loading-label { color: var(--muted); font-size: 14px; font-weight: 500; }
 /* Spinner shown inside a button while its request is in flight. */

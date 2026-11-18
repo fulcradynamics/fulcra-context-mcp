@@ -105,7 +105,9 @@ records are marked stale until refreshed, and excluded or revoked sources stay
 filtered. Each fresh history result replaces the cached view, including an empty
 result. Opening reuses the roster and its latest-read results. History starts
 one week before the earlier of the latest incoming and outgoing records;
-**Load more history** adds two weeks.
+**Load more history** adds two weeks. While a thread opens or loads more
+history, that button reads **Loading** with its spinner, so the thread's height
+doesn't change when loading finishes.
 Switching contacts reads only the selected thread, without another catalog,
 shares or latest pass, and does not wait for unrelated previews. Polling runs
 every 10 seconds while visible, backs off on failure and preserves drafts,

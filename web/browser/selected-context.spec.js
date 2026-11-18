@@ -120,7 +120,7 @@ test('cached source removal stays filtered when temporary ownership ends before 
   // reads belong in the assertions below, not a detached older preview request.
   await expect(ui.locator('#connections .thread-time .refresh-spinner')).toHaveCount(0);
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await page.evaluate(() => { window.excludeOut = true; window.holdReads = true; window.holdMessages = true; window.calls = []; });
   // Background discovery applies revocation; opening itself reuses the roster.
   await page.clock.runFor(11000);
@@ -155,7 +155,7 @@ test('cached source removal stays filtered when temporary ownership ends before 
   expect(await page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
 
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   await expect.poll(() => latest(page)).toContain(remaining);
   expect(await latest(page)).not.toContain(out);

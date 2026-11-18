@@ -17,12 +17,12 @@ test('opening a contact shows its preview while history is pending', async ({ pa
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBe(3);
   await expect(ui.locator('#messages .message-row')).toHaveCount(1);
   await expect(ui.locator('#messages')).toContainText('Broadcast message');
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   expect(await page.evaluate(requestCounts)).toEqual(before);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
 });
 
 for (const targeted of [false, true]) test(`${targeted ? 'targeted' : 'automatic'} opening reuses the preview before history arrives`, async ({ page }) => {
@@ -31,10 +31,10 @@ for (const targeted of [false, true]) test(`${targeted ? 'targeted' : 'automatic
   await expect(ui.locator('#connections-loading')).toBeHidden();
   if (targeted) await page.evaluate(() => window.releaseLaunch());
   await expect(ui.locator('#messages .message-row')).toHaveCount(1);
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'send_agent_contact_message'))).toEqual([]);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
 });
 
 test('switching contacts replaces the provisional message and ignores late history', async ({ page }) => {
@@ -90,7 +90,7 @@ test('a slow contact preview does not hold up polling of the open conversation',
   await expect(ui.locator('#connections-loading')).toBeHidden();
   // Weekend's preview reads hang; Alex's own history keeps refreshing.
   await ui.locator('#connections .thread-button').filter({ hasText: 'Alex' }).filter({ hasNotText: 'Weekend' }).click();
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await page.evaluate(o => { window.holdReads = o; }, other);
   const reads = () => page.evaluate(p => window.calls.filter(c => c.name === 'get_records' && !c.arguments.latest && c.arguments.fulcra_userid === p).length, peer);
   for (let i = 0; i < 2; i++) {
@@ -123,4 +123,26 @@ test('returning to a contact whose history never loaded does not enable sending 
   await expect(ui.locator('#message-status')).toContainText('Could not load messages');
   await ui.locator('.composer-input').fill('Reply');
   await expect(ui.locator('.send-to-peer')).toBeDisabled();
+});
+
+test('opening a thread and loading more history share the history-row loading state', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false });
+  await expect(ui.locator('#connections-loading')).toBeHidden();
+  await page.evaluate(() => { window.holdReads = 'history'; });
+  await weekend(ui).click();
+  const more = ui.locator('#message-more'), spinner = ui.locator('#more-spinner'), row = ui.locator('#message-history');
+  await expect(more).toHaveText('Loading');
+  await expect(more).toBeDisabled();
+  await expect(spinner).toHaveCSS('visibility', 'visible');
+  const loadingHeight = (await row.boundingBox()).height;
+  await page.evaluate(() => { window.releaseReads(); });
+  await expect(more).toHaveText('Load more history');
+  await expect(more).toBeEnabled();
+  await expect(spinner).toHaveCSS('visibility', 'hidden');
+  expect((await row.boundingBox()).height).toBe(loadingHeight);
+  await more.click();
+  await expect(more).toHaveText('Loading');
+  await expect(spinner).toHaveCSS('visibility', 'visible');
+  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
+  await expect(more).toHaveText('Load more history');
 });

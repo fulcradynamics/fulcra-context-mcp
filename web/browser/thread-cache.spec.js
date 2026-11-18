@@ -9,7 +9,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   await expect(ui.locator('#connections-loading')).toBeHidden();
   await weekend(ui).click();
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   const initial = await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && !c.arguments.latest).at(-1).arguments.start_time);
   await ui.locator('#message-more').click();
   await expect(ui.locator('#more-spinner')).toHaveCSS('visibility', 'hidden');
@@ -17,7 +17,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   expect(Date.parse(initial) - Date.parse(expanded)).toBe(14 * 86400000);
   await alex(ui).click();
   await expect(ui.locator('#messages .message-row')).toHaveCount(3);
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   const before = await page.evaluate(() => ({
     latest: window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length,
     writes: window.calls.filter(c => c.name === 'send_agent_contact_message').length,
@@ -28,7 +28,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   await weekend(ui).click();
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBe(3);
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   const reads = await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && !c.arguments.latest));
   expect(reads.every(c => c.arguments.start_time === expanded)).toBe(true);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_records' && c.arguments.latest).length)).toBe(before.latest);
@@ -36,7 +36,7 @@ test('returning to a thread immediately restores its loaded messages and expande
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(before.catalog);
   expect(await page.evaluate(() => window.calls.filter(c => c.name === 'list_shares').length)).toBe(before.shares);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
 });
 
@@ -51,10 +51,10 @@ test('fresh history replaces cached records, including an empty result', async (
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBe(3);
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect(ui.locator('#messages .message-row')).toHaveCount(0);
   await alex(ui).click();
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await page.evaluate(() => { window.holdReads = 'history'; });
   await weekend(ui).click();
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBe(3);

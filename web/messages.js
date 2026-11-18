@@ -29,7 +29,6 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const status = doc.querySelector('#message-status');
   const retry = doc.querySelector('#message-retry');
   const retrySpinner = doc.querySelector('#message-retry-spinner');
-  const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
   const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Your agent name';
@@ -100,10 +99,20 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const more = doc.querySelector('#message-more');
   const moreSpinner = doc.querySelector('#more-spinner');
   more.prepend(icon(History, 'btn-icon'));
+  const moreLabel = more.querySelector('.more-label');
   let loadingMore = false;
-  // The spinner sits to the right of the button; toggling visibility (not
-  // display) keeps its space reserved so the button never shifts.
-  const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
+  // Opening a thread and loading more history share one loading state in the
+  // history row, so the thread's height doesn't change when loading finishes.
+  // The spinner's space is always reserved (visibility, not display).
+  const updateMore = () => {
+    const busy = loadingMore || firstAttempt || debug.get(selected?.peer).messages === 'loading';
+    history.hidden = !busy && !attemptedStart;
+    if (!attemptedStart) through.textContent = '';
+    if (busy) more.disabled = true;
+    moreLabel.textContent = busy ? 'Loading' : 'Load more history';
+    moreSpinner.style.visibility = busy ? 'visible' : 'hidden';
+    messages.before(history);
+  };
 
   // Context-lifecycle plumbing runs, but its progress is no longer surfaced to the
   // user (it was too technical); writes go to a detached, never-shown element.
@@ -162,7 +171,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (overrides.messages === 'empty') text = 'No messages in this history window. (Debug preview)';
       if (overrides.messages === 'error') text = 'Could not load messages. (Debug preview; live retries unchanged)';
     }
-    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt;
+    updateMore();
     messages.hidden = overrides.messages === 'loading';
     ackPreview.hidden = !overrides.ack;
     ackPreview.textContent = overrides.ack ? `Debug preview: ${acknowledgementPreview[overrides.ack]}` : '';
@@ -322,7 +331,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   function failed(error, revoked = false) {
     if (!selected) return;
     acknowledgeOnOpen = false;
-    firstAttempt = false; loading.hidden = true;
+    firstAttempt = false;
     loadFailed = true; unavailable = revoked || unavailable;
     const canSend = !unavailable && Boolean(lastSuccess || (!provisional && displayed?.messages.length));
     const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Retrying automatically.`;
@@ -385,7 +394,6 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; provisional = false; }
       loadFailed = !success; unavailable = false;
       firstAttempt = false;
-      loading.hidden = true;
       displayed = result;
       render(result, !provisional);
       // Consume the explicit opening gesture once, never on later polling.
@@ -408,9 +416,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
   function placeMore() {
-    history.hidden = !attemptedStart;
     if (attemptedStart) through.textContent = `Showing messages through ${new Date(attemptedStart).toLocaleDateString()}`;
-    messages.before(history);
+    updateMore();
   }
   const onMore = () => {
     if (!start || requestedStart) return;
@@ -435,7 +442,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
-    clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
+    clearTimeout(statusTimer); history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = false;
@@ -455,7 +462,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     const selectionGeneration = generation;
     selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false; provisional = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
-    clearTimeout(statusTimer); loading.hidden = false;
+    clearTimeout(statusTimer);
     returnFocus?.removeAttribute('aria-current');
     returnFocus = button;
     button?.setAttribute('aria-current', 'true');
@@ -482,7 +489,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       });
     updateComposer(thread.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
     setTitle(thread);
-    history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
+    more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     contactTopic.hidden = true; contactTopic.textContent = '';
     panel.hidden = false; listPanel.hidden = false;
@@ -513,7 +520,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     generation++; selected = undefined;
     messageList.dispose();
     stopDebug();
-    clearTimeout(statusTimer); loading.hidden = true;
+    clearTimeout(statusTimer);
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);
