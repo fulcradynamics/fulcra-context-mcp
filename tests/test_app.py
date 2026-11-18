@@ -115,10 +115,9 @@ async def test_contacts_app():
         assert 'thread-time' in resources[0].text
         assert 'unread-dot' in resources[0].text
         assert 'prefers-reduced-motion' in resources[0].text
-        assert 'id="message-loading"' in resources[0].text
-        assert resources[0].text.index('id="message-area"') < resources[0].text.index('id="message-loading"') < resources[0].text.index('id="messages"')
+        assert 'id="message-loading"' not in resources[0].text
         assert 'No messages with ' in resources[0].text
-        assert resources[0].text.index('id="messages"') < resources[0].text.index('Load more history</button>') < resources[0].text.index('id="thread-composer"')
+        assert resources[0].text.index('id="messages"') < resources[0].text.index('<span class="more-label">Load more history</span></button>') < resources[0].text.index('id="thread-composer"')
         assert 'get_records' in resources[0].text
         assert '<meta name="connection-presentation" content="global">' in resources[0].text
         thread_resource = await client.read_resource("ui://fulcra/contacts/thread/v85.html")
