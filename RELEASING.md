@@ -4,6 +4,16 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.19 release notes
+
+- Serve `/hermes/authorize`, `/hermes/callback` and `/hermes/token` so apps that
+  receive the OAuth redirect on a random loopback port (Hermes plugins) can sign
+  in with Auth0, which matches callback ports exactly. Auth0 redirects to the
+  fixed `/hermes/callback`, which asks the user to confirm and hands the code to
+  the app; the app exchanges it with its own PKCE verifier and gets Auth0's
+  tokens. Nothing is stored. The app's Auth0 client must allow
+  `<server>/hermes/callback`. Tools and UI are unchanged.
+
 ## 1.19.16 release notes
 
 - Keep the conversation still while typing in the message composer. Contacts UI

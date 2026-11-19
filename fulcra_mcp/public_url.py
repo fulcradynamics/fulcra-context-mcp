@@ -25,14 +25,14 @@ def _request_origin(request: Request) -> str:
     return str(url).rstrip("/")
 
 
-def public_origin() -> str:
+def public_origin(request: Request | None = None) -> str:
     """This server's origin, with no trailing slash: ``OIDC_SERVER_URL`` if set,
-    else the current request's host, else localhost when there is no request
-    (a stdio server, or startup)."""
+    else the host of ``request`` or the current MCP request, else localhost when
+    there is no request (a stdio server, or startup)."""
     if settings.oidc_server_url:
         return settings.oidc_server_url.rstrip("/")
     try:
-        return _request_origin(get_http_request())
+        return _request_origin(request or get_http_request())
     except RuntimeError:
         return f"http://localhost:{settings.port}"
 
