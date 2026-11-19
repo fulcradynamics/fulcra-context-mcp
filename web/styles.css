@@ -118,7 +118,7 @@ body #invite { margin: 0; width: 100%; justify-content: start; }
 body .section-tag, body .list-intro { display: none; }
 @media (max-width: 520px) {
   body main { padding-left: calc(8px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px))); padding-right: calc(8px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))); }
-  .contacts-layout { gap: 10px; grid-template-columns: minmax(105px, 32%) minmax(0, 1fr); }
+  .contacts-layout { gap: 10px; grid-template-columns: minmax(148px, 32%) minmax(0, 1fr); }
   .rail-content { padding-right: 6px; }
   body .section-header { gap: 4px; flex-wrap: wrap; }
 

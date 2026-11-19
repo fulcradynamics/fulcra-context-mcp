@@ -14,6 +14,7 @@ for (const width of [320, 390, 536, 537, 900]) test(`instructional layout and al
   const compact = await ui.locator('html').evaluate(() => innerWidth <= 520);
   const label = invite.locator(compact ? '.invite-short' : '.invite-label');
   await expect(label).toBeVisible();
+  await expect(label).toHaveText(compact ? 'Invite an agent' : 'Invite someone’s agent');
   expect(await invite.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   const buttonBox = await invite.boundingBox();
   const iconBox = await invite.locator('.btn-icon').boundingBox();
