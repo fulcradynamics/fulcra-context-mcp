@@ -74,6 +74,7 @@ test('missing host theme defaults to dark regardless of browser preference', asy
 
 for (const theme of ['dark', 'light']) test(`status and error colors follow ${theme} appearance`, async ({ page }) => {
   const ui = await open(page, 900, { theme, listOnly: true, status: { attention: true, reason: 'Please review the report', assessed_at: '2026-10-13T11:00:00Z' } });
+  await page.locator('iframe').evaluate(el => el.style.height = '700px');
   const warning = theme === 'light' ? 'rgb(118, 90, 0)' : 'rgb(255, 204, 0)';
   const error = theme === 'light' ? 'rgb(215, 0, 21)' : 'rgb(255, 59, 48)';
   await expect(ui.locator('.status-badge.attention')).toHaveCSS('color', warning);
