@@ -227,7 +227,8 @@ defaults to dark when no appearance is supplied. Both palettes use the Portal /
 Context Web semantic color roles and keep Rubik. The contacts rail and floating
 composer use `surface-raised` (`#222227` dark, `#f4f5f7` light), matching Portal’s
 chat components and distinct from the conversation canvas. Both use the theme’s
-`divider` border (`#38383a` dark, `#d9dce2` light).
+`divider` border (`#38383a` dark, `#d9dce2` light). The secondary host-chat action
+uses a contrasting `surface` fill with the same divider outline.
 
 ## UI versions
 

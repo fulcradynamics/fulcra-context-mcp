@@ -28,6 +28,10 @@ async function expectPalette(ui, theme) {
     await expect(ui.locator(selector)).toHaveCSS('border-top-width', '1px');
   }
   await expect(ui.locator('.composer-input')).toHaveCSS('color', palette.text);
+  const handoff = ui.locator('.composer-actions .btn-secondary');
+  await expect(handoff).toHaveCSS('background-color', palette.surface);
+  await expect(handoff).toHaveCSS('border-top-color', theme === 'dark' ? 'rgb(56, 56, 58)' : 'rgb(217, 220, 226)');
+  await expect(handoff).toHaveCSS('border-top-width', '1px');
   await expect(ui.locator('.incoming .bubble').first()).toHaveCSS('background-color', palette.raised);
   await expect(ui.locator('.incoming .bubble').first()).toHaveCSS('color', palette.text);
   await expect(ui.locator('.outgoing .bubble')).toHaveCSS('background-color', 'rgb(111, 82, 229)');
