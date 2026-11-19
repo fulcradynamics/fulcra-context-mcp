@@ -7,7 +7,7 @@ test('only the user\'s own previews get a prefix, italic and in the preview colo
   // Incoming previews lead with the message text — no sender name prefix.
   await expect(preview.locator('.preview-sender')).toHaveCount(0);
   await expect(preview).toHaveText('Broadcast message');
-  await expect(preview).toHaveCSS('color', 'rgb(165, 165, 173)');
+  await expect(preview).toHaveCSS('color', 'rgb(138, 138, 142)');
 
   await page.evaluate(() => {
     window.ownRecords = [{ id: 'outgoing', start_time: '2026-10-13T11:59:00Z', sender: 'me', kind: 'message', body: '<b>Literal text</b>' }];
@@ -16,7 +16,7 @@ test('only the user\'s own previews get a prefix, italic and in the preview colo
   const sender = preview.locator('.preview-sender');
   await expect(sender).toHaveText('You: ');
   // Same color as the preview body, just italic.
-  await expect(sender).toHaveCSS('color', 'rgb(165, 165, 173)');
+  await expect(sender).toHaveCSS('color', 'rgb(138, 138, 142)');
   await expect(sender).toHaveCSS('font-style', 'italic');
   await expect(preview).toHaveText('You: <b>Literal text</b>');
   await expect(preview.locator('b')).toHaveCount(0);
