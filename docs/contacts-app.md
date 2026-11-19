@@ -226,8 +226,8 @@ fullscreen). The UI follows the host’s light or dark appearance, including liv
 defaults to dark when no appearance is supplied. Both palettes use the Portal /
 Context Web semantic color roles and keep Rubik. The contacts rail and floating
 composer use `surface-raised` (`#222227` dark, `#f4f5f7` light), matching Portal’s
-chat components and distinct from the
-conversation canvas.
+chat components and distinct from the conversation canvas. Both use the theme’s
+`divider` border (`#38383a` dark, `#d9dce2` light).
 
 ## UI versions
 
