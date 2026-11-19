@@ -18,8 +18,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
   input.value = draft.value; label.append(input);
   // Grow up to four lines (two on narrow screens), then scroll the draft.
   const autosize = () => {
-    const edge = doc.querySelector('#messages')?.lastElementChild?.getBoundingClientRect();
-    const follow = doc.activeElement === input && edge && Math.abs(edge.bottom - container.getBoundingClientRect().top) <= 40;
     input.style.height = 'auto';
     const s = getComputedStyle(input);
     const border = parseFloat(s.borderTopWidth) + parseFloat(s.borderBottomWidth);
@@ -28,7 +26,6 @@ export function setupThreadActions(app, lifecycle, context, container, isCurrent
     const full = input.scrollHeight + border;
     input.style.overflowY = full > max ? 'auto' : 'hidden';
     input.style.height = `${Math.min(full, max)}px`;
-    if (follow) doc.querySelector('#message-area').scrollTop += edge.bottom - container.getBoundingClientRect().top + 12;
   };
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'primary composer-primary send-to-peer';
   send.append(icon(Send, 'btn-icon'), doc.createTextNode('Send'));

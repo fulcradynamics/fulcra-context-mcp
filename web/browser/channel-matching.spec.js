@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { open, peer, out, incoming } from './harness.js';
 
-test('ordinary descriptions and share names retain usable contacts after refresh', async ({page}) => {
+test('an unmarked, unmatched incoming channel is not treated as a contact channel', async ({page}) => {
   const ui = await open(page, 900, {listOnly: true, autoSelect: false});
   await page.evaluate(peer => {
     window.unmarkedChannels = true;
     window.audience = [peer];
   }, peer);
   await page.clock.runFor(11000);
-  await expect(ui.locator('#connections .thread-row')).toHaveCount(1);
+  // The labelled own channel remains, waiting for a recognizable return channel.
+  await expect(ui.locator('#connections .thread-row')).toHaveCount(0);
+  await expect(ui.locator('#pending-connections > li')).toHaveCount(1);
   expect(await page.evaluate(() => window.calls.some(c => ['create_share', 'update_data_type', 'send_agent_contact_message'].includes(c.name)))).toBe(false);
-  await ui.locator('#connections .thread-row').click();
-  await expect(ui.locator('#messages')).toContainText('Broadcast message');
 });
 
 for (const named of [false, true]) test(`two saved pairs select exact history and reply through the corresponding outbox; named=${named}`, async ({page}) => {

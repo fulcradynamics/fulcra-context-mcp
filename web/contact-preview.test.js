@@ -8,7 +8,8 @@ test('latest content retains its acknowledgement from the opposite direction', (
   assert.deepEqual(contactPreview([message('read', 'Outgoing', 'ack', 'hello'), incoming]), { message: incoming, acknowledged: true });
   const outgoing = message('sent', 'Outgoing');
   assert.deepEqual(contactPreview([message('read', 'Incoming', 'ack', 'sent'), outgoing]), { message: outgoing, acknowledged: true });
-  assert.equal(contactPreview([message('read', 'Incoming', 'ack')]), undefined);
+  assert.deepEqual(contactPreview([message('read', 'Incoming', 'ack')]), { noContentWithin30Days: true });
+  assert.equal(contactPreview([]), undefined);
 });
 test('rows sort by attention, then unread, then recency', () => {
   const rows = [

@@ -10,27 +10,49 @@ const timestamp = record => {
 // Latest content plus receipt evidence. A latest read returns ONE record, so
 // receipt-ended channels need bounded history, not just client-side filtering.
 export async function readLatest(app, sources, now = Date.now(), { resolveContent = true } = {}) {
+  return createLatestReader(app, now)(sources, { resolveContent });
+}
+
+// One reader per discovered roster. Raw anchors and resolved previews share
+// latest requests, but a slow ACK fallback never blocks the history anchor.
+export function createLatestReader(app, now = Date.now()) {
+  const latest = new Map(), history = new Map();
   const start = now - 30 * 86400000;
-  let usedHistory = false;
-  const latest = await Promise.all(sources.map(async ({ direction, identifier: _identifier, setupSession: _setupSession, ...source }) => {
-    const args = { data_type: source.id };
-    if (direction === 'Incoming') args.fulcra_userid = source.fulcra_userid;
-    async function read(range) {
-      const { records, truncated } = parseRecords(await app.callServerTool({ name: 'get_records', arguments: { ...args, ...range } }, { timeout: 30000 }), source.id);
-      if (truncated || records.some(record => !Number.isFinite(timestamp(record)))) throw new Error('Preview incomplete.');
-      return records;
+  async function read(source, range) {
+    const args = { data_type: source.id, ...range };
+    if (source.direction === 'Incoming') args.fulcra_userid = source.fulcra_userid;
+    const { records, truncated } = parseRecords(await app.callServerTool({ name: 'get_records', arguments: args }, { timeout: 30000 }), source.id);
+    if (truncated) throw new Error('Preview incomplete.');
+    return records;
+  }
+  // Share in-flight and successful reads; a failed read is retried next time.
+  const shared = (map, key, load) => {
+    if (!map.has(key)) {
+      const promise = load();
+      map.set(key, promise);
+      promise.catch(() => { if (map.get(key) === promise) map.delete(key); });
     }
-    let records = await read({ latest: true });
-    if (resolveContent && records.some(record => !['message', 'reply'].includes(record.kind))) {
-      usedHistory = true;
-      records = [...records, ...await read({ start_time: new Date(start).toISOString(), end_time: new Date(now).toISOString() })];
-    }
-    return records.map(record => ({ record, source, direction }));
-  }));
-  const messages = latest.flat().sort((a, b) => timestamp(b.record) - timestamp(a.record));
-  const content = messages.find(m => ['message', 'reply'].includes(m.record.kind));
-  if (usedHistory && (!content || timestamp(content.record) < start)) throw new Error('Preview incomplete within 30-day history.');
-  return messages;
+    return map.get(key);
+  };
+  return async (sources, { resolveContent = true } = {}) => {
+    const results = await Promise.allSettled(sources.map(async ({ direction, identifier: _identifier, setupSession: _setupSession, ...source }) => {
+      const key = JSON.stringify([source.fulcra_userid, source.id]);
+      const channel = { ...source, direction };
+      let records = await shared(latest, key, () => read(channel, { latest: true }));
+      const ackEnded = resolveContent && records.some(record => record.kind === 'ack');
+      if (ackEnded) records = [...records, ...await shared(history, key, () => read(channel, {
+        start_time: new Date(start).toISOString(), end_time: new Date(now).toISOString(),
+      }))];
+      return { ackEnded, messages: records.map(record => ({ record, source, direction })) };
+    }));
+    const failed = results.find(r => r.status === 'rejected');
+    if (failed) throw failed.reason;
+    let messages = results.flatMap(r => r.value.messages);
+    // Only the 30-day window is complete once a channel ends in an ACK, so older
+    // content elsewhere cannot be presented as the latest message.
+    if (results.some(r => r.value.ackEnded)) messages = messages.filter(({ record }) => record.kind === 'ack' || timestamp(record) >= start);
+    return messages.sort((a, b) => timestamp(b.record) - timestamp(a.record));
+  };
 }
 
 export async function readConversation(app, selected, range, isCurrent = () => true, { discovery: supplied, previous, now } = {}) {

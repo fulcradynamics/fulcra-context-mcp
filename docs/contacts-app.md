@@ -47,7 +47,15 @@ not an authorization boundary.
 
 ## Discovery
 
-Contacts are schema-compatible Event channels shared with exact, narrow direct grants. Prefixes (`connect-our-agents` or `connect-agents-with-anyone`) are discovery hints, not requirements. [Channel metadata](channel-metadata.md) retains resolved pairs without making metadata a prerequisite:
+Contacts are Event channels shared with exact, narrow direct grants whose name or
+description looks like a connection: a `connect-our-agents` or
+`connect-agents-with-anyone` prefix, `Agent contact channel`, a Contact label or
+Connection details. An incoming channel named in an own channel's Connection
+details is a contact channel whatever it is called. The panel calls
+`get_data_catalog` and `list_shares` once per roster refresh, with no per-type
+lookups; the server still checks the channel schema before any send.
+[Channel metadata](channel-metadata.md) retains resolved pairs without making
+metadata a prerequisite:
 
 - Our channels need single-channel direct grants to exactly the
   expected contact audience. Existing broader shares are independent access policy:
@@ -76,6 +84,10 @@ The list has **Agent Chats**, **Pending** (not yet shared both ways) and
 **Legacy Connections** sections, sorted by attention, then unread, then latest
 activity. Each row shows a preview, relative time, an **Unread** badge and, when
 every own channel has one, the saved status reason (amber when it needs attention).
+Latest reads run in parallel and contacts appear as their previews settle; the
+list loading indicator remains until all have finished. An ack-ended channel
+gets one 30-day history read for its preview. A successful read without content
+shows **No message found within 30 days**; a failed read shows **Preview unavailable**.
 
 ## Messages
 
@@ -83,9 +95,23 @@ Messages use the SDK `CHANNEL_FIELDS` schema (`id`, `sender`, `kind`, `body`, pl
 optional `recipients`, `topic`, `priority`, `in_reply_to`, `artifacts`). Bodies
 render literally.
 
-Opening a contact loads from one week before its latest message; **Load more
-history** adds two weeks. Polling runs every 10 seconds while visible, backs off
-on failure and preserves drafts, focus, selection and scroll position. Failed
+Opening a contact immediately shows its existing list-preview message, if that
+source is still selected, while the normal history read runs. The preview is
+incomplete context, not a completed read or an acknowledgement; returned history
+replaces it. Returning to a previously opened thread immediately restores its
+loaded messages and history window, including **Load more history** expansions,
+then refreshes that same window. This cache lasts only for the open app; cached
+records are marked stale until refreshed, and excluded or revoked sources stay
+filtered. Each fresh history result replaces the cached view, including an empty
+result. Opening reuses the roster and its latest-read results. History starts
+one week before the earlier of the latest incoming and outgoing records;
+**Load more history** adds two weeks. While a thread opens or loads more
+history, that button reads **Loading** with its spinner, so the thread's height
+doesn't change when loading finishes.
+Switching contacts reads only the selected thread, without another catalog,
+shares or latest pass, and does not wait for unrelated previews. Polling runs
+every 10 seconds while visible, backs off on failure and preserves drafts,
+focus, selection and scroll position. Failed
 reads keep the last good view with a stale warning; revoked sources are removed.
 
 `send_agent_contact_message` (app) and `send_agent_message` (model) share one checked

@@ -8,7 +8,7 @@ const quiet = async page => {
 };
 
 test('context-only host gets loading identity then displayed context without a turn', async ({ page }) => {
-  const ui = await open(page, 900, { ...readOnlyThread, holdReads: true, chat: false, contextOnly: true, sampling: true });
+  const ui = await open(page, 900, { ...readOnlyThread, waitForContacts: false, holdReads: true, chat: false, contextOnly: true, sampling: true });
   await expect.poll(() => latest(page)).toContain('Weekend');
   const loading = await latest(page);
   expect(loading).toContain(own); expect(loading).toContain(peer); expect(loading).toContain(out);
@@ -76,7 +76,7 @@ test('source deselection replaces passive context without a chat handoff', async
 });
 
 test('rejected passive history retries only on a later unchanged poll', async ({ page }) => {
-  await open(page, 900, { ...readOnlyThread, holdReads: true });
+  await open(page, 900, { ...readOnlyThread, waitForContacts: false, holdReads: true });
   await expect.poll(() => latest(page)).toContain('Messages loading');
   await page.evaluate(() => { window.holdContexts = true; window.holdReads = false; window.releaseReads(); });
   await expect.poll(() => page.evaluate(() => window.heldContexts.length)).toBe(1);
@@ -113,13 +113,17 @@ for (const action of ['check', 'file']) {
   });
 }
 
-test('initial source removal stays filtered when temporary ownership ends before reads settle', async ({ page }) => {
+test('cached source removal stays filtered when temporary ownership ends before reads settle', async ({ page }) => {
   const ui = await open(page, 900, { listOnly: true, presentation: 'thread', second: true, checkStatus: { status: 'not_set_up' } });
   const remaining = out.slice(0, -1) + '8';
   // Drain initial previews before revoking a source; only the selection's fresh
   // reads belong in the assertions below, not a detached older preview request.
   await expect(ui.locator('#connections .thread-time .refresh-spinner')).toHaveCount(0);
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await page.evaluate(() => { window.excludeOut = true; window.holdReads = true; window.holdMessages = true; window.calls = []; });
+  // Background discovery applies revocation; opening itself reuses the roster.
+  await page.clock.runFor(11000);
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   const reads = await page.evaluate(() => window.calls.filter(c => c.name === 'get_records'));
@@ -130,7 +134,7 @@ test('initial source removal stays filtered when temporary ownership ends before
   const initial = await page.evaluate(() => window.contexts.find(c => c.content.length)?.content[0].text);
   expect(initial).toContain(out);
   expect(initial).toContain(remaining);
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
 
   await ui.locator('#onboarding-thread').getByRole('button', { name: 'Set up automatic checking' }).click();
   await expect.poll(() => page.evaluate(() => window.hostMessages.length)).toBe(1);
@@ -140,16 +144,20 @@ test('initial source removal stays filtered when temporary ownership ends before
   const restored = JSON.parse((await latest(page)).split('\n').slice(1).join('\n'));
   expect(restored.selected_sources.some(s => s.id === out)).toBe(false);
   expect(restored.selected_sources.some(s => s.id === remaining && s.fulcra_userid === own)).toBe(true);
-  expect(restored.messages).toEqual([]);
+  expect(restored.messages).toHaveLength(6);
+  expect(restored.messages.some(m => m.record.body === 'Broadcast message')).toBe(true);
+  expect(restored.messages.every(m => restored.selected_sources.some(s => s.id === m.source.id && s.fulcra_userid === m.source.fulcra_userid))).toBe(true);
   expect(await latest(page)).not.toContain(out);
   expect(await latest(page)).toContain(remaining);
   expect(beforeHandoff).toContain('Messages loading');
   expect(beforeHandoff).not.toContain(out);
-  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
   expect(await page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
 
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect.poll(() => latest(page)).toContain('Broadcast message');
+  await expect.poll(() => latest(page)).toContain(remaining);
   expect(await latest(page)).not.toContain(out);
   expect(await latest(page)).toContain(remaining);
   expect(await page.evaluate(() => window.hostMessages.length)).toBe(1);
@@ -160,7 +168,7 @@ test('initial source removal stays filtered when temporary ownership ends before
   expect(sends[0].outbox).toBe(remaining);
 });
 
-test('reopening applies saved source exclusions before delayed discovery', async ({ page }) => {
+test('reopening applies saved source exclusions without waiting for discovery', async ({ page }) => {
   const ui = await open(page, 900, readOnlyThread);
   await expect.poll(() => latest(page)).toContain('Broadcast message');
   await page.evaluate(() => { window.navigationContact = true; });
@@ -171,12 +179,17 @@ test('reopening applies saved source exclusions before delayed discovery', async
   await expect.poll(() => latest(page)).not.toContain(peer + '-1');
   await ui.locator('.thread-button').filter({ hasText: 'Quiet contact' }).click();
   await expect.poll(() => latest(page)).toContain('navigation-peer');
-  await page.evaluate(() => { window.holdDiscovery = true; });
+  await page.evaluate(() => { window.holdDiscovery = true; window.holdReads = 'history'; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
+  await expect(ui.locator('#messages .message-row')).toHaveCount(3);
   await expect.poll(() => latest(page)).toContain('Messages loading');
-  const snapshot = JSON.parse((await latest(page)).split('\n').slice(1).join('\n'));
+  expect(await latest(page)).not.toContain(peer + '-3');
+  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
+  let text;
+  await expect.poll(async () => text = await latest(page)).toContain('Broadcast message');
+  const snapshot = JSON.parse(text.split('\n').slice(1).join('\n'));
   expect(snapshot.selected_sources.some(s => s.fulcra_userid === peer)).toBe(false);
-  expect(await latest(page)).toContain('excluded by the viewer');
+  expect(text).toContain('excluded by the viewer');
   await expect(ui.locator('.incoming-sources input').first()).not.toBeChecked();
 });
 

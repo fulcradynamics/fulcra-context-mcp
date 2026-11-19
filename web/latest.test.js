@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readLatest } from './conversation.js';
+import { readLatest, createLatestReader } from './conversation.js';
 import { contactPreview } from './contact-preview.js';
 
 const now = Date.parse('2026-10-13T13:00:00Z');
@@ -41,9 +41,34 @@ for (const [name, incoming, outgoing, expected, acknowledged] of [
   assert.ok(h.calls.length <= 4);
 });
 
-for (const fault of ['truncated', 'error']) test(`incomplete preview is explicit on ${fault}`, async () => {
-  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], fault);
+test('failed ACK history read rejects the preview', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], 'error');
   await assert.rejects(readLatest(h.app, sources, now));
+});
+
+test('truncated ACK history rejects the preview', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')], 'truncated');
+  await assert.rejects(readLatest(h.app, sources, now), /incomplete/i);
+});
+
+test('content older than the ACK history window is not presented as latest', async () => {
+  const day = d => new Date(now - d * 86400000).toISOString();
+  const h = harness([{ ...record('theirs', '10'), start_time: day(45) }, { ...record('receipt', '12', 'ack'), start_time: day(1) }],
+    [{ ...record('mine', '10'), start_time: day(60) }]);
+  assert.deepEqual(contactPreview(await readLatest(h.app, sources, now)), { noContentWithin30Days: true });
+});
+
+test('a failed read is retried rather than reused', async () => {
+  let fail = true, calls = 0;
+  const reader = createLatestReader({ async callServerTool({ arguments: args }) {
+    calls++;
+    if (fail) throw new Error('offline');
+    return { structuredContent: { result: `Records for ${args.data_type} from start to end: ${JSON.stringify([record(args.data_type, '10')])}` } };
+  } }, now);
+  await assert.rejects(reader(sources));
+  fail = false;
+  assert.equal((await reader(sources, { resolveContent: false })).length, 2);
+  assert.equal(calls, 4);
 });
 
 test('detail anchoring can read old latest records without resolving a preview', async () => {
@@ -54,8 +79,32 @@ test('detail anchoring can read old latest records without resolving a preview',
   assert.equal(h.calls.length, 2);
 });
 
-test('bounded history does not misrepresent older content as absent', async () => {
+test('ack with no content in bounded history is a neutral preview', async () => {
   const old = { ...record('old', '10'), start_time: '2026-01-01T00:00:00Z' };
   const h = harness([old, record('receipt', '12', 'ack')], []);
-  await assert.rejects(readLatest(h.app, sources, now), /30.day|incomplete/i);
+  const latest = await readLatest(h.app, sources, now);
+  assert.deepEqual(contactPreview(latest), { noContentWithin30Days: true });
+  assert.equal(h.calls.filter(c => !c.latest).length, 1);
+});
+
+test('roster batch shares raw latest promises without waiting for preview history', async () => {
+  const h = harness([record('incoming', '10')], [record('receipt', '12', 'ack')]);
+  let finish;
+  const app = { callServerTool(call) {
+    if (!call.arguments.latest) return new Promise(resolve => { finish = () => resolve(h.app.callServerTool(call)); });
+    return h.app.callServerTool(call);
+  } };
+  const latest = createLatestReader(app, now);
+  const preview = latest(sources);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  const anchor = await latest(sources, { resolveContent: false });
+  assert.equal(anchor[0].record.id, 'receipt');
+  assert.equal(h.calls.length, 2);
+  assert.equal((await latest([sources[0]]))[0].record.id, 'incoming');
+  finish();
+  await preview;
+  await latest(sources);
+  assert.equal(h.calls.length, 3);
+  await createLatestReader(h.app, now)(sources, { resolveContent: false });
+  assert.equal(h.calls.length, 5);
 });

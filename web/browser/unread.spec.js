@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { open, peer, other } from './harness.js';
 
-test('contacts render before message reads and show latest preview read state without writes', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true });
+test('contacts wait for previews and show latest read state without writes', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, waitForContacts: false, holdReads: true });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   const row = ui.locator('.thread-row').filter({ hasText: 'Weekend' });
   await expect(row.locator('.thread-preview')).toBeHidden();
@@ -37,23 +37,17 @@ test('opening a contact whose last message is outgoing does not acknowledge an o
   expect(await page.evaluate(() => window.calls.some(c => c.name === 'send_agent_contact_message'))).toBe(false);
 });
 
-test('previews survive metadata-only refreshes while their reads are pending', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'thread' });
-  await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
+test('background previews keep previously visible contacts available', async ({ page }) => {
+  const ui = await open(page, 900, { listOnly: true, autoSelect: false });
+  await page.evaluate(() => { window.holdReads = true; });
   await page.clock.runFor(11000);
-  await expect.poll(() => page.evaluate(() => window.calls.filter(c => c.name === 'get_data_catalog').length)).toBe(2);
-  await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('.thread-row').filter({ hasText: 'Weekend' }).locator('.thread-preview')).toContainText('Broadcast message');
-});
-
-test('slow list previews do not hold up opening a contact', async ({ page }) => {
-  const ui = await open(page, 900, { listOnly: true, holdReads: true, presentation: 'thread' });
   await expect.poll(() => page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.evaluate(() => { window.holdReads = false; });
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
-  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
+  await expect(ui.locator('#connection-detail')).toBeVisible();
   expect(await page.evaluate(() => window.heldReads.length)).toBeGreaterThan(0);
   await page.evaluate(() => window.releaseReads());
+  await expect(ui.locator('#messages .message-row')).toHaveCount(6);
 });
 
 test('failed opening reads do not turn a later poll into an acknowledgement', async ({ page }) => {

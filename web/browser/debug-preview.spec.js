@@ -65,10 +65,10 @@ test('message, loading and acknowledgement previews never enter sends or host co
   await expect(ui.locator('#debug-ack-status')).toContainText('Could not mark');
   expect(await page.evaluate(() => calls.length)).toBe(before);
   await ui.getByLabel('Messages', { exact: true }).selectOption('loading');
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   await expect(ui.locator('#messages')).toBeHidden();
   await page.clock.runFor(11000);
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   await ui.getByLabel('Messages', { exact: true }).selectOption('empty');
   await expect(ui.locator('#messages .message-row')).toHaveCount(0);
   await expect(ui.locator('#message-status')).toContainText('No messages');
@@ -89,7 +89,7 @@ test('message, loading and acknowledgement previews never enter sends or host co
   expect(await page.evaluate(() => JSON.stringify({ calls, contexts, hostMessages }))).not.toContain('PREVIEW ONLY');
   await ui.getByRole('button', { name: 'Reset to live', exact: true }).click();
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect(ui.locator('#debug-ack-status')).toBeHidden();
 });
 
@@ -97,16 +97,16 @@ test('forced loading remains visible while live poll reads are held', async ({ p
   const ui = await open(page, 900, { debug: true });
   await debug(ui);
   await ui.getByLabel('Messages', { exact: true }).selectOption('loading');
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   await page.evaluate(() => { window.holdReads = true; });
   await page.clock.runFor(11000);
   await expect.poll(() => page.evaluate(() => heldReads.length)).toBeGreaterThan(0);
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   await expect(ui.locator('#messages')).toBeHidden();
   await page.evaluate(() => { window.holdReads = false; window.releaseReads(); });
-  await expect(ui.locator('#message-loading')).toBeVisible();
+  await expect(ui.locator('#message-more')).toHaveText('Loading');
   await ui.getByRole('button', { name: 'Reset to live', exact: true }).click();
-  await expect(ui.locator('#message-loading')).toBeHidden();
+  await expect(ui.locator('#message-more')).toHaveText('Load more history');
   await expect(ui.locator('#messages .message-row')).toHaveCount(6);
 });
 

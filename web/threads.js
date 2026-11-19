@@ -4,7 +4,7 @@ import { contactName, readable } from './contact-identity.js';
 import { legacyHandoff } from './legacy-handoff.js';
 import { renderBadge } from './contact-status.js';
 import { setupMessages, messageText } from './messages.js';
-import { readLatest } from './conversation.js';
+import { createLatestReader } from './conversation.js';
 import { contactPreview, compareRows } from './contact-preview.js';
 import { createRefreshScheduler } from './refresh.js';
 import { pendingContacts, matchInvitations } from './pending-contacts.js';
@@ -57,15 +57,27 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
   const connRetrySpinner = doc.querySelector('#connection-retry-spinner');
   status.textContent = '';
   const debug = createDebugPreview();
-  const detail = setupMessages(app, doc, () => scheduler.request(), entrypoint.presentation, debug);
+  let roster;
+  const detail = setupMessages(app, doc, reason => reason === 'selection' && roster
+    ? detail.refresh(roster) : scheduler.request(), entrypoint.presentation, debug);
   const stopDebug = debug.subscribe(peer => { const entry = rows.get(peer); if (entry) renderPreview(entry); });
   function choose(entry) {
     if (disposed || rows.get(entry.thread.peer) !== entry) return;
     userSelected = true; launchPending = false; launchStatus.textContent = '';
-    detail.select(entry.thread, entry.button, { acknowledge: true });
+    detail.select(entry.thread, entry.button, { acknowledge: true, preview: roster && entry.summary?.message });
   }
   let requestedPeer, launchPending = false, userSelected = false, autoSelected = false;
   let launchResolved = entrypoint.presentation === 'global' || entrypoint.directResource;
+  function resolveLaunch() {
+    if (!launchPending || !roster) return;
+    launchPending = false;
+    const thread = roster.threads.find(t => t.peer === requestedPeer);
+    if (thread) {
+      launchStatus.textContent = '';
+      const entry = rows.get(requestedPeer);
+      detail.select(thread, entry?.button, { preview: entry?.summary?.message });
+    } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
+  }
   // Open the highest-sorted conversation once after initial previews load,
   // so the panel isn't empty — unless an entrypoint peer or the user already chose.
   function maybeAutoSelect() {
@@ -76,7 +88,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     const entry = [...rows.values()].find(e => e.row === list.firstElementChild);
     if (!entry) return;
     autoSelected = true;
-    detail.select(entry.thread, entry.button);
+    detail.select(entry.thread, entry.button, { preview: entry.summary?.message });
   }
 
   const launchStatus = doc.createElement('p');
@@ -95,6 +107,8 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         void refreshInvitations();
         const discovery = pendingContacts(await discoverThreads(app));
         if (disposed) return true;
+        discovery.readLatest = createLatestReader(app);
+        roster = discovery;
         const peers = new Set(discovery.threads.map(t => t.peer));
         for (const [peer, entry] of rows) if (!peers.has(peer)) { entry.row.remove(); rows.delete(peer); }
         for (const thread of discovery.threads) {
@@ -102,6 +116,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           if (!entry) {
             const row = doc.createElement('li');
             row.className = 'thread-row animate-rise';
+            row.hidden = true;
             row.style.animationDelay = `${Math.min(nextRow, 12) * 40}ms`;
             // Drop the entrance class once it has played so a later re-sort can't
             // replay the rise (which would flash the row on auto-refresh).
@@ -203,28 +218,24 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
           entry.refresh();
         }
         legacySection.hidden = legacyRows.size === 0;
-        if (launchPending) {
-          launchPending = false;
-          const matches = discovery.threads.filter(t => t.peer === requestedPeer);
-          if (matches.length === 1) {
-            launchStatus.textContent = '';
-            detail.select(matches[0], rows.get(requestedPeer)?.button);
-          } else launchStatus.textContent = 'The exact referenced peer is not available or is ambiguous in accessible Agent Contacts. Choose an Agent Contact below; no other peer was selected.';
-        }
+        const detailRead = detail.refresh(discovery);
+        resolveLaunch();
 
         lastSuccess = new Date().toISOString();
         listFailed = false; listWarnings = discovery.warnings.join(' '); renderConnectionStatus();
         if (doc.visibilityState !== 'visible') return true;
-        // Reveal the contacts as soon as discovery returns — the per-thread reads
-        // that inform unread state and timestamps fill in after, with a small
-        // spinner in each time badge until they land, then an animated re-sort.
-
-        if (firstLoad) { firstLoad = false; loadingEl.hidden = true; }
-        list.hidden = rows.size === 0; empty.hidden = rows.size > 0;
-        void refreshPreviews().then(() => { sortRows(); maybeAutoSelect(); });
-        return await detail.refresh(discovery);
+        loadingEl.hidden = !firstLoad;
+        list.hidden = rows.size === 0; empty.hidden = true;
+        // Previews never hold up the open conversation's next refresh.
+        void refreshPreviews(discovery).then(() => {
+          if (disposed) return;
+          firstLoad = false; loadingEl.hidden = true; empty.hidden = rows.size > 0;
+          sortRows(); maybeAutoSelect();
+        });
+        return await detailRead;
       } catch (error) {
         if (disposed) return false;
+        roster = undefined;
         if (firstLoad) { firstLoad = false; loadingEl.hidden = true; list.hidden = false; }
         listFailed = true; renderConnectionStatus();
         detail.failed(error);
@@ -267,13 +278,13 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
     if (status.textContent !== text) status.textContent = text;
   }
   // Never present an incomplete read as a current preview or unread state.
-  async function refreshPreviews() {
+  async function refreshPreviews(discovery) {
     await Promise.all([...rows.values()].map(async entry => {
       if (entry.reading) return;
       const thread = entry.thread;
       let latest, failed = false;
       entry.reading = true;
-      try { latest = await readLatest(app, selectedSources(thread).sources); }
+      try { latest = await discovery.readLatest(selectedSources(thread).sources); }
       catch { failed = true; }
       finally { entry.reading = false; }
       if (disposed || rows.get(thread.peer) !== entry
@@ -282,6 +293,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         entry.summary = null; entry.previewFailed = true;
         entry.lastAt = NaN;
         renderPreview(entry);
+        entry.row.hidden = false; sortRows();
         return;
       }
       const summary = contactPreview(latest);
@@ -290,6 +302,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       const at = message?.record?.start_time;
       entry.lastAt = at ? Date.parse(at) : NaN;
       renderPreview(entry);
+      entry.row.hidden = false; sortRows();
     }));
   }
   function renderPreview(entry) {
@@ -311,8 +324,9 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         }
         entry.preview.append(doc.createTextNode(messageText(message.record)));
       }
-      if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
-      entry.preview.hidden = !message && !entry.previewFailed;
+      if (summary?.noContentWithin30Days) entry.preview.textContent = 'No message found within 30 days';
+      if (entry.previewFailed) entry.preview.textContent = 'Preview unavailable';
+      entry.preview.hidden = !message && !entry.previewFailed && !summary?.noContentWithin30Days;
       entry.unread = overrides.unread ? overrides.unread === 'unread' : message?.direction === 'Incoming' && !summary.acknowledged;
       entry.dot.classList.toggle('on', entry.unread);
       // Replaces the badge spinner (set at row creation) with the time, or clears it.
@@ -324,7 +338,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
       if (overrides.previewText) { entry.preview.textContent = overrides.previewText; entry.preview.hidden = false; }
       if (overrides.time) entry.time.textContent = overrides.time;
       if (overrides.preview === 'error') {
-        entry.preview.textContent = 'Preview unavailable — recent 30-day history incomplete. Open contact for history.';
+        entry.preview.textContent = 'Preview unavailable';
         entry.preview.hidden = false; entry.time.textContent = '';
       }
       if (['empty', 'loading'].includes(overrides.preview)) {
@@ -401,10 +415,11 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
 
         launchStatus.textContent = launchPending ? 'Finding the exact referenced peer…' : '';
       }
-      // Untargeted startup already requested discovery. Only an exact late
-      // target needs another pass; don't duplicate the initial list refresh.
-      if (launchPending) scheduler.request();
-      else { sortRows(); maybeAutoSelect(); }
+      // Startup already requested discovery; a late target reuses that roster
+      // when it has the contact, and otherwise gets one fresh discovery.
+      if (launchPending && roster && !roster.threads.some(t => t.peer === requestedPeer)) scheduler.request();
+      else resolveLaunch();
+      sortRows(); maybeAutoSelect();
     });
   } else scheduler.request();
   return dispose;

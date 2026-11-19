@@ -1,8 +1,7 @@
 import { parseContactIdentifier, threadIdentifier } from './contact-identifier.js';
-import { LEGACY_OUTBOX_PATTERN } from './connection-compatibility.js';
+import { CONNECTION_PREFIXES, LEGACY_OUTBOX_PATTERN } from './connection-compatibility.js';
 import { fieldSpan } from './description-fields.js';
 import { channelMetadata, isInvitationTemplate } from './channel-metadata.js';
-import { compatibleSchema } from './connection-schema.js';
 import { parseSetupSession } from './setup-session.js';
 import { parseStatus, aggregateStatus } from './contact-status.js';
 
@@ -30,6 +29,10 @@ export function parseConnections(result) {
 
 export const isConnection = e => e.id.startsWith('Event/');
 const isLegacy = e => e.id.startsWith('MomentAnnotation/') && LEGACY_OUTBOX_PATTERN.test(e.name);
+// Names and descriptions are hints alongside the narrow grants checked below.
+const HINTS = [...CONNECTION_PREFIXES, 'Agent contact channel'];
+const looksLikeConnection = e => [e.name, e.description].some(t => HINTS.some(h => t?.includes(h)))
+  || parseContactIdentifier(e.description) !== undefined || channelMetadata(e.description).version === 1;
 
 const covers = (s, id) => s.share_all_data === true || s.data_types?.some(t => [id, id.split('/')[0], '*', id.split('/')[0] + '/*'].includes(t));
 
@@ -74,6 +77,10 @@ export async function discoverThreads(app) {
   if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
   const [catalog, shares] = results.map(r => r.value);
   const own = shares.own_fulcra_userid;
+  // A channel an own outbox has matched is a contact channel whatever it is called.
+  const matched = new Set(catalog.filter(e => (e.fulcra_userid || own) === own)
+    .flatMap(e => channelMetadata(e.description).peers ?? [])
+    .map(p => JSON.stringify([p.fulcra_userid, p.data_type])));
   const threads = new Map();
   const legacy = new Map();
   const pending = [];
@@ -92,9 +99,7 @@ export async function discoverThreads(app) {
       ...(identifier ? { identifier } : {}) };
     const connection = isConnection(entry);
     if (connection) {
-      const exact = entry.fields ? [entry] : parseConnections(await call('get_data_catalog', { data_type: entry.id, fulcra_userid: owner }));
-      const schema = exact.find(e => e.id === entry.id && (e.fulcra_userid || own) === owner);
-      if (!schema || !compatibleSchema(schema)) continue;
+      if (!looksLikeConnection(entry) && !matched.has(key)) continue;
       const pairs = owner === own && channelMetadata(entry.description).peers;
       if (pairs?.length) source.matchedPeers = pairs;
     }

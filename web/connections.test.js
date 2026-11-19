@@ -28,7 +28,7 @@ for (const prefix of ['connect-agents-with-anyone', 'connect-our-agents']) {
     assert.equal((await discoverThreads(app([{ ...channel, fulcra_userid: peer }], [], [incoming]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [{ ...share, datashare_name: `${prefix}: test` }]))).threads.length, 1);
     assert.equal((await discoverThreads(app([channel], [share, { share_all_data: true }]))).threads.length, 1);
-    assert.equal((await discoverThreads(app([{ ...channel, fields: {} }]))).threads.length, 0);
+    assert.equal((await discoverThreads(app([{ ...channel, name: 'Notes', description: 'Notes' }]))).threads.length, 0);
   });
 }
 test('same-peer broad overlap retains both directions without changing the audience', async () => {
@@ -67,9 +67,8 @@ test('broad access policy neither establishes nor expands a contact', async () =
   assert.deepEqual(result.threads[0].expectedPeerUserids, ['another-peer', peer].sort());
 });
 
-test('all covering grants and channel schema are checked', async () => {
+test('all covering grants are checked', async () => {
   assert.equal((await discoverThreads(app([entry],[share,{share_all_data:true}]))).threads.length,1);
-  assert.equal((await discoverThreads(app([{...entry,fields:{}}]))).threads.length,0);
 });
 test('legacy group-only entries are excluded and owned provenance suppresses repeat conversion', async () => {
   const legacy={id:old,name:'Mesh Outbox old',fulcra_userid:peer};

@@ -75,7 +75,7 @@ async def create_agent_invitation(inviter_name: str, recipient_name: str,
 @openai_tools.tool(app={"visibility": ["app"]}, annotations={
     "title": "Match Agent Invitations", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
 async def match_agent_invitations() -> dict:
-    """Match unambiguous FIRST-message codes for user-prepared invitations using
+    """Match unambiguous handshake codes within the outbox creation-time window (one-year fallback) for user-prepared invitations using
     authenticated incoming-share owners, not sender claims. Verify the return grant
     for that outbox only; open invitations get individual copies, never template grants.
     Labels (<sender> via <open invitation identifier>) are display-only. Unmatched

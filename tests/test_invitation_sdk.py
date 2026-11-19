@@ -74,7 +74,7 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
             except ValueError:
                 raise HTTPError(req.full_url, 422, 'Invalid query', Message(), None)
             end = parsed.vector_selector.at.at
-            assert end - parsed.range == datetime(1, 1, 1, tzinfo=timezone.utc)
+            assert end - parsed.range == query_end - timedelta(days=365, seconds=1)
             assert end == query_end
             payload = '\n'.join(json.dumps(r) for r in rows).encode()
             return BytesIO(payload + (b'\n{"id":' if partial else b'\n'))
@@ -115,12 +115,7 @@ def test_sdk_invitation_transport_owner_scope_and_partial_reads(monkeypatch, par
     if partial:
         assert result['status'] == 'unavailable' and outgoing == []
         assert result['diagnostic'] == {'stage': 'handshake_history', 'category': 'validation'}
-    elif earlier:
-        if open_invitation:
-            assert result['results'] == []
-        else:
-            assert result['results'][0]['reason'] == 'No unique first-message handshake.'
-        assert outgoing == []
+
     else:
         assert result['results'][0]['status'] == 'matched'
         assert invitations.match(api)['results'] == []

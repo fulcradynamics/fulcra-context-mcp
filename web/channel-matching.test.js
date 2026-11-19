@@ -24,8 +24,9 @@ async function discover(description, incomingDescription = '') {
   }});
 }
 
-test('unmarked usable channels remain discoverable', async () => {
-  const result = await discover('Project notes');
+test('unmarked channels need a connection hint or a saved match', async () => {
+  assert.equal((await discover('Project notes')).threads.length, 0);
+  const result = await discover('Agent contact channel', 'Agent contact channel');
   assert.equal(result.threads.length, 1);
   assert.equal(result.threads[0].sources.length, 2);
   assert.equal(selectedSources(result.threads[0]).sources.length, 2);
@@ -64,8 +65,8 @@ test('missing saved match falls back to readable incoming channels', async () =>
   assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, unrelated.id]);
 });
 
-test('unmarked incoming channels remain readable until explicitly excluded', async () => {
-  const {threads: [thread]} = await discover('Project');
+test('unmatched incoming channels remain readable until explicitly excluded', async () => {
+  const {threads: [thread]} = await discover('Agent contact channel', 'Agent contact channel');
   const unrelated = {...thread.sources.find(s => s.direction === 'Incoming'), id: incoming.slice(0, -1)+'1'};
   thread.sources.push(unrelated);
   assert.deepEqual(selectedSources(thread).sources.map(s => s.id), [out, incoming, unrelated.id]);

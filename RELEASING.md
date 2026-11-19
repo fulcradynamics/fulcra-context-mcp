@@ -4,6 +4,23 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.16 release notes
+
+- Keep the conversation still while typing in the message composer. Contacts UI
+  v84 removes the per-keystroke scroll adjustment and mentions the Fulcra plugin
+  in invitation text. Earlier released UI bundles stay intact.
+
+## 1.19.15 release notes
+
+- Automatic invitation matching uses each invitation outbox's creation timestamp,
+  or a 365-day fallback when absent, and accepts any exact handshake in that window.
+  Individual and open invitations use the same rule on OpenAI and standard endpoints.
+  Ambiguous peers and uncertain writes remain blocked. No UI bundle changes.
+
+- Catalog results include `created_at` from the data type's metadata when available,
+  for owned and shared types on standard, OpenAI and Claude endpoints. Other
+  metadata remains private; tool schemas, descriptions and annotations are unchanged.
+
 ## 1.19.13 release notes
 
 - Fix sign-in from Claude Desktop, on every endpoint: `/callback` rejected

@@ -36,13 +36,3 @@ for(const mode of ['absent','wrong-owner','wrong-peer','group','valid']) test(`c
   assert.deepEqual(result.threads[0].convertedFrom,mode==='valid'?refs:[]);
   assert.deepEqual(result.threads[0].sources[0].convertedFrom??[],mode==='valid'?refs:[]);
 });
-for(const mode of ['types','required','kind','body_limit','sender_limit','recipients','valid']) test(`semantic connection schema: ${mode}`,async()=>{
-  const candidate=structuredClone(entry);
-  if(mode==='types') {candidate.fields={sender:'number',kind:'boolean',body:'object'};delete candidate.required_fields;}
-  if(mode==='required') delete candidate.required_fields;
-  if(mode==='kind') candidate.fields.kind.enum=['message','heartbeat'];
-  if(mode==='body_limit') candidate.fields.body.maxLength=9999;
-  if(mode==='sender_limit') candidate.fields.sender.minLength=0;
-  if(mode==='recipients') candidate.fields.recipients.maxItems=99;
-  assert.equal((await discover([candidate],[],[incoming(peer,id)])).threads.length,mode==='valid'?1:0);
-});

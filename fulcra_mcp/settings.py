@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # Overrides the origin taken from each request's Host (see public_url.py).
     oidc_server_url: str | None = None
     fulcra_environment: str = "stdio"
+    fulcra_mcp_variant: Literal["standard", "openai", "claude"] = "standard"
     fulcra_contacts_debug: bool = False
     # Domain verification token from the OpenAI plugin portal, served at
     # /.well-known/openai-apps-challenge; unset serves 404.

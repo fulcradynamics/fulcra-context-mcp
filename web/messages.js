@@ -3,7 +3,7 @@ import { contactName, readable, contactIdentity } from './contact-identity.js';
 import { messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources, availableSources, sourceKey } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
-import { readConversation, readLatest } from './conversation.js';
+import { readConversation } from './conversation.js';
 import { createMessageList } from './message-list.js';
 import { renderArtifacts } from './artifacts.js';
 import { getContextLifecycle } from './native-context.js';
@@ -29,7 +29,6 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const status = doc.querySelector('#message-status');
   const retry = doc.querySelector('#message-retry');
   const retrySpinner = doc.querySelector('#message-retry-spinner');
-  const loading = doc.querySelector('#message-loading');
   const messages = doc.querySelector('#messages');
   const composer = doc.querySelector('#thread-composer');
   const viewerLabel = doc.createElement('label'); viewerLabel.textContent = 'Your agent name';
@@ -100,10 +99,20 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const more = doc.querySelector('#message-more');
   const moreSpinner = doc.querySelector('#more-spinner');
   more.prepend(icon(History, 'btn-icon'));
+  const moreLabel = more.querySelector('.more-label');
   let loadingMore = false;
-  // The spinner sits to the right of the button; toggling visibility (not
-  // display) keeps its space reserved so the button never shifts.
-  const updateMore = () => { moreSpinner.style.visibility = loadingMore ? 'visible' : 'hidden'; };
+  // Opening a thread and loading more history share one loading state in the
+  // history row, so the thread's height doesn't change when loading finishes.
+  // The spinner's space is always reserved (visibility, not display).
+  const updateMore = () => {
+    const busy = loadingMore || firstAttempt || debug.get(selected?.peer).messages === 'loading';
+    history.hidden = !busy && !attemptedStart;
+    if (!attemptedStart) through.textContent = '';
+    if (busy) more.disabled = true;
+    moreLabel.textContent = busy ? 'Loading' : 'Load more history';
+    moreSpinner.style.visibility = busy ? 'visible' : 'hidden';
+    messages.before(history);
+  };
 
   // Context-lifecycle plumbing runs, but its progress is no longer surfaced to the
   // user (it was too technical); writes go to a detached, never-shown element.
@@ -111,6 +120,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   const drafts = new Map();
   // start is the applied window start; each read covers start through now.
   let selected, displayed, start, requestedStart, attemptedStart, updateComposer, lastSuccess, ready = false;
+  // A list preview stands in for history but never enables sending.
+  let provisional = false;
   const syncDebug = setupDebugControls(doc, debug, () => selected?.peer);
   const ackPreview = doc.createElement('p'); ackPreview.id = 'debug-ack-status'; ackPreview.className = 'meta'; ackPreview.hidden = true;
   status.after(ackPreview);
@@ -130,7 +141,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     () => ({peer_fulcra_userid:selected?.peer, legacy_sources:selected?.convertedFrom ?? []}),
     {lifecycle:contextLifecycle, isCurrent:()=>!!selected?.convertedFrom?.length && !unavailable});
 
-  let generation = 0, sourceGeneration = 0;
+  let generation = 0, sourceGeneration = 0, readGeneration = 0;
   let returnFocus;
   let firstAttempt = true, loadFailed = false, unavailable = false, statusTimer;
   let refreshState = { running: false, paused: false, nextAt: null };
@@ -160,7 +171,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (overrides.messages === 'empty') text = 'No messages in this history window. (Debug preview)';
       if (overrides.messages === 'error') text = 'Could not load messages. (Debug preview; live retries unchanged)';
     }
-    loading.hidden = overrides.messages === 'loading' ? false : !firstAttempt || !!displayed;
+    updateMore();
     messages.hidden = overrides.messages === 'loading';
     ackPreview.hidden = !overrides.ack;
     ackPreview.textContent = overrides.ack ? `Debug preview: ${acknowledgementPreview[overrides.ack]}` : '';
@@ -305,7 +316,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       setTitle(selected);
       renderStatus();
       placeMore();
-      updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || result.messages.length));
+      updateComposer(selected.peer, start && { start_time: start }, result, ready, Boolean(lastSuccess || (!provisional && result.messages.length)));
     });
   }
 
@@ -320,9 +331,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   function failed(error, revoked = false) {
     if (!selected) return;
     acknowledgeOnOpen = false;
-    firstAttempt = false; loading.hidden = true;
+    firstAttempt = false;
     loadFailed = true; unavailable = revoked || unavailable;
-    const canSend = !unavailable && Boolean(lastSuccess || displayed?.messages.length);
+    const canSend = !unavailable && Boolean(lastSuccess || (!provisional && displayed?.messages.length));
     const warning = `${unavailable ? '' : 'Stale — '}${error.message} Access and content not verified current. Retrying automatically.`;
     displayed = { messages: unavailable ? [] : (displayed?.messages ?? []).map(m => ({ ...m, stale: true })), warnings: [...new Set([...(displayed?.warnings ?? []), warning])] };
     if (unavailable) {
@@ -337,7 +348,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (!selected) return true;
     renderStatus();
     const requestGeneration = generation, requestSourceGeneration = sourceGeneration;
-    const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration;
+    const requestReadGeneration = ++readGeneration;
+    const current = () => generation === requestGeneration && sourceGeneration === requestSourceGeneration
+      && readGeneration === requestReadGeneration;
     try {
       const available = discovery.threads.find(t => t.peer === selected.peer);
       if (available) incoming.update(available, drafts.get(selected.peer)?.excludedSources, drafts.get(selected.peer)?.outbox);
@@ -362,7 +375,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (!start && !requestedStart && thread) {
         let latest;
         // Anchoring history must remain available even when a preview cannot be resolved.
-        try { latest = await readLatest(app, thread.sources, Date.now(), { resolveContent: false }); } catch { throw new Error('Could not find the latest messages.'); }
+        try {
+          latest = await discovery.readLatest(thread.sources, { resolveContent: false });
+        } catch { throw new Error('Could not find the latest messages.'); }
         if (!current()) return true;
         const edges = ['Incoming', 'Outgoing'].map(d => latest.find(m => m.direction === d)).filter(Boolean)
           .map(m => Date.parse(m.record.recorded_at ?? m.record.start_time));
@@ -376,11 +391,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       if (!current()) return true;
       const success = !result.warnings.some(w => w.startsWith('Could not load messages'));
       // A failed wider read keeps the applied window; the next refresh retries it.
-      if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; }
+      if (success) { lastSuccess = query.end_time; start = query.start_time; requestedStart = undefined; provisional = false; }
       loadFailed = !success; unavailable = false;
-      loading.hidden = true;
+      firstAttempt = false;
       displayed = result;
-      render(result);
+      render(result, !provisional);
       // Consume the explicit opening gesture once, never on later polling.
       if (acknowledgeOnOpen) {
         acknowledgeOnOpen = false;
@@ -401,9 +416,8 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   }
   // History controls sit at the earliest end of the list; Load more history extends the window by two weeks.
   function placeMore() {
-    history.hidden = !attemptedStart;
     if (attemptedStart) through.textContent = `Showing messages through ${new Date(attemptedStart).toLocaleDateString()}`;
-    messages.before(history);
+    updateMore();
   }
   const onMore = () => {
     if (!start || requestedStart) return;
@@ -419,11 +433,16 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     contextLifecycle.invalidate();
     if (displayed) render(displayed, ready);
   };
+  function rememberHistory() {
+    // Only history that loaded is cached; a lone list preview is not history.
+    if (selected && displayed && lastSuccess) drafts.get(selected.peer).history = { messages: displayed.messages, start, requestedStart, lastSuccess };
+  }
   const onBack = () => {
+    rememberHistory();
     contextLifecycle.invalidate();
     generation++;
     selected = undefined;
-    clearTimeout(statusTimer); loading.hidden = true; history.hidden = true;
+    clearTimeout(statusTimer); history.hidden = true;
     messageList.clear(); composer.replaceChildren();
     panel.hidden = true; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = false;
@@ -435,14 +454,15 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   retry.addEventListener('click', onRetry);
   viewer.addEventListener('input', onViewer);
 
-  function select(thread, button, { acknowledge = false } = {}) {
+  function select(thread, button, { acknowledge = false, preview } = {}) {
+    rememberHistory();
     acknowledgeOnOpen = acknowledge;
     contextLifecycle.invalidate();
     generation++;
     const selectionGeneration = generation;
-    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false;
+    selected = thread; displayed = undefined; lastSuccess = undefined; start = undefined; requestedStart = undefined; attemptedStart = undefined; ready = false; provisional = false;
     firstAttempt = true; loadFailed = false; unavailable = false;
-    clearTimeout(statusTimer); loading.hidden = false;
+    clearTimeout(statusTimer);
     returnFocus?.removeAttribute('aria-current');
     returnFocus = button;
     button?.setAttribute('aria-current', 'true');
@@ -469,22 +489,38 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
       });
     updateComposer(thread.peer, undefined, { messages: [], warnings: [...selected.warnings, 'Messages loading; displayed history is not yet available.'] }, false, false);
     setTitle(thread);
-    history.hidden = true; more.disabled = false; loadingMore = false; updateMore();
+    more.disabled = false; loadingMore = false; updateMore();
     advanced.hidden = true; advancedToggle.setAttribute('aria-expanded', 'false');
     contactTopic.hidden = true; contactTopic.textContent = '';
     panel.hidden = false; listPanel.hidden = false;
     doc.querySelector('#selection-empty').hidden = true;
     status.textContent = '';
-    renderDisplay();
-    requestRefresh();
+    const cached = drafts.get(thread.peer).history;
+    if (cached) {
+      ({ start, requestedStart, lastSuccess } = cached);
+      attemptedStart = requestedStart ?? start;
+      more.disabled = Boolean(requestedStart);
+      displayed = {
+        messages: cached.messages.filter(m => selected.sources.some(s => sourceKey(s) === sourceKey(m.source)))
+          .map(m => ({ ...m, stale: true })),
+        warnings: [...selected.warnings, 'Messages loading; cached history is not yet refreshed.'],
+      };
+      render(displayed, false);
+    } else if (preview && selected.sources.some(s => sourceKey(s) === sourceKey(preview.source))) {
+      displayed = { messages: [preview], warnings: [...selected.warnings, 'Messages loading; displayed history is incomplete.'] };
+      provisional = true;
+      render(displayed, false);
+    } else renderDisplay();
+    requestRefresh('selection');
   }
-  return { select, back: onBack, refresh: read, failed, contextLifecycle,
+  return { select, back: onBack, refresh: read, contextLifecycle,
+    failed(error) { readGeneration++; failed(error); },
     refreshState(state) { refreshState = state; renderStatus(); },
     dispose() {
     generation++; selected = undefined;
     messageList.dispose();
     stopDebug();
-    clearTimeout(statusTimer); loading.hidden = true;
+    clearTimeout(statusTimer);
     more.removeEventListener('click', onMore);
     retry.removeEventListener('click', onRetry);
     advancedToggle.removeEventListener('click', onAdvanced);

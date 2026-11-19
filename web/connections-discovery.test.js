@@ -49,6 +49,53 @@ test('sharing account names are labeled without inventing agent names or groupin
 });
 
 const entry = (id, owner) => ({ id: `Event/${id}`, name: 'Mesh Outbox same name', ...(owner ? { fulcra_userid: owner } : {}) });
+const discover = async (catalog, shares) => {
+  const calls = [];
+  const result = await discoverThreads({ async callServerTool(call) {
+    calls.push(call);
+    return text(call.name === 'get_data_catalog'
+      ? 'Available data types, grouped by compatible tool: ' + JSON.stringify({ 'data types usable with: get_records': catalog })
+      : 'Shares: ' + JSON.stringify({ own_fulcra_userid: 'me', incoming: [], ...shares }));
+  } });
+  return { calls, result };
+};
+
+test('one catalog and one shares call discover contacts without per-type lookups', async () => {
+  const catalog = [{ ...entry('own'), description: 'Agent contact channel' },
+    { ...entry('incoming', 'peer'), description: 'connect-our-agents channel' }];
+  const { calls, result } = await discover(catalog, { outgoing: [grant('own')],
+    incoming: incomingFixtures(catalog).map(({ datashare_name, ...s }) => s) });
+  assert.deepEqual(calls, [{ name: 'get_data_catalog', arguments: {} }, { name: 'list_shares', arguments: { direction: 'both' } }]);
+  assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/own', 'Event/incoming']]);
+});
+
+test('narrowly shared Events need a connection-like name or description', async () => {
+  const catalog = [
+    { ...entry('notes'), name: 'Workout notes', description: 'Personal notes' },
+    { ...entry('prefixed'), name: 'connect-our-agents: me with Alex', description: 'Notes' },
+    { ...entry('described'), name: 'Plain', description: 'Agent contact channel: messages sent to Alex.' },
+    { ...entry('labelled'), name: 'Plain', description: 'Contact label: "Alex"' },
+    { ...entry('legacy'), name: 'Plain', description: '[mesh_identifier: "Alex"]' },
+  ];
+  const { result } = await discover(catalog, { outgoing: catalog.map(e => grant(e.id.slice(6))) });
+  assert.deepEqual(result.threads[0].sources.map(s => s.id).sort(),
+    ['Event/described', 'Event/labelled', 'Event/legacy', 'Event/prefixed']);
+  assert.deepEqual(result.pending, []);
+});
+
+for (const named of [false, true]) test(`an own channel's saved match identifies an unmarked incoming channel; named=${named}`, async () => {
+  const match = JSON.stringify({ version: 1, peers: [{ fulcra_userid: '00000000-0000-4000-8000-000000000002', data_type: 'Event/00000000-0000-4000-8000-00000000000a' }] });
+  const peer = '00000000-0000-4000-8000-000000000002';
+  const catalog = [
+    { ...entry('own'), description: named ? `Connection details: ${match}` : `[agent_connection: ${match}]` },
+    { id: 'Event/00000000-0000-4000-8000-00000000000a', name: 'Their stuff', description: 'Anything', fulcra_userid: peer },
+    { id: 'Event/00000000-0000-4000-8000-00000000000b', name: 'Other stuff', description: 'Anything', fulcra_userid: peer },
+  ];
+  const { result } = await discover(catalog, { outgoing: [{ ...grant('own'), with_user_ids: [peer] }],
+    incoming: catalog.slice(1).map(e => ({ sharing_fulcra_userid: peer, grant_type: 'user', data_types: [e.id] })) });
+  assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/own', 'Event/00000000-0000-4000-8000-00000000000a']]);
+});
+
 for (const named of [false, true]) test(`setup links belong only to eligible own outgoing channels; named=${named}`, async () => {
   const url = 'codex://threads/00000000-0000-0000-0000-000000000001';
   const linked = (id, owner) => ({ ...entry(id, owner), description: named ? `Setup conversation: "${url}"` : `[connection_setup_session: "${url}"]` });
