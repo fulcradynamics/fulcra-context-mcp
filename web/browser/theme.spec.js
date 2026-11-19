@@ -15,7 +15,7 @@ async function expectPalette(ui, theme) {
   await expect(ui.locator('html')).toHaveCSS('background-color', palette.canvas);
   await expect(ui.locator('h1')).toHaveCSS('color', palette.text);
   await expect(ui.locator('#invite')).toHaveCSS('color', palette.text);
-  await expect(ui.locator('#invite')).toHaveCSS('background-color', palette.raised);
+  await expect(ui.locator('#invite')).toHaveCSS('background-color', palette.surface);
   await expect(ui.locator('#invite')).toHaveCSS('border-radius', '10px');
   await expect(ui.locator('#invite')).toHaveCSS('justify-content', 'center');
   await expect(ui.locator('#invite .btn-icon')).toHaveCSS('color', palette.accent);
@@ -37,6 +37,9 @@ for (const theme of ['dark', 'light']) test(`host ${theme} theme covers conversa
   await page.locator('iframe').evaluate(el => el.style.height = '700px');
   await ui.locator('.thread-button').filter({ hasText: 'Weekend' }).click();
   await expectPalette(ui, theme);
+  await ui.locator('#invite').hover();
+  await expect(ui.locator('#invite')).toHaveCSS('background-color', palettes[theme].surface);
+  await ui.locator('h1').hover();
   await ui.locator('.composer-input').fill('A draft that survives theme changes');
   await expect(ui.locator('.send-to-peer')).toBeEnabled();
   await expect(ui.locator('.send-to-peer')).toHaveCSS('color', 'rgb(255, 255, 255)');
