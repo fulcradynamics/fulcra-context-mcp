@@ -22,7 +22,7 @@ MENU_ICONS = [
 # The version tools advertise. web/ui-version.js reads this line to name the
 # bundle it builds. Every UI update should raise the version number.
 # see "UI versions" in docs/contacts-app.md.
-CONTACTS_UI_VERSION = 85
+CONTACTS_UI_VERSION = 84
 UI_MIME_TYPE = "text/html;profile=mcp-app"
 FULL_PANEL = {"openai/ui": {"preferredDisplayMode": "fullscreen", "availableDisplayModes": ["fullscreen"]}}
 # Every version ever released, current included. Earlier ones stay readable for
