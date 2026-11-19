@@ -267,9 +267,14 @@ body #legacy-connections .thread-text { display: block; min-width: 0; }
 .legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
 .legacy-help { color: var(--on-surface-muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
 /* Portal's page action pill, kept in the contacts rail. */
-body #invite { font-size: 14px; padding: 8px 14px; gap: 6px; border: 1px solid var(--divider); border-radius: 9999px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 8px 30px #00000014; transition: border-color 150ms ease; }
+body #invite { font-size: 12px; padding: 8px 10px; gap: 6px; white-space: nowrap; border: 1px solid var(--divider); border-radius: 9999px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 8px 30px #00000014; transition: border-color 150ms ease; }
 body #invite:hover:not(:disabled) { background: var(--surface-raised); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
 #invite .btn-icon { color: var(--primary-readable); }
+#invite .invite-short { display: none; }
+@media (max-width: 520px) {
+  #invite .invite-label { display: none; }
+  #invite .invite-short { display: inline; }
+}
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: var(--on-surface); }
 #host-guidance::backdrop { background: #0009; }
 #end-contact-dialog, .app-dialog { width: min(440px, 90vw); box-sizing: border-box; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: var(--on-surface); }
@@ -699,7 +704,7 @@ html { overflow-anchor: none; }
     <div class="contacts-layout">
     <section id="connection-list" aria-labelledby="connections-title">
       <div class="rail-content">
-      <button id="invite" type="button" disabled>Invite someone’s agent</button>
+      <button id="invite" type="button" aria-label="Invite someone’s agent" disabled><span class="invite-label" aria-hidden="true">Invite someone’s agent</span><span class="invite-short" aria-hidden="true">Invite</span></button>
       <div class="section-header">
         <h2 id="connections-title">Agent Chats</h2>
         <span class="section-rule" aria-hidden="true"></span>

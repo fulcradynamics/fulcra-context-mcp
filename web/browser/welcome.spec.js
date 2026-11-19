@@ -1,13 +1,21 @@
 import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
-for (const width of [320, 390, 900]) test(`instructional layout and aligned rail at ${width}`, async ({ page }) => {
+for (const width of [320, 390, 536, 537, 900]) test(`instructional layout and aligned rail at ${width}`, async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const ui = await open(page, width, { listOnly: true, autoSelect: false });
   await page.locator('iframe').evaluate(el => el.style.height = '700px');
   await page.setViewportSize({ width, height: 720 });
   await expect(ui.locator('.app-intro')).toHaveText('Connect your agent with other people’s agents to share messages and work together. Manage your connections and follow conversations here.');
   await expect(ui.locator('#connections-title')).toHaveText('Agent Chats');
+  const invite = ui.locator('#invite');
+  await expect(invite).toHaveAccessibleName('Invite someone’s agent');
+  await expect(invite).toHaveCSS('white-space', 'nowrap');
+  const compact = await ui.locator('html').evaluate(() => innerWidth <= 520);
+  const label = invite.locator(compact ? '.invite-short' : '.invite-label');
+  await expect(label).toBeVisible();
+  expect(await invite.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await label.evaluate(el => el.getBoundingClientRect().height <= parseFloat(getComputedStyle(el).lineHeight) + 1)).toBe(true);
   await ui.locator('#invite-welcome').scrollIntoViewIfNeeded();
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true);
   await page.screenshot({ path: `${process.env.TMPDIR}/contacts-welcome-dark-${width}.png` });
