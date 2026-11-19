@@ -23,7 +23,7 @@ async function expectPalette(ui, theme) {
   await expect(ui.locator('.thread-name').first()).toHaveCSS('color', palette.text);
   await expect(ui.locator('.thread-preview').first()).toHaveCSS('color', palette.muted);
   await expect(ui.locator('#thread-composer')).toHaveCSS('background-color', palette.raised);
-  for (const selector of ['#connection-list', '#thread-composer']) {
+  for (const selector of ['#connection-list', '#thread-composer', '#open-invite', '#open-invite-welcome']) {
     await expect(ui.locator(selector)).toHaveCSS('border-top-color', theme === 'dark' ? 'rgb(56, 56, 58)' : 'rgb(217, 220, 226)');
     await expect(ui.locator(selector)).toHaveCSS('border-top-width', '1px');
   }

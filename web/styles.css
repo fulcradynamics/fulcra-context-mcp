@@ -433,7 +433,7 @@ ul, ol { list-style: none; padding: 0; margin: 0; }
 /* Disabled Send stays recognizably purple, just dimmed (not harshly dark). */
 .composer-primary.send-to-peer:disabled { background: var(--bubble-disabled); color: var(--bubble-disabled-content); }
 /* Gray secondary action (the host-chat handoff) so it doesn't read as primary. */
-.composer-actions .btn-secondary { border: 1px solid var(--divider); }
+.composer-actions .btn-secondary, #open-invite, #open-invite-welcome { border: 1px solid var(--divider); }
 .composer-actions .btn-secondary:not(:disabled) { background: var(--surface); color: var(--on-surface); font-weight: 400; }
 .composer-actions .btn-secondary:hover:not(:disabled) { background: var(--surface-raised-hover); }
 .composer-hint { margin: 8px 0 0; font-size: 12px; color: var(--on-surface-muted); }
