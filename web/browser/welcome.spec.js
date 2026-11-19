@@ -12,9 +12,8 @@ for (const width of [320, 390, 900]) test(`instructional layout and aligned rail
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true);
   await page.screenshot({ path: `${process.env.TMPDIR}/contacts-welcome-dark-${width}.png` });
   await page.evaluate(() => document.querySelector('iframe').contentWindow.postMessage({ jsonrpc:'2.0', method:'ui/notifications/host-context-changed', params:{theme:'light'} }, '*'));
-  // This app retains its dark palette even when the host reports a light theme.
-  await expect(ui.locator('html')).toHaveCSS('color-scheme', 'dark');
-  await expect(ui.locator('html')).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(ui.locator('html')).toHaveCSS('color-scheme', 'light');
+  await expect(ui.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const chatInset = await ui.locator('#connections .thread-button').first().evaluate(el => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft));
   await page.evaluate(() => { window.excludeOut = true; });
   await page.clock.runFor(11000);

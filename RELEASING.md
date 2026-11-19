@@ -4,6 +4,12 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.18 release notes
+
+- Contacts UI v85 follows the host’s light or dark appearance, including live
+  changes, with Portal-aligned semantic colors for panels, messages, controls and
+  dialogs. Missing host appearance defaults to dark. Earlier bundles stay intact.
+
 ## 1.19.16 release notes
 
 - Keep the conversation still while typing in the message composer. Contacts UI

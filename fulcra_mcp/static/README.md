@@ -9,5 +9,4 @@ The contact tools embed it as a data URI tool icon because [OpenAI entrypoints](
 prefer tool icons over server or registered-app branding.
 
 `icon.png` remains the full-color server/listing and in-app asset. The plugin's
-logo and composer icon are separate branding surfaces. The app itself remains
-dark-only.
+logo and composer icon are separate branding surfaces. The app itself follows the host's light or dark appearance.

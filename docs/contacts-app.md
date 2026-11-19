@@ -222,7 +222,9 @@ The sidebar stays beside the conversation at all widths and reaches the bottom o
 the frame. The message pane scrolls on its own; the composer follows the last
 message, with half a viewport of extra room so it can be scrolled above host
 chrome. Bottom clearance is the larger of the host/device inset and 36px (48px in
-fullscreen). The UI is dark-only and keeps the Fulcra palette and Rubik.
+fullscreen). The UI follows the host’s light or dark appearance, including live changes, and
+defaults to dark when no appearance is supplied. Both palettes use the Portal /
+Context Web semantic color roles and keep Rubik.
 
 ## UI versions
 
