@@ -224,7 +224,9 @@ message, with half a viewport of extra room so it can be scrolled above host
 chrome. Bottom clearance is the larger of the host/device inset and 36px (48px in
 fullscreen). The UI follows the host’s light or dark appearance, including live changes, and
 defaults to dark when no appearance is supplied. Both palettes use the Portal /
-Context Web semantic color roles and keep Rubik.
+Context Web semantic color roles and keep Rubik. The contacts rail and floating
+composer use `chrome` (`#121318` dark, `#e9ecf1` light), distinct from the
+conversation canvas.
 
 ## UI versions
 
