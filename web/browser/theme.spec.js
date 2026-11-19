@@ -14,7 +14,10 @@ async function expectPalette(ui, theme) {
   await expect(ui.locator('html')).toHaveCSS('color-scheme', theme);
   await expect(ui.locator('html')).toHaveCSS('background-color', palette.canvas);
   await expect(ui.locator('h1')).toHaveCSS('color', palette.text);
-  await expect(ui.locator('#invite')).toHaveCSS('color', theme === 'light' ? 'rgb(10, 92, 99)' : 'rgb(86, 214, 183)');
+  await expect(ui.locator('#invite')).toHaveCSS('color', palette.text);
+  await expect(ui.locator('#invite')).toHaveCSS('background-color', palette.raised);
+  await expect(ui.locator('#invite')).toHaveCSS('border-radius', '9999px');
+  await expect(ui.locator('#invite .btn-icon')).toHaveCSS('color', palette.accent);
   await expect(ui.locator('#connection-list')).toHaveCSS('background-color', palette.chrome);
   await expect(ui.locator('.thread-name').first()).toHaveCSS('color', palette.text);
   await expect(ui.locator('.thread-preview').first()).toHaveCSS('color', palette.muted);

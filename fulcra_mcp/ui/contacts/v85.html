@@ -129,7 +129,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   --divider: #38383a;
   --on-surface-muted: #8a8a8e;
   --on-surface: #fff;
-  --primary-readable: #56d6b7;
+  --primary: #56d6b7;
+  --primary-readable: var(--primary);
   --primary-tint-content: #56d6b7;
   --primary-hover: #abebdb;
   --primary-content: #05241c;
@@ -265,7 +266,10 @@ body #legacy-connections .thread-text { display: block; min-width: 0; }
 .legacy-convert { grid-column: 1; justify-self: start; }
 .legacy-convert, .pending-assist { font-size: 11px; padding: 5px 9px; min-height: 0; overflow-wrap: normal; }
 .legacy-help { color: var(--on-surface-muted); font-size: 12px; line-height: 1.5; margin: -4px 0 8px; }
-body #invite { font-size: 12px; padding: 8px 14px; gap: 8px; }
+/* Portal's page action pill, kept in the contacts rail. */
+body #invite { font-size: 14px; padding: 8px 14px; gap: 6px; border: 1px solid var(--divider); border-radius: 9999px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 8px 30px #00000014; transition: border-color 150ms ease; }
+body #invite:hover:not(:disabled) { background: var(--surface-raised); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+#invite .btn-icon { color: var(--primary-readable); }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: var(--on-surface); }
 #host-guidance::backdrop { background: #0009; }
 #end-contact-dialog, .app-dialog { width: min(440px, 90vw); box-sizing: border-box; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: var(--on-surface); }
