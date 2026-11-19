@@ -15,6 +15,10 @@ for (const width of [320, 390, 536, 537, 900]) test(`instructional layout and al
   const label = invite.locator(compact ? '.invite-short' : '.invite-label');
   await expect(label).toBeVisible();
   expect(await invite.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const buttonBox = await invite.boundingBox();
+  const iconBox = await invite.locator('.btn-icon').boundingBox();
+  const labelBox = await label.boundingBox();
+  expect(Math.abs((iconBox.x + labelBox.x + labelBox.width) / 2 - (buttonBox.x + buttonBox.width / 2))).toBeLessThanOrEqual(1);
   expect(await label.evaluate(el => el.getBoundingClientRect().height <= parseFloat(getComputedStyle(el).lineHeight) + 1)).toBe(true);
   await ui.locator('#invite-welcome').scrollIntoViewIfNeeded();
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true);
