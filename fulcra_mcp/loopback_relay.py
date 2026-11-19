@@ -14,14 +14,12 @@ import json
 import urllib.parse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fulcra_api.core import FULCRA_OIDC_AUDIENCE, FULCRA_OIDC_DOMAIN
 
 from .public_url import public_origin
 from .settings import settings
-
-router = APIRouter(prefix="/hermes")
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1"}
 
@@ -61,7 +59,6 @@ def _unpack(state: str) -> tuple[str, str]:
         raise HTTPException(400, "Invalid state")
 
 
-@router.get("/authorize")
 async def authorize(request: Request) -> Response:
     params = dict(request.query_params)
     redirect_uri = _loopback(params.get("redirect_uri"))
@@ -78,7 +75,6 @@ async def authorize(request: Request) -> Response:
     return RedirectResponse(_auth0("/authorize?" + urllib.parse.urlencode(params)), 302)
 
 
-@router.get("/callback")
 async def callback(request: Request) -> Response:
     params = dict(request.query_params)
     redirect_uri, state = _unpack(params.get("state", ""))
@@ -91,7 +87,6 @@ async def callback(request: Request) -> Response:
     return HTMLResponse(_CONFIRM_PAGE.format(target=html.escape(target)))
 
 
-@router.post("/token")
 async def token(request: Request) -> Response:
     form = dict(await request.form())
     if form.get("grant_type") == "authorization_code":
@@ -105,6 +100,12 @@ async def token(request: Request) -> Response:
         media_type=upstream.headers.get("content-type"),
         headers={"Cache-Control": "no-store"},
     )
+
+
+def add_routes(app: FastAPI) -> None:
+    app.add_api_route("/hermes/authorize", authorize, methods=["GET"])
+    app.add_api_route("/hermes/callback", callback, methods=["GET"])
+    app.add_api_route("/hermes/token", token, methods=["POST"])
 
 
 _CONFIRM_PAGE = """<!doctype html>

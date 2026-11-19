@@ -242,7 +242,7 @@ async def file_upload(token: str, request: Request) -> Response:
     return Response(json.dumps(result) + "\n", media_type="application/json")
 
 
-app.include_router(loopback_relay.router)
+loopback_relay.add_routes(app)
 
 
 @app.get("/callback")
