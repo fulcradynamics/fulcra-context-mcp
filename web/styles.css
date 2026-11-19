@@ -19,7 +19,6 @@
   background: var(--canvas);
   /* Semantic roles and values shared with Portal / Context Web. */
   --canvas: #000;
-  --chrome: #121318;
   --surface: #16161d;
   --surface-raised: #222227;
   --surface-raised-hover: #38383a;
@@ -61,7 +60,6 @@
 :root[data-theme='light'] {
   color-scheme: light;
   --canvas: #fff;
-  --chrome: #e9ecf1;
   --surface: #fff;
   --surface-raised: #f4f5f7;
   --surface-raised-hover: #e9ecf1;
@@ -85,7 +83,7 @@
 
 /* Bounded panes own scrolling; safe-bottom padding belongs to rail content. */
 .contacts-layout { display: grid; grid-template-columns: minmax(215px, 26%) minmax(0, 1fr); gap: 20px; flex: 1; min-height: 0; margin-top: 12px; }
-#connection-list { overflow-y: auto; min-width: 0; background: var(--chrome); border: 1px solid var(--surface-raised); border-bottom: 0; border-radius: 12px 12px 0 0; }
+#connection-list { overflow-y: auto; min-width: 0; background: var(--surface-raised); border: 1px solid var(--surface-raised); border-bottom: 0; border-radius: 12px 12px 0 0; }
 /* Slack-style: keep scroll panes clean — a slim scrollbar only fills in on hover. */
 #connection-list::-webkit-scrollbar, #message-area::-webkit-scrollbar { width: 8px; }
 #connection-list::-webkit-scrollbar-track, #message-area::-webkit-scrollbar-track { background: transparent; }
@@ -457,7 +455,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 12p
 #thread-composer details label { font-size: 12px; color: var(--on-surface-muted); margin-top: 12px; }
 
 /* The flex footer is always pinned, including short and empty histories. */
-#thread-composer:not(:empty) { margin-top: 8px; background: var(--chrome); border: 1px solid var(--surface-raised); border-radius: 16px; padding: 12px 14px; }
+#thread-composer:not(:empty) { margin-top: 8px; background: var(--surface-raised); border: 1px solid var(--surface-raised); border-radius: 16px; padding: 12px 14px; }
 #thread-composer label { display: block; }
 #thread-composer .composer-actions { margin-top: 14px; }
 /* Primary Send sits bottom-right; the secondary handoff stays on the left. */

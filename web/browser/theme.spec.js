@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { open } from './harness.js';
 
 const palettes = {
-  dark: { chrome: 'rgb(18, 19, 24)', canvas: 'rgb(0, 0, 0)', surface: 'rgb(22, 22, 29)', raised: 'rgb(34, 34, 39)', text: 'rgb(255, 255, 255)', muted: 'rgb(138, 138, 142)', accent: 'rgb(86, 214, 183)' },
-  light: { chrome: 'rgb(233, 236, 241)', canvas: 'rgb(255, 255, 255)', surface: 'rgb(255, 255, 255)', raised: 'rgb(244, 245, 247)', text: 'rgb(22, 22, 29)', muted: 'rgb(98, 106, 120)', accent: 'rgb(14, 125, 132)' },
+  dark: { canvas: 'rgb(0, 0, 0)', surface: 'rgb(22, 22, 29)', raised: 'rgb(34, 34, 39)', text: 'rgb(255, 255, 255)', muted: 'rgb(138, 138, 142)', accent: 'rgb(86, 214, 183)' },
+  light: { canvas: 'rgb(255, 255, 255)', surface: 'rgb(255, 255, 255)', raised: 'rgb(244, 245, 247)', text: 'rgb(22, 22, 29)', muted: 'rgb(98, 106, 120)', accent: 'rgb(14, 125, 132)' },
 };
 const changeTheme = (page, theme) => page.evaluate(theme => {
   document.querySelector('iframe').contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme } }, '*');
@@ -19,10 +19,10 @@ async function expectPalette(ui, theme) {
   await expect(ui.locator('#invite')).toHaveCSS('border-radius', '10px');
   await expect(ui.locator('#invite')).toHaveCSS('justify-content', 'center');
   await expect(ui.locator('#invite .btn-icon')).toHaveCSS('color', palette.accent);
-  await expect(ui.locator('#connection-list')).toHaveCSS('background-color', palette.chrome);
+  await expect(ui.locator('#connection-list')).toHaveCSS('background-color', palette.raised);
   await expect(ui.locator('.thread-name').first()).toHaveCSS('color', palette.text);
   await expect(ui.locator('.thread-preview').first()).toHaveCSS('color', palette.muted);
-  await expect(ui.locator('#thread-composer')).toHaveCSS('background-color', palette.chrome);
+  await expect(ui.locator('#thread-composer')).toHaveCSS('background-color', palette.raised);
   await expect(ui.locator('.composer-input')).toHaveCSS('color', palette.text);
   await expect(ui.locator('.incoming .bubble').first()).toHaveCSS('background-color', palette.raised);
   await expect(ui.locator('.incoming .bubble').first()).toHaveCSS('color', palette.text);
