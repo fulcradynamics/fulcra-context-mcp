@@ -14,6 +14,12 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
   tokens. Nothing is stored. The app's Auth0 client must allow
   `<server>/hermes/callback`. Tools and UI are unchanged.
 
+## 1.19.18 release notes
+
+- Contacts UI v85 follows the host’s light or dark appearance, including live
+  changes, with Portal-aligned semantic colors for panels, messages, controls and
+  dialogs. Missing host appearance defaults to dark. Earlier bundles stay intact.
+
 ## 1.19.16 release notes
 
 - Keep the conversation still while typing in the message composer. Contacts UI
