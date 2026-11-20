@@ -15,7 +15,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
-from . import file_transfer, server_info
+from . import file_transfer, loopback_relay, server_info
 from .claude_endpoint import CLAUDE_MCP_PATH, create_claude_server
 from .credentials import fulcra_for_grant
 from .endpoint import create_server
@@ -240,6 +240,9 @@ async def file_upload(token: str, request: Request) -> Response:
             media_type="text/plain",
         )
     return Response(json.dumps(result) + "\n", media_type="application/json")
+
+
+loopback_relay.add_routes(app)
 
 
 @app.get("/callback")
