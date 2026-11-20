@@ -222,7 +222,13 @@ The sidebar stays beside the conversation at all widths and reaches the bottom o
 the frame. The message pane scrolls on its own; the composer follows the last
 message, with half a viewport of extra room so it can be scrolled above host
 chrome. Bottom clearance is the larger of the host/device inset and 36px (48px in
-fullscreen). The UI is dark-only and keeps the Fulcra palette and Rubik.
+fullscreen). The UI follows the host’s light or dark appearance, including live changes, and
+defaults to dark when no appearance is supplied. Both palettes use the Portal /
+Context Web semantic color roles and keep Rubik. The contacts rail and floating
+composer use `surface-raised` (`#222227` dark, `#f4f5f7` light), matching Portal’s
+chat components and distinct from the conversation canvas. Both use the theme’s
+`divider` border (`#38383a` dark, `#d9dce2` light). The secondary host-chat action
+uses a contrasting `surface` fill with the same divider outline.
 
 ## UI versions
 

@@ -78,7 +78,7 @@ createServer(async (req, res) => {
     }
     if (url === '/contacts.html') {
       const html = (await readFile(appHtmlPath, 'utf8'))
-        .replace('</head>', `<style>:root{background:${DEV_BG} !important}</style></head>`);
+        .replace('</head>', `<style>:root:not([data-theme='light']){background:${DEV_BG} !important}</style></head>`);
       res.writeHead(200, { 'content-type': 'text/html' });
       return res.end(html);
     }
