@@ -12,14 +12,22 @@ for (const width of [320, 390, 536, 537, 900]) test(`instructional layout and al
   await expect(invite).toHaveAccessibleName('Invite someone’s agent');
   await expect(invite).toHaveCSS('white-space', 'nowrap');
   const compact = await ui.locator('html').evaluate(() => innerWidth <= 520);
-  const label = invite.locator(compact ? '.invite-short' : '.invite-label');
+  const label = invite.locator('.invite-label');
   await expect(label).toBeVisible();
-  await expect(label).toHaveText(compact ? 'Invite an agent' : 'Invite someone’s agent');
+  await expect(label).toHaveText('Invite someone’s agent');
+  await expect(invite.locator('.btn-icon')).toBeVisible({ visible: !compact });
   expect(await invite.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   const buttonBox = await invite.boundingBox();
   const iconBox = await invite.locator('.btn-icon').boundingBox();
   const labelBox = await label.boundingBox();
-  expect(Math.abs((iconBox.x + labelBox.x + labelBox.width) / 2 - (buttonBox.x + buttonBox.width / 2))).toBeLessThanOrEqual(1);
+  const contentCenter = compact ? labelBox.x + labelBox.width / 2 : (iconBox.x + labelBox.x + labelBox.width) / 2;
+  expect(Math.abs(contentCenter - (buttonBox.x + buttonBox.width / 2))).toBeLessThanOrEqual(1);
+  if (compact) {
+    const railWidth = await ui.locator('#connection-list').evaluate(el => el.clientWidth);
+    const railPadding = await ui.locator('.rail-content').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).paddingRight));
+    expect(Math.abs(railWidth - railPadding - buttonBox.width)).toBeLessThanOrEqual(1);
+    expect(buttonBox.width - labelBox.width).toBeCloseTo(22, 0);
+  }
   expect(await label.evaluate(el => el.getBoundingClientRect().height <= parseFloat(getComputedStyle(el).lineHeight) + 1)).toBe(true);
   await ui.locator('#invite-welcome').scrollIntoViewIfNeeded();
   expect(await ui.locator('html').evaluate(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true);

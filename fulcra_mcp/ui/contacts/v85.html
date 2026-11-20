@@ -219,7 +219,7 @@ body #invite { margin: 0; width: 100%; justify-content: start; }
 body .section-tag, body .list-intro { display: none; }
 @media (max-width: 520px) {
   body main { padding-left: calc(8px + max(env(safe-area-inset-left, 0px), var(--host-safe-left, 0px))); padding-right: calc(8px + max(env(safe-area-inset-right, 0px), var(--host-safe-right, 0px))); }
-  .contacts-layout { gap: 10px; grid-template-columns: minmax(148px, 32%) minmax(0, 1fr); }
+  .contacts-layout { gap: 10px; grid-template-columns: min-content minmax(0, 1fr); }
   .rail-content { padding-right: 6px; }
   body .section-header { gap: 4px; flex-wrap: wrap; }
 
@@ -268,10 +268,9 @@ body #legacy-connections .thread-text { display: block; min-width: 0; }
 body #invite { font-size: 12px; padding: 8px 10px; gap: 6px; white-space: nowrap; justify-content: center; text-align: center; border: 1px solid var(--divider); border-radius: 10px; background: var(--surface); color: var(--on-surface); box-shadow: 0 8px 30px #00000014; transition: border-color 150ms ease; }
 body #invite:hover:not(:disabled) { background: var(--surface); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
 #invite .btn-icon { color: var(--primary-readable); }
-#invite .invite-short { display: none; }
 @media (max-width: 520px) {
-  #invite .invite-label { display: none; }
-  #invite .invite-short { display: inline; }
+  body #invite { width: max-content; }
+  #invite .btn-icon { display: none; }
 }
 #host-guidance { max-width: min(440px, 90vw); border: 1px solid var(--divider); border-radius: 8px; background: var(--surface); color: var(--on-surface); }
 #host-guidance::backdrop { background: #0009; }
@@ -703,7 +702,7 @@ html { overflow-anchor: none; }
     <div class="contacts-layout">
     <section id="connection-list" aria-labelledby="connections-title">
       <div class="rail-content">
-      <button id="invite" type="button" aria-label="Invite someone’s agent" disabled><span class="invite-label" aria-hidden="true">Invite someone’s agent</span><span class="invite-short" aria-hidden="true">Invite an agent</span></button>
+      <button id="invite" type="button" aria-label="Invite someone’s agent" disabled><span class="invite-label" aria-hidden="true">Invite someone’s agent</span></button>
       <div class="section-header">
         <h2 id="connections-title">Agent Chats</h2>
         <span class="section-rule" aria-hidden="true"></span>
