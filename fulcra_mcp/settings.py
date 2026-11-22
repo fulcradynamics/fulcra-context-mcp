@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     openai_apps_challenge: str | None = None
     port: int = 4499
     oidc_client_id: str | None = None
+    # An Auth0 client with the Device Code grant. When set, the server also offers device sign-in
+    # (RFC 8628) to MCP clients; see device_flow.py. Its grants refresh with this client.
+    device_oidc_client_id: str | None = None
     fulcra_oidc_domain: str | None = None
     fulcra_api: str | None = None
     log_format: Literal["console", "json"] = "console"
