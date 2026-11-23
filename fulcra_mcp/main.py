@@ -19,6 +19,7 @@ from . import file_transfer, server_info
 from .claude_endpoint import CLAUDE_MCP_PATH, create_claude_server
 from .credentials import fulcra_for_grant
 from .endpoint import create_server
+from .hermes_endpoint import HERMES_MCP_PATH, create_hermes_server
 from .logging_config import configure_logging
 from .openai_endpoint import OPENAI_MCP_PATH, create_openai_server
 from .provider import oauth_provider
@@ -36,6 +37,7 @@ socket.setdefaulttimeout(settings.http_timeout_seconds)
 mcp = create_server()
 openai_mcp = create_openai_server()
 claude_mcp = create_claude_server()
+hermes_mcp = create_hermes_server()
 
 # Add CORS middleware for browser-based clients
 cors_middleware = [
@@ -65,6 +67,7 @@ cors_middleware = [
 mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 openai_asgi_app = openai_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 claude_asgi_app = claude_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
+hermes_asgi_app = hermes_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 
 
 @asynccontextmanager
@@ -73,6 +76,7 @@ async def lifespan(_app: FastAPI):
         mcp_asgi_app.lifespan(_app),
         openai_asgi_app.lifespan(_app),
         claude_asgi_app.lifespan(_app),
+        hermes_asgi_app.lifespan(_app),
     ):
         yield
 
@@ -148,7 +152,7 @@ async def server_card_preflight() -> Response:
 # /.well-known/oauth-protected-resource/mcp first, and spec-strict ones compare
 # the declared resource against the URL they connected to, so serve that
 # document with the matching identifier.
-for _path in ("/mcp", OPENAI_MCP_PATH, CLAUDE_MCP_PATH):
+for _path in ("/mcp", OPENAI_MCP_PATH, CLAUDE_MCP_PATH, HERMES_MCP_PATH):
     for _route in create_protected_resource_routes(
         resource_url=AnyHttpUrl(f"{str(oauth_provider.base_url).rstrip('/')}{_path}"),
         authorization_servers=[oauth_provider.issuer_url],
@@ -272,7 +276,7 @@ class OpenAIWorkaroundMiddleware:
             return
 
         # Rewrite /mcp to /mcp/ so the Starlette mount passes "/" to the sub-app
-        if scope["path"] in ("/mcp", "/MCP", OPENAI_MCP_PATH, CLAUDE_MCP_PATH):
+        if scope["path"] in ("/mcp", "/MCP", OPENAI_MCP_PATH, CLAUDE_MCP_PATH, HERMES_MCP_PATH):
             scope = dict(scope, path=scope["path"] + "/")
 
         if scope["path"] in (
@@ -281,6 +285,7 @@ class OpenAIWorkaroundMiddleware:
             "/MCP/register",
             f"{OPENAI_MCP_PATH}/register",
             f"{CLAUDE_MCP_PATH}/register",
+            f"{HERMES_MCP_PATH}/register",
         ):
             logger.info(
                 "Intercepted /register request (ASGI). Attempting to modify 'token_endpoint_auth_method'."
@@ -389,6 +394,7 @@ MCP_PATHS = (
     "/", "/mcp", "/mcp/", "/MCP", "/MCP/",
     OPENAI_MCP_PATH, f"{OPENAI_MCP_PATH}/",
     CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/",
+    HERMES_MCP_PATH, f"{HERMES_MCP_PATH}/",
 )
 
 
@@ -475,6 +481,7 @@ app.add_middleware(PathFormChallengeMiddleware)
 app.add_middleware(PublicOriginMiddleware, advertised_origin=str(oauth_provider.base_url))
 app.mount(OPENAI_MCP_PATH, openai_asgi_app)
 app.mount(CLAUDE_MCP_PATH, claude_asgi_app)
+app.mount(HERMES_MCP_PATH, hermes_asgi_app)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)

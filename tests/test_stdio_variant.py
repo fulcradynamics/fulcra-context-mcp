@@ -79,6 +79,6 @@ def test_http_keeps_all_routes(monkeypatch, tmp_path, variant):
     monkeypatch.setattr(main.uvicorn, 'run', run)
     main.main()
     assert run.call_args.args == (main.app,)
-    assert {'/mcp', '/openai/mcp', '/claude/mcp'} <= {
+    assert {'/mcp', '/openai/mcp', '/claude/mcp', '/hermes/mcp'} <= {
         route.path for route in main.app.routes
     }
