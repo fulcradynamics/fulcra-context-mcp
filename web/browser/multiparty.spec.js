@@ -61,3 +61,9 @@ test('send carries full expected audience; widening invalidates context and pres
  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Keep old draft');
 });
+
+test('the saved open-invitation name becomes the assumed agent name',async({page})=>{
+ const ui=await open(page,390,{standingName:'Avery'});
+ await ui.locator('#advanced-toggle').click();
+ await expect(ui.getByLabel('Your agent name')).toHaveValue("Avery's synthetic");
+});

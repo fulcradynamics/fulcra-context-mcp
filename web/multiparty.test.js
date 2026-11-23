@@ -62,5 +62,8 @@ test('agent addressing is exact-case, not human identity or privacy',()=>{
  assert.equal(hostAgent({getHostVersion:()=>({name:'Hermes'})}),'hermes');
  assert.equal(hostAgent({getHostVersion:()=>({name:'ChatGPT'})}),'chatgpt');
  assert.equal(hostAgent({getHostVersion:()=>undefined}),'agent');
+ assert.equal(hostAgent({getHostVersion:()=>({name:'Hermes'})},'Avery'),"Avery's Hermes");
+ assert.equal(hostAgent({getHostVersion:()=>({name:'chatgpt'})},'Avery'),"Avery's ChatGPT");
+ assert.equal(hostAgent({getHostVersion:()=>undefined},'Avery'),"Avery's agent");
  assert.equal(viewingAgent([],'<untrusted>'),'<untrusted>');
 });

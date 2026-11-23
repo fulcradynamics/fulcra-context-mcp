@@ -68,6 +68,13 @@ function directRecipients(share) {
     && share.with_user_ids;
 }
 
+function savedInviter(description) {
+  try {
+    const name = fieldSpan(description, 'standing_invitation_inviter')?.[2];
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+  } catch { return undefined; }
+}
+
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
@@ -85,9 +92,13 @@ export async function discoverThreads(app) {
   const legacy = new Map();
   const pending = [];
   const seen = new Set();
-  let omitted = 0;
+  let omitted = 0, inviterName;
   for (const entry of catalog) {
-    if (isInvitationTemplate(entry)) continue;
+    if (isInvitationTemplate(entry)) {
+      // The name the user saved for their open invitation, which introduces this agent as "<name>'s <host>".
+      if ((entry.fulcra_userid || own) === own) inviterName = savedInviter(entry.description) ?? inviterName;
+      continue;
+    }
     const owner = entry.fulcra_userid || own;
     const key = JSON.stringify([owner, entry.id]);
     if (seen.has(key)) continue;
@@ -201,5 +212,5 @@ export async function discoverThreads(app) {
       && thread.sources.some(s => s.direction === 'Incoming' && s.fulcra_userid === thread.peer);
     if (old && (complete || old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id]))))) legacy.delete(thread.peer);
   }
-  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
+  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings, inviterName };
 }

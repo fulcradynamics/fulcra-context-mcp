@@ -93,7 +93,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (expand) messageList.reveal(advanced);
   };
   advancedToggle.addEventListener('click', onAdvanced);
-  let activeViewer = hostAgent(app);
+  let activeViewer = hostAgent(app), inviter;
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
   const more = doc.querySelector('#message-more');
@@ -290,7 +290,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   function render(result, canSend = true) {
     ready = canSend;
     const draft = drafts.get(selected.peer);
-    const assumed = hostAgent(app);
+    const assumed = hostAgent(app, inviter);
     activeViewer = viewingAgent(result.messages, draft.viewingAgent, assumed);
     readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === assumed ? ' (assumption; change here)' : ''}`;
     if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
@@ -515,6 +515,11 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     requestRefresh('selection');
   }
   return { select, back: onBack, refresh: read, contextLifecycle,
+    setInviter(name) {
+      if (name === inviter) return;
+      inviter = name;
+      if (selected && displayed) render(displayed, ready);
+    },
     failed(error) { readGeneration++; failed(error); },
     refreshState(state) { refreshState = state; renderStatus(); },
     dispose() {

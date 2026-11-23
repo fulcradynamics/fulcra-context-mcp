@@ -7,9 +7,11 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 ## 1.19.19 release notes
 
 - Contacts UI v86: with no sender name chosen and no single earlier one in the
-  thread, the panel assumes the host's own name, lowercased (`hermes` in Hermes,
-  `chatgpt` in ChatGPT, unchanged there), instead of always `chatgpt`. Earlier
-  bundles stay intact.
+  thread, the panel assumes `<name>'s <host>` (such as `Avery's Hermes`) when the
+  user has saved a name on their open invitation, the agent name its invitations
+  introduce, and otherwise the host's own name, lowercased (`hermes`, `chatgpt`),
+  instead of always `chatgpt`. The name comes from the catalog the panel already
+  reads. Earlier bundles stay intact.
 
 ## 1.19.18 release notes
 

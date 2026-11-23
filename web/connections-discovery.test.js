@@ -179,3 +179,12 @@ test('failed, malformed, and timed-out discovery rejects, never returns empty hi
   assert.equal((await load([entry('own')], [grant('own')])).selections.length, 1);
   await assert.rejects(load([entry('own')], [grant('own')], ''), /Thread discovery failed/);
 });
+
+test('the user\'s saved open-invitation name, from their own template only', async () => {
+  const template = (owner, description) => ({ id: `Event/t-${owner}`, name: 'connect-our-agents-standing-invitation', fulcra_userid: owner, description });
+  const inviter = async catalog => (await discover(catalog, { outgoing: [] })).result.inviterName;
+  assert.equal(await inviter([template('me', 'Agent contact channel\nInvitation sender: "Avery"')]), 'Avery');
+  assert.equal(await inviter([template('other', 'Invitation sender: "Mallory"')]), undefined);
+  assert.equal(await inviter([template('me', 'Agent contact channel')]), undefined);
+  assert.equal(await inviter([template('me', 'Invitation sender: "A" Invitation sender: "B"')]), undefined);
+});
