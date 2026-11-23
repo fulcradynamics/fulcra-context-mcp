@@ -1,6 +1,6 @@
 import { createThreadComposer } from './thread-composer.js';
 import { contactName, readable, contactIdentity } from './contact-identity.js';
-import { messageAddressing, viewingAgent } from './addressing.js';
+import { hostAgent, messageAddressing, viewingAgent } from './addressing.js';
 import { incomingSelector, selectedSources, availableSources, sourceKey } from './incoming-sources.js';
 import { renderStatus as renderAssessment } from './contact-status.js';
 import { readConversation } from './conversation.js';
@@ -93,7 +93,7 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
     if (expand) messageList.reveal(advanced);
   };
   advancedToggle.addEventListener('click', onAdvanced);
-  let activeViewer = 'chatgpt';
+  let activeViewer = hostAgent(app);
   const history = doc.querySelector('#message-history');
   const through = doc.querySelector('#message-through');
   const more = doc.querySelector('#message-more');
@@ -290,8 +290,9 @@ export function setupMessages(app, doc, requestRefresh, presentation = 'global',
   function render(result, canSend = true) {
     ready = canSend;
     const draft = drafts.get(selected.peer);
-    activeViewer = viewingAgent(result.messages, draft.viewingAgent);
-    readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === 'chatgpt' ? ' (assumption; change here)' : ''}`;
+    const assumed = hostAgent(app);
+    activeViewer = viewingAgent(result.messages, draft.viewingAgent, assumed);
+    readingSummary.textContent = `Message addressing — viewing as ${activeViewer}${!draft.viewingAgent && activeViewer === assumed ? ' (assumption; change here)' : ''}`;
     if (viewer.value !== activeViewer && doc.activeElement !== viewer) viewer.value = activeViewer;
     // The per-message "sent" badge reflects confirmation; no separate status line.
     reconcilePosts(draft, result.messages);

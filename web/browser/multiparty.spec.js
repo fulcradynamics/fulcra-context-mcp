@@ -10,7 +10,7 @@ test('own audience names, exact addressing, provenance and safe responsive label
  await expect(ui.locator('#messages img, #messages script')).toHaveCount(0);
  await expect(ui.locator('.message-source').first()).toContainText('association unverified');
  await ui.locator('#advanced-toggle').click();
- await expect(ui.getByLabel('Your agent name')).toHaveValue('chatgpt');
+ await expect(ui.getByLabel('Your agent name')).toHaveValue('synthetic');
  await ui.getByLabel('Your agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
  expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='send_agent_contact_message').map(c=>c.arguments.kind))).toEqual(['ack']);

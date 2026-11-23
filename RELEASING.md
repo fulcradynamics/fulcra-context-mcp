@@ -4,6 +4,13 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.19 release notes
+
+- Contacts UI v86: with no sender name chosen and no single earlier one in the
+  thread, the panel assumes the host's own name, lowercased (`hermes` in Hermes,
+  `chatgpt` in ChatGPT, unchanged there), instead of always `chatgpt`. Earlier
+  bundles stay intact.
+
 ## 1.19.18 release notes
 
 - Contacts UI v85 follows the host’s light or dark appearance, including live
