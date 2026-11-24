@@ -2,6 +2,7 @@
 deployment works on its custom domain, run.app URL and tagged previews without
 being told its own URL."""
 
+import re
 import time
 import urllib.parse
 from unittest.mock import MagicMock
@@ -63,12 +64,23 @@ async def test_protected_resource_metadata_uses_the_request_host(path, resource)
     assert doc["authorization_servers"] == [f"{PUBLIC}/"]
 
 
-async def test_the_401_challenge_uses_the_request_host():
+@pytest.mark.parametrize("path", [
+    "/", "/mcp", "/mcp/", "/MCP", "/MCP/",
+    "/openai/mcp", "/openai/mcp/", "/claude/mcp", "/claude/mcp/",
+    "/hermes/mcp", "/hermes/mcp/",
+])
+async def test_401_metadata_identifies_requested_endpoint(path):
     async with client_for(PUBLIC) as client:
-        response = await client.post("/mcp", json={})
+        response = await client.post(path, json={})
+        assert response.status_code == 401
+        challenge = response.headers["www-authenticate"]
+        metadata_url = re.search(r'resource_metadata="([^"]+)"', challenge)
+        assert metadata_url, challenge
+        metadata = await client.get(metadata_url.group(1))
 
-    assert response.status_code == 401
-    assert f'resource_metadata="{PUBLIC}/.well-known/' in response.headers["www-authenticate"]
+    assert metadata.status_code == 200
+    assert metadata.request.url.host == response.request.url.host
+    assert metadata.json()["resource"] == str(response.request.url)
 
 
 @pytest.mark.parametrize(
