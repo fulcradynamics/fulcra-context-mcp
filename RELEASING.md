@@ -4,6 +4,14 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.19 release notes
+
+- Serve `/hermes/mcp` for the Hermes plugin (`hermes_endpoint.py`), currently the
+  same server as `/mcp`, so the plugin's behavior can be kept or changed without
+  touching `/mcp`.
+- OAuth challenges on all MCP endpoints now link to metadata for the exact
+  requested path, including the `/MCP` alias and trailing-slash URLs.
+
 ## 1.19.18 release notes
 
 - Contacts UI v85 follows the host’s light or dark appearance, including live
