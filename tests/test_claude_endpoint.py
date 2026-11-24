@@ -96,7 +96,7 @@ async def test_claude_endpoint_requires_auth(path):
     assert response.status_code == 401
     # Its own path-form document, whose resource is the URL Claude connected to.
     challenge = response.headers["www-authenticate"]
-    assert f'/.well-known/oauth-protected-resource{CLAUDE_MCP_PATH}"' in challenge
+    assert f'/.well-known/oauth-protected-resource{path}"' in challenge
 
 
 @pytest.mark.parametrize("path", [CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/"])
