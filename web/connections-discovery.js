@@ -78,7 +78,8 @@ function savedInviter(description) {
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_data_catalog', {}).then(parseConnections),
+    // Contact channels are always user-defined types; the full catalog can exceed a host's result limit.
+    call('get_data_catalog', { category: 'user_defined' }).then(parseConnections),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
   if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');

@@ -12,6 +12,10 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
   introduce, and otherwise the host's own name, lowercased (`hermes`, `chatgpt`),
   instead of always `chatgpt`. The name comes from the catalog the panel already
   reads. Earlier bundles stay intact.
+- Contacts UI v86 also asks `get_data_catalog` for user-defined types only, where
+  every contact channel is. The full catalog (about 120 KB on a dev account) can
+  exceed a host's tool-result limit (Hermes caps plugin MCP results at about
+  64 KB), so contacts failed to load.
 
 ## 1.19.18 release notes
 
