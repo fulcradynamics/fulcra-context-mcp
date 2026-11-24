@@ -158,6 +158,7 @@ jobs:
       fulcra_api: ${{ steps.vars.outputs.fulcra_api }}
       oidc_client_id: ${{ steps.vars.outputs.oidc_client_id }}
       openai_apps_challenge: ${{ steps.vars.outputs.openai_apps_challenge }}
+      device_oidc_client_id: ${{ steps.vars.outputs.device_oidc_client_id }}
     steps:
       - name: Read runtime config
         id: vars
@@ -168,8 +169,10 @@ jobs:
           FULCRA_API: ${{ vars.FULCRA_API }}
           OIDC_CLIENT_ID: ${{ vars.OIDC_CLIENT_ID }}
           OPENAI_APPS_CHALLENGE: ${{ vars.OPENAI_APPS_CHALLENGE }}
+          DEVICE_OIDC_CLIENT_ID: ${{ vars.DEVICE_OIDC_CLIENT_ID }}
         run: |
           # OPENAI_APPS_CHALLENGE is optional; unset serves a 404.
+          # DEVICE_OIDC_CLIENT_ID is optional; unset offers no device sign-in.
           for v in FULCRA_ENVIRONMENT FULCRA_OIDC_DOMAIN FULCRA_API OIDC_CLIENT_ID; do
             if [ -z "${!v}" ]; then
               echo "::error::Environment $CONFIG is missing the $v variable"
@@ -182,6 +185,7 @@ jobs:
             echo "fulcra_api=$FULCRA_API"
             echo "oidc_client_id=$OIDC_CLIENT_ID"
             echo "openai_apps_challenge=$OPENAI_APPS_CHALLENGE"
+            echo "device_oidc_client_id=$DEVICE_OIDC_CLIENT_ID"
           } >> "$GITHUB_OUTPUT"
 
   deploy:
@@ -284,6 +288,7 @@ jobs:
           FULCRA_API: ${{ needs.config.outputs.fulcra_api }}
           OIDC_CLIENT_ID: ${{ needs.config.outputs.oidc_client_id }}
           OPENAI_APPS_CHALLENGE: ${{ needs.config.outputs.openai_apps_challenge }}
+          DEVICE_OIDC_CLIENT_ID: ${{ needs.config.outputs.device_oidc_client_id }}
         run: |
           for v in PROJECT REGION SERVICE; do
             if [ -z "${!v}" ]; then
@@ -295,10 +300,17 @@ jobs:
           # "^|^" switches gcloud's list delimiter from "," to "|".
           env_vars="^|^FULCRA_ENVIRONMENT=$FULCRA_ENVIRONMENT|FULCRA_OIDC_DOMAIN=$FULCRA_OIDC_DOMAIN|FULCRA_API=$FULCRA_API|OIDC_CLIENT_ID=$OIDC_CLIENT_ID"
           args=(--image "$IMAGE" --region "$REGION" --project "$PROJECT" --quiet)
-          if [ -n "$OPENAI_APPS_CHALLENGE" ]; then
-            env_vars+="|OPENAI_APPS_CHALLENGE=$OPENAI_APPS_CHALLENGE"
-          else
-            args+=(--remove-env-vars OPENAI_APPS_CHALLENGE)
+          # Optional variables: set when configured, else removed (in one flag; gcloud keeps only the last).
+          remove=()
+          for v in OPENAI_APPS_CHALLENGE DEVICE_OIDC_CLIENT_ID; do
+            if [ -n "${!v}" ]; then
+              env_vars+="|$v=${!v}"
+            else
+              remove+=("$v")
+            fi
+          done
+          if [ ${#remove[@]} -gt 0 ]; then
+            args+=(--remove-env-vars "$(IFS=,; echo "${remove[*]}")")
           fi
           args+=(--update-env-vars "$env_vars")
           if [ -n "$REVISION_TAG" ]; then

@@ -12,6 +12,7 @@ from fulcra_api.credentials import FulcraCredentials
 from mcp.server.auth.middleware.auth_context import get_access_token
 
 from .provider import aware, oauth_provider
+from . import device_flow
 from .settings import settings
 from .user_agent import fulcra_api_kwargs
 
@@ -296,7 +297,8 @@ def fulcra_for_grant(
 
     fulcra = GrantFulcraAPI(
         grant_id,
-        oidc_client_id=settings.oidc_client_id,
+        # Device sign-ins come from a different Auth0 client, which must also refresh them.
+        oidc_client_id=device_flow.oidc_client_id(grant_id),
         oidc_domain=settings.fulcra_oidc_domain,
         oidc_audience=settings.fulcra_api,
         credentials=creds,

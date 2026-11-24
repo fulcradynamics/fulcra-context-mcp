@@ -135,6 +135,12 @@ class FulcraOAuthProvider(OAuthProvider):
         self._grant_locks: dict[str, threading.RLock] = {}
         self._grant_locks_guard = threading.Lock()
 
+    def get_routes(self, mcp_path=None):
+        routes = super().get_routes(mcp_path)
+        from . import device_flow
+
+        return device_flow.routes(self, routes) if device_flow.enabled() else routes
+
     # ------------------------------------------------------------------ paths
 
     def _state_file(self, *parts: str) -> Path | None:
