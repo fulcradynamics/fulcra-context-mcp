@@ -19,6 +19,7 @@ from . import file_transfer, server_info
 from .claude_endpoint import CLAUDE_MCP_PATH, create_claude_server
 from .credentials import fulcra_for_grant
 from .endpoint import create_server
+from .hermes_endpoint import HERMES_MCP_PATH, create_hermes_server
 from .logging_config import configure_logging
 from .openai_endpoint import OPENAI_MCP_PATH, create_openai_server
 from .provider import oauth_provider
@@ -36,6 +37,7 @@ socket.setdefaulttimeout(settings.http_timeout_seconds)
 mcp = create_server()
 openai_mcp = create_openai_server()
 claude_mcp = create_claude_server()
+hermes_mcp = create_hermes_server()
 
 # Add CORS middleware for browser-based clients
 cors_middleware = [
@@ -65,6 +67,7 @@ cors_middleware = [
 mcp_asgi_app = mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 openai_asgi_app = openai_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 claude_asgi_app = claude_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
+hermes_asgi_app = hermes_mcp.http_app(path="/", middleware=cors_middleware, stateless_http=True)
 
 
 @asynccontextmanager
@@ -73,6 +76,7 @@ async def lifespan(_app: FastAPI):
         mcp_asgi_app.lifespan(_app),
         openai_asgi_app.lifespan(_app),
         claude_asgi_app.lifespan(_app),
+        hermes_asgi_app.lifespan(_app),
     ):
         yield
 
@@ -148,7 +152,9 @@ async def server_card_preflight() -> Response:
 # /.well-known/oauth-protected-resource/mcp first, and spec-strict ones compare
 # the declared resource against the URL they connected to, so serve that
 # document with the matching identifier.
-for _path in ("/mcp", OPENAI_MCP_PATH, CLAUDE_MCP_PATH):
+MCP_MOUNTS = ("/mcp", "/MCP", OPENAI_MCP_PATH, CLAUDE_MCP_PATH, HERMES_MCP_PATH)
+MCP_RESOURCE_PATHS = tuple(path for mount in MCP_MOUNTS for path in (mount, mount + "/"))
+for _path in MCP_RESOURCE_PATHS:
     for _route in create_protected_resource_routes(
         resource_url=AnyHttpUrl(f"{str(oauth_provider.base_url).rstrip('/')}{_path}"),
         authorization_servers=[oauth_provider.issuer_url],
@@ -272,7 +278,7 @@ class OpenAIWorkaroundMiddleware:
             return
 
         # Rewrite /mcp to /mcp/ so the Starlette mount passes "/" to the sub-app
-        if scope["path"] in ("/mcp", "/MCP", OPENAI_MCP_PATH, CLAUDE_MCP_PATH):
+        if scope["path"] in MCP_MOUNTS:
             scope = dict(scope, path=scope["path"] + "/")
 
         if scope["path"] in (
@@ -281,6 +287,7 @@ class OpenAIWorkaroundMiddleware:
             "/MCP/register",
             f"{OPENAI_MCP_PATH}/register",
             f"{CLAUDE_MCP_PATH}/register",
+            f"{HERMES_MCP_PATH}/register",
         ):
             logger.info(
                 "Intercepted /register request (ASGI). Attempting to modify 'token_endpoint_auth_method'."
@@ -385,33 +392,23 @@ class OpenAIWorkaroundMiddleware:
             await self.app(scope, receive, send)
 
 
-MCP_PATHS = (
-    "/", "/mcp", "/mcp/", "/MCP", "/MCP/",
-    OPENAI_MCP_PATH, f"{OPENAI_MCP_PATH}/",
-    CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/",
-)
+MCP_PATHS = ("/", *MCP_RESOURCE_PATHS)
 
 
 class PathFormChallengeMiddleware:
-    """Point /claude/mcp's 401 at its own path-form metadata document.
+    """Point each mounted endpoint's 401 at metadata for the exact request path."""
 
-    The endpoints are built at "/", so their 401 challenges all name the root
-    document, whose resource is "<base>/". Claude's directory requires the
-    declared resource to equal the URL the user connected to, which the
-    path-form document above does.
-    """
-
-    MOUNTS = {CLAUDE_MCP_PATH: CLAUDE_MCP_PATH, f"{CLAUDE_MCP_PATH}/": CLAUDE_MCP_PATH}
     ROOT_DOCUMENT = '/.well-known/oauth-protected-resource"'
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        mount = self.MOUNTS.get(scope["path"]) if scope["type"] == "http" else None
-        if mount is None:
+        if scope["type"] != "http" or scope["path"] not in MCP_RESOURCE_PATHS:
             await self.app(scope, receive, send)
             return
+
+        path = scope["path"]
 
         async def rewriting_send(message):
             if message["type"] == "http.response.start":
@@ -419,7 +416,7 @@ class PathFormChallengeMiddleware:
                 challenge = headers.get("www-authenticate")
                 if challenge:
                     headers["www-authenticate"] = challenge.replace(
-                        self.ROOT_DOCUMENT, f'/.well-known/oauth-protected-resource{mount}"')
+                        self.ROOT_DOCUMENT, f'/.well-known/oauth-protected-resource{path}"')
             await send(message)
 
         await self.app(scope, receive, rewriting_send)
@@ -475,6 +472,7 @@ app.add_middleware(PathFormChallengeMiddleware)
 app.add_middleware(PublicOriginMiddleware, advertised_origin=str(oauth_provider.base_url))
 app.mount(OPENAI_MCP_PATH, openai_asgi_app)
 app.mount(CLAUDE_MCP_PATH, claude_asgi_app)
+app.mount(HERMES_MCP_PATH, hermes_asgi_app)
 app.mount("/MCP", mcp_asgi_app)
 app.mount("/mcp", mcp_asgi_app)
 app.mount("/", mcp_asgi_app)
