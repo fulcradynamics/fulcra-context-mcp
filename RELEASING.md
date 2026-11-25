@@ -4,6 +4,19 @@ A version-bump PR merged to `main` publishes the package to PyPI and the
 [official MCP Registry](https://registry.modelcontextprotocol.io)
 (`com.fulcradynamics/context`). Hosted deployment is separate.
 
+## 1.19.20 release notes
+
+- Contacts UI v86: with no sender name chosen and no single earlier one in the
+  thread, the panel assumes `<name>'s <host>` (such as `Avery's Hermes`) when the
+  user has saved a name on their open invitation, the agent name its invitations
+  introduce, and otherwise the host's own name, lowercased (`hermes`, `chatgpt`),
+  instead of always `chatgpt`. The name comes from the catalog the panel already
+  reads. Earlier bundles stay intact.
+- Contacts UI v86 also asks `get_data_catalog` for user-defined types only, where
+  every contact channel is. The full catalog (about 120 KB on a dev account) can
+  exceed a host's tool-result limit (Hermes caps plugin MCP results at about
+  64 KB), so contacts failed to load.
+
 ## 1.19.19 release notes
 
 - Serve `/hermes/mcp` for the Hermes plugin (`hermes_endpoint.py`), currently the

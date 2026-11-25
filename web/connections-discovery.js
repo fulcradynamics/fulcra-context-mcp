@@ -68,10 +68,18 @@ function directRecipients(share) {
     && share.with_user_ids;
 }
 
+function savedInviter(description) {
+  try {
+    const name = fieldSpan(description, 'standing_invitation_inviter')?.[2];
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+  } catch { return undefined; }
+}
+
 export async function discoverThreads(app) {
   const call = async (name, args) => app.callServerTool({ name, arguments: args }, { timeout: 30000 });
   const results = await Promise.allSettled([
-    call('get_data_catalog', {}).then(parseConnections),
+    // Contact channels are always user-defined types; the full catalog can exceed a host's result limit.
+    call('get_data_catalog', { category: 'user_defined' }).then(parseConnections),
     call('list_shares', { direction: 'both' }).then(parseShares),
   ]);
   if (results.some(r => r.status === 'rejected')) throw new Error('Thread discovery failed (get_data_catalog/list_shares or missing own user ID). No cached channels were read.');
@@ -85,9 +93,13 @@ export async function discoverThreads(app) {
   const legacy = new Map();
   const pending = [];
   const seen = new Set();
-  let omitted = 0;
+  let omitted = 0, inviterName;
   for (const entry of catalog) {
-    if (isInvitationTemplate(entry)) continue;
+    if (isInvitationTemplate(entry)) {
+      // The name the user saved for their open invitation, which introduces this agent as "<name>'s <host>".
+      if ((entry.fulcra_userid || own) === own) inviterName = savedInviter(entry.description) ?? inviterName;
+      continue;
+    }
     const owner = entry.fulcra_userid || own;
     const key = JSON.stringify([owner, entry.id]);
     if (seen.has(key)) continue;
@@ -201,5 +213,5 @@ export async function discoverThreads(app) {
       && thread.sources.some(s => s.direction === 'Incoming' && s.fulcra_userid === thread.peer);
     if (old && (complete || old.sources.every(s => converted.has(JSON.stringify([s.fulcra_userid,s.id]))))) legacy.delete(thread.peer);
   }
-  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings };
+  return { threads: [...threads.values()].sort((a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0), legacy: [...legacy.values()], pending, warnings, inviterName };
 }

@@ -109,6 +109,7 @@ export function setupThreads(app, doc, entrypoint = { presentation: 'global' }) 
         if (disposed) return true;
         discovery.readLatest = createLatestReader(app);
         roster = discovery;
+        detail.setInviter(discovery.inviterName);
         const peers = new Set(discovery.threads.map(t => t.peer));
         for (const [peer, entry] of rows) if (!peers.has(peer)) { entry.row.remove(); rows.delete(peer); }
         for (const thread of discovery.threads) {

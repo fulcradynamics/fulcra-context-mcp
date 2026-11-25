@@ -65,7 +65,7 @@ test('one catalog and one shares call discover contacts without per-type lookups
     { ...entry('incoming', 'peer'), description: 'connect-our-agents channel' }];
   const { calls, result } = await discover(catalog, { outgoing: [grant('own')],
     incoming: incomingFixtures(catalog).map(({ datashare_name, ...s }) => s) });
-  assert.deepEqual(calls, [{ name: 'get_data_catalog', arguments: {} }, { name: 'list_shares', arguments: { direction: 'both' } }]);
+  assert.deepEqual(calls, [{ name: 'get_data_catalog', arguments: { category: 'user_defined' } }, { name: 'list_shares', arguments: { direction: 'both' } }]);
   assert.deepEqual(result.threads.map(t => t.sources.map(s => s.id)), [['Event/own', 'Event/incoming']]);
 });
 
@@ -178,4 +178,13 @@ test('failed, malformed, and timed-out discovery rejects, never returns empty hi
   }
   assert.equal((await load([entry('own')], [grant('own')])).selections.length, 1);
   await assert.rejects(load([entry('own')], [grant('own')], ''), /Thread discovery failed/);
+});
+
+test('the user\'s saved open-invitation name, from their own template only', async () => {
+  const template = (owner, description) => ({ id: `Event/t-${owner}`, name: 'connect-our-agents-standing-invitation', fulcra_userid: owner, description });
+  const inviter = async catalog => (await discover(catalog, { outgoing: [] })).result.inviterName;
+  assert.equal(await inviter([template('me', 'Agent contact channel\nInvitation sender: "Avery"')]), 'Avery');
+  assert.equal(await inviter([template('other', 'Invitation sender: "Mallory"')]), undefined);
+  assert.equal(await inviter([template('me', 'Agent contact channel')]), undefined);
+  assert.equal(await inviter([template('me', 'Invitation sender: "A" Invitation sender: "B"')]), undefined);
 });

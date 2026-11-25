@@ -9,13 +9,14 @@ export const out='Event/00000000-0000-4000-8000-000000000004', incoming='Event/0
 // Explicit read-only opener for layout tests. `autoSelect: false` keeps an
 // untargeted global launch on the instructional view instead of opening the top contact.
 export const readOnlyThread = { listOnly: true, presentation: 'thread', launchPeer: 'connection:' + JSON.stringify([own, peer, other].sort()) };
-export async function open(page, width=900, { listOnly = false, waitForContacts = true, holdReads = false, acceptAck = false, ownRecords = [], channelRecords = null, failHistory = false, chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined, theme = undefined } = {}) {
+export async function open(page, width=900, { listOnly = false, waitForContacts = true, holdReads = false, acceptAck = false, ownRecords = [], channelRecords = null, failHistory = false, chat = true, contextOnly = false, presentation = 'global', status = null, launchPeer = null, holdLaunch = false, resourceStartup = false, direct = false, checkStatus = null, second = false, debug = null, autoSelect = true, displayMode = 'fullscreen', availableDisplayModes = undefined, theme = undefined, standingName = undefined } = {}) {
  await page.setViewportSize({width,height:process.env.PW_VIDEO ? 700 : 1100});
  await page.clock.install({time:new Date('2026-10-13T12:00:00Z')});
  await page.clock.pauseAt(new Date('2026-10-13T12:00:01Z'));
  await page.setContent('<iframe style="border:0;width:100%;height:1800px" sandbox="allow-scripts"></iframe>');
- await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes,theme})=>{
+ await page.evaluate(({bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes,theme,standingName})=>{
   window.direct = direct;
+  window.standingName = standingName;
   window.contactStatus = status;
   window.second = second;
   window.holdReads = holdReads; window.checkStatus = checkStatus;
@@ -67,6 +68,7 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
    }
    let text;
    if(name==='get_data_catalog')text='Available data types, grouped by compatible tool: '+JSON.stringify({'data types usable with: get_records':[
+    ...(window.standingName ? [{id:'Event/standing',name:'connect-our-agents-standing-invitation',description:'Agent contact channel\nInvitation sender: '+JSON.stringify(window.standingName)}] : []),
     ...(window.navigationContact ? [
      {id:'Event/navigation-out',name:'Quiet contact',description:'connect-agents-with-anyone channel'},
      {id:'Event/navigation-in',name:'Quiet contact',fulcra_userid:'navigation-peer',description:'connect-agents-with-anyone channel'},
@@ -91,7 +93,7 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
    if(name==='get_records') {
     if(window.failReads || (window.failHistory && !a.latest)) { reply(r.id,{isError:true,content:[{type:'text',text:'Synthetic read failure'}]}); return; }
     const records = window.emptyRecords || a.data_type.startsWith('Event/navigation-') ? [] : a.fulcra_userid?[
-    {id:a.fulcra_userid+'-1',start_time:'2026-10-13T11:00:00Z',sender:'SharedName',kind:'message',body:'Addressed message',recipients:['chatgpt']},
+    {id:a.fulcra_userid+'-1',start_time:'2026-10-13T11:00:00Z',sender:'SharedName',kind:'message',body:'Addressed message',recipients:['synthetic']},
     {id:a.fulcra_userid+'-2',start_time:'2026-10-13T11:01:00Z',sender:'SharedName',kind:'message',body:'Other agent message',recipients:['ChatGPT','<script>bad</script>']},
     {id:a.fulcra_userid+'-3',start_time:'2026-10-13T11:02:00Z',sender:'SharedName',kind:'message',body:'Broadcast message',recipients:['all']}
     ]:window.ownRecords;
@@ -112,7 +114,7 @@ export async function open(page, width=900, { listOnly = false, waitForContacts 
     .replace('</head>', autoSelect ? '</head>' : '<script>window.__fulcraDevNoAutoSelect=true;</script></head>')
     .replace(/<meta name="connection-debug"[^>]*>/, debug === null ? '$&' : '')
     .replace('</head>', debug === null || debug === 'missing' ? '</head>' : `<meta name="connection-debug" content="${debug}"></head>`);
- },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes,theme});
+ },{bundle,schema,own,peer,other,out,incoming,holdReads,acceptAck,ownRecords,channelRecords,failHistory,chat,contextOnly,presentation,status,launchPeer,holdLaunch,resourceStartup,direct,checkStatus,second,debug,autoSelect,displayMode,availableDisplayModes,theme,standingName});
  const ui=page.frameLocator('iframe');
  if (listOnly) { if (waitForContacts) await expect(ui.locator('.thread-button').filter({hasText:'Weekend'})).toBeVisible(); return ui; }
  await ui.locator('.thread-button').filter({hasText:'Weekend'}).click();

@@ -10,7 +10,7 @@ test('own audience names, exact addressing, provenance and safe responsive label
  await expect(ui.locator('#messages img, #messages script')).toHaveCount(0);
  await expect(ui.locator('.message-source').first()).toContainText('association unverified');
  await ui.locator('#advanced-toggle').click();
- await expect(ui.getByLabel('Your agent name')).toHaveValue('chatgpt');
+ await expect(ui.getByLabel('Your agent name')).toHaveValue('synthetic');
  await ui.getByLabel('Your agent name').fill('ChatGPT');
  await expect(ui.locator('.addressed-to-viewer').first()).toContainText('Other agent message');
  expect(await page.evaluate(()=>window.calls.filter(c=>c.name==='send_agent_contact_message').map(c=>c.arguments.kind))).toEqual(['ack']);
@@ -60,4 +60,10 @@ test('send carries full expected audience; widening invalidates context and pres
  await expect(ui.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
  await expect(ui.locator('#messages .message-row')).toHaveCount(0);
  await expect(ui.locator('#thread-composer textarea:not([readonly])')).toHaveValue('Keep old draft');
+});
+
+test('the saved open-invitation name becomes the assumed agent name',async({page})=>{
+ const ui=await open(page,390,{standingName:'Avery'});
+ await ui.locator('#advanced-toggle').click();
+ await expect(ui.getByLabel('Your agent name')).toHaveValue("Avery's synthetic");
 });

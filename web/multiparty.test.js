@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { discoverThreads } from './connections-discovery.js';
-import { messageAddressing, viewingAgent } from './addressing.js';
+import { hostAgent, messageAddressing, viewingAgent } from './addressing.js';
 import schema from '../tests/fixtures/connection-schema.json' with { type: 'json' };
 
 const own='00000000-0000-4000-8000-000000000001', peer='00000000-0000-4000-8000-000000000002', other='00000000-0000-4000-8000-000000000003';
@@ -56,8 +56,14 @@ test('agent addressing is exact-case, not human identity or privacy',()=>{
  assert.equal(messageAddressing({recipients:['ChatGPT']},'chatgpt'),'other');
  assert.equal(messageAddressing({recipients:[own]},'chatgpt'),'other');
  assert.equal(messageAddressing({recipients:['all']},'all'),'broadcast');
- assert.equal(viewingAgent([{direction:'Incoming',record:{sender:'impostor'}}]),'chatgpt');
+ assert.equal(viewingAgent([{direction:'Incoming',record:{sender:'impostor'}}],undefined,'hermes'),'hermes');
  assert.equal(viewingAgent([{direction:'Outgoing',record:{sender:'Exact'}}]),'Exact');
- assert.equal(viewingAgent([{direction:'Outgoing',record:{sender:'A'}},{direction:'Outgoing',record:{sender:'B'}}]),'chatgpt');
+ assert.equal(viewingAgent([{direction:'Outgoing',record:{sender:'A'}},{direction:'Outgoing',record:{sender:'B'}}],undefined,'chatgpt'),'chatgpt');
+ assert.equal(hostAgent({getHostVersion:()=>({name:'Hermes'})}),'hermes');
+ assert.equal(hostAgent({getHostVersion:()=>({name:'ChatGPT'})}),'chatgpt');
+ assert.equal(hostAgent({getHostVersion:()=>undefined}),'agent');
+ assert.equal(hostAgent({getHostVersion:()=>({name:'Hermes'})},'Avery'),"Avery's Hermes");
+ assert.equal(hostAgent({getHostVersion:()=>({name:'chatgpt'})},'Avery'),"Avery's ChatGPT");
+ assert.equal(hostAgent({getHostVersion:()=>undefined},'Avery'),"Avery's agent");
  assert.equal(viewingAgent([],'<untrusted>'),'<untrusted>');
 });
